@@ -45,7 +45,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         android: {
           minSdkVersion: 24,
-          // react-native-webrtc references native classes R8 can't see (e.g. org.webrtc.Dav1dDecoder$Natives).
+          // No R8 shrinking: WebRTC's native code looks up Java classes by name from
+          // JNI_OnLoad, which R8 can't see, and a stripped class crashes the app at launch.
+          enableMinifyInReleaseBuilds: false,
+          enableShrinkResourcesInReleaseBuilds: false,
           extraProguardRules: ['-keep class org.webrtc.** { *; }', '-dontwarn org.webrtc.**'].join('\n'),
         },
       },
