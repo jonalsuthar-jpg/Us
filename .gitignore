@@ -34,3 +34,6 @@ Thumbs.db
 
 # local test logins (scripts/e2e-live.mjs)
 .test-accounts.json
+
+.vercel
+.env*
