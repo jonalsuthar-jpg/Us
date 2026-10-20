@@ -1,0 +1,36 @@
+node_modules/
+.turbo/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# expo
+.expo/
+apps/mobile/ios/
+apps/mobile/android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# supabase
+supabase/.branches/
+supabase/.temp/
+supabase/functions/.env
+
+.DS_Store
+Thumbs.db
+
+# local test logins (scripts/e2e-live.mjs)
+.test-accounts.json

@@ -1,0 +1,25 @@
+/** Friendly copy for the error codes raised by our Postgres functions. */
+const MESSAGES: Record<string, string> = {
+  invite_invalid: "That code doesn't match an open invite. Check it with your partner?",
+  invite_used: 'That invite has already been used.',
+  invite_own: "That's your own invite — send it to your partner instead.",
+  already_paired: "You're already paired. Us is for exactly two people.",
+  not_paired: 'Pair with your partner first.',
+  not_authenticated: 'Please sign in again.',
+  call_not_found: 'That call is no longer available.',
+  'Invalid login credentials': "That email and password don't match.",
+  'User already registered': 'An account with that email already exists. Try signing in.',
+};
+
+export function friendlyError(error: unknown): string {
+  const raw =
+    typeof error === 'string'
+      ? error
+      : error && typeof error === 'object' && 'message' in error
+        ? String((error as { message: unknown }).message)
+        : '';
+  for (const [key, copy] of Object.entries(MESSAGES)) {
+    if (raw.includes(key)) return copy;
+  }
+  return raw || 'Something went wrong. Please try again.';
+}

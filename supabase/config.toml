@@ -1,0 +1,40 @@
+# Supabase CLI config (local dev: `npx supabase start` — requires Docker).
+project_id = "us"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback", "us://"]
+jwt_expiry = 3600
+enable_signup = true
+minimum_password_length = 8
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[functions.push]
+verify_jwt = true
+
+[functions.turn-credentials]
+verify_jwt = true
+
+[functions.fight-translator]
+verify_jwt = true

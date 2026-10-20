@@ -1,0 +1,38 @@
+{
+  "name": "us",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Us — a private two-person space for a couple: calls, chat and relationship tools.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "packageManager": "npm@9.6.7",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "npm run dev -w @us/web",
+    "dev:mobile": "npm run start -w @us/mobile",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:db": "node scripts/test-db.mjs",
+    "sounds": "node scripts/generate-sounds.mjs",
+    "db:push": "supabase db push",
+    "db:types": "supabase gen types typescript --linked > packages/shared/src/database.generated.ts"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "supabase": "2.121.0",
+    "turbo": "2.11.9",
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "@types/react": "19.3.0"
+  }
+}
