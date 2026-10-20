@@ -40,7 +40,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-font',
     'expo-secure-store',
     ['expo-splash-screen', { backgroundColor: PAPER, image: './assets/images/icon.png', imageWidth: 120 }],
-    ['expo-build-properties', { android: { minSdkVersion: 24 } }],
+    [
+      'expo-build-properties',
+      {
+        android: {
+          minSdkVersion: 24,
+          // react-native-webrtc references native classes R8 can't see (e.g. org.webrtc.Dav1dDecoder$Natives).
+          extraProguardRules: ['-keep class org.webrtc.** { *; }', '-dontwarn org.webrtc.**'].join('\n'),
+        },
+      },
+    ],
     [
       'expo-image-picker',
       {
