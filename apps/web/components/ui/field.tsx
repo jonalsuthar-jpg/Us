@@ -1,4 +1,11 @@
-import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from 'react';
+import {
+  forwardRef,
+  useId,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react';
 import { cn } from '@/lib/cn';
 
 export const inputStyles = cn(
@@ -44,6 +51,61 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
           {hint}
         </p>
       ) : null}
+    </div>
+  );
+});
+
+interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label: string;
+  hint?: ReactNode;
+}
+
+export const TextAreaField = forwardRef<HTMLTextAreaElement, TextAreaFieldProps>(function TextAreaField(
+  { label, hint, className, id, rows = 3, ...props },
+  ref,
+) {
+  const auto = useId();
+  const inputId = id ?? auto;
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={inputId} className="block text-small font-medium text-ink">
+        {label}
+      </label>
+      <textarea
+        ref={ref}
+        id={inputId}
+        rows={rows}
+        aria-describedby={hint ? `${inputId}-hint` : undefined}
+        className={cn(inputStyles, 'resize-y py-3', className)}
+        {...props}
+      />
+      {hint ? (
+        <p id={`${inputId}-hint`} className="text-small text-ink-muted">
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+});
+
+interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  label: string;
+}
+
+export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function SelectField(
+  { label, className, id, children, ...props },
+  ref,
+) {
+  const auto = useId();
+  const inputId = id ?? auto;
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={inputId} className="block text-small font-medium text-ink">
+        {label}
+      </label>
+      <select ref={ref} id={inputId} className={cn(inputStyles, 'h-12 appearance-none pr-8', className)} {...props}>
+        {children}
+      </select>
     </div>
   );
 });

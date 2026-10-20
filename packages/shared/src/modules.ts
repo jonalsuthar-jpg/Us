@@ -63,7 +63,7 @@ export const MODULES: AppModule[] = [
     title: 'Plan',
     tagline: 'The logistics of a life together, held lightly.',
     phase: 4,
-    status: 'planned',
+    status: 'live',
     features: [
       { title: 'Shared calendar', blurb: 'Dates, trips, and the dentist.', privacy: 'shared' },
       { title: 'Decision picker', blurb: 'Can’t choose dinner? Let it choose — fairly.', privacy: 'shared' },

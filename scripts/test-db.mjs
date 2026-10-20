@@ -246,5 +246,85 @@ await test('shared phase tables: couple-scoped', async () => {
   await rejects(as(carol, () => q(`insert into public.calendar_events (couple_id, created_by, title, starts_at) values ($1, $2, 'x', now())`, [couple.id, carol])), /row-level security/, 'foreign');
 });
 
+console.log('\nPhase 4 · Plan');
+
+await test('calendar: create only as yourself; end cannot precede start', async () => {
+  await rejects(
+    as(alice, () => q(`insert into public.calendar_events (couple_id, created_by, title, starts_at) values ($1, $2, 'x', now())`, [couple.id, bob])),
+    /row-level security/,
+    'spoof creator',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.calendar_events (couple_id, created_by, title, starts_at, ends_at) values ($1, $2, 'x', now(), now() - interval '1 hour')`, [couple.id, alice])),
+    /ends_after_start/,
+    'ends before start',
+  );
+  // Partner can edit a shared event.
+  const edited = await as(alice, () => q(`update public.calendar_events set title = 'Dinner at 8' returning id`));
+  assert.equal(edited.length, 1);
+});
+
+await test('decisions: weighted pick within a category, recorded, couple-scoped', async () => {
+  await as(alice, () => q(
+    `insert into public.decision_options (couple_id, category, label, weight) values
+       ($1, 'dinner', 'Ramen', 9), ($1, 'dinner', 'Tacos', 1), ($1, 'film', 'Paddington', 1)`,
+    [couple.id],
+  ));
+  const counts = { Ramen: 0, Tacos: 0 };
+  for (let i = 0; i < 300; i++) {
+    await q(`update public.decision_options set last_picked_at = null`);
+    const p = await as(bob, () => one(`select * from public.pick_decision('dinner')`));
+    counts[p.label]++;
+  }
+  assert.equal(counts.Ramen + counts.Tacos, 300, 'only the requested category');
+  assert.ok(counts.Ramen > 220, `weight 9:1 should dominate (got ${counts.Ramen}:${counts.Tacos})`);
+  const ramen = await one(`select times_picked, last_picked_at from public.decision_options where label = 'Ramen'`);
+  assert.equal(ramen.times_picked, counts.Ramen);
+  assert.ok(ramen.last_picked_at);
+  await rejects(as(alice, () => q(`select public.pick_decision('nothing here')`)), /no_options/, 'empty');
+  await rejects(as(carol, () => q(`select public.pick_decision('dinner')`)), /not_paired/, 'outsider');
+});
+
+await test('decisions: a recent pick is deprioritised', async () => {
+  // Equal weights; Ramen was just picked, Tacos never → Tacos should win ~5:1.
+  await q(`update public.decision_options set weight = 1`);
+  const counts = { Ramen: 0, Tacos: 0 };
+  for (let i = 0; i < 300; i++) {
+    await q(`update public.decision_options set last_picked_at = case when label = 'Ramen' then now() else null end`);
+    counts[(await as(alice, () => one(`select (public.pick_decision('dinner')).label`))).label]++;
+  }
+  assert.ok(counts.Tacos > 200, `recent pick should be rarer (got Ramen ${counts.Ramen} : Tacos ${counts.Tacos})`);
+});
+
+await test('labour: log for either of you, never for an outsider', async () => {
+  await as(bob, () => q(`insert into public.labor_entries (couple_id, done_by, task, effort) values ($1, $2, 'Laundry', 2)`, [couple.id, alice]));
+  await rejects(
+    as(bob, () => q(`insert into public.labor_entries (couple_id, done_by, task) values ($1, $2, 'x')`, [couple.id, carol])),
+    /row-level security/,
+    'outsider',
+  );
+  await rejects(
+    as(bob, () => q(`update public.labor_entries set done_by = $1`, [carol])),
+    /row-level security/,
+    'reassign to outsider',
+  );
+});
+
+await test('costs: paid by a member, valid currency, settlements recorded', async () => {
+  await as(alice, () => q(`insert into public.expenses (couple_id, paid_by, description, amount_cents, currency) values ($1, $2, 'Groceries', 4200, 'EUR')`, [couple.id, alice]));
+  await as(bob, () => q(`insert into public.expenses (couple_id, paid_by, description, amount_cents, currency, split_a_pct, is_settlement) values ($1, $2, 'Settle up', 2100, 'EUR', 100, true)`, [couple.id, bob]));
+  await rejects(
+    as(alice, () => q(`insert into public.expenses (couple_id, paid_by, description, amount_cents) values ($1, $2, 'x', 100)`, [couple.id, carol])),
+    /row-level security/,
+    'outsider payer',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.expenses (couple_id, paid_by, description, amount_cents, currency) values ($1, $2, 'x', 100, 'eur')`, [couple.id, alice])),
+    /currency_format/,
+    'currency',
+  );
+  assert.equal((await as(carol, () => q(`select * from public.expenses`))).length, 0);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 await db.close();

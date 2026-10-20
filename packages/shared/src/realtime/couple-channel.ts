@@ -28,12 +28,19 @@ export type SignalEnvelope = SignalEvent & { from: string };
 
 export type RowChange<T> = { type: 'INSERT' | 'UPDATE' | 'DELETE'; row: T };
 
+/** "Something in this area changed — refetch." Sent after shared-data writes. */
+export interface ChangedEvent {
+  from: string;
+  topic: string;
+}
+
 /**
  * The couple's realtime link. Two Supabase channels:
  *
- *  - `couple:<id>` (private broadcast + presence) — typing, online presence
- *    and WebRTC signaling. Ephemeral; nothing touches the database. Access is
- *    restricted to the two members by Realtime Authorization policies.
+ *  - `couple:<id>` (private broadcast + presence) — typing, online presence,
+ *    WebRTC signaling and "changed" pings for the Plan/Memory/Growth data.
+ *    Ephemeral; nothing touches the database. Access is restricted to the
+ *    two members by Realtime Authorization policies.
  *  - `db:<id>` (Postgres Changes) — message inserts / receipt updates and
  *    call status changes, filtered server-side by RLS.
  */
@@ -44,6 +51,7 @@ export class CoupleChannel {
   readonly signals = new Emitter<SignalEnvelope>();
   readonly presence = new Emitter<Set<string>>();
   readonly status = new Emitter<ChannelStatus>();
+  readonly changes = new Emitter<ChangedEvent>();
 
   private live?: RealtimeChannel;
   private db?: RealtimeChannel;
@@ -75,6 +83,7 @@ export class CoupleChannel {
       })
       .on('broadcast', { event: 'typing' }, ({ payload }) => this.typing.emit(payload as TypingEvent))
       .on('broadcast', { event: 'signal' }, ({ payload }) => this.signals.emit(payload as SignalEnvelope))
+      .on('broadcast', { event: 'changed' }, ({ payload }) => this.changes.emit(payload as ChangedEvent))
       .on('presence', { event: 'sync' }, () => {
         const state = this.live?.presenceState() ?? {};
         this.online = new Set(Object.keys(state));
@@ -110,6 +119,11 @@ export class CoupleChannel {
 
   sendTyping(typing: boolean) {
     void this.live?.send({ type: 'broadcast', event: 'typing', payload: { from: this.userId, typing } });
+  }
+
+  /** Tell my partner's open clients that `topic` changed. Carries no data. */
+  sendChanged(topic: string) {
+    void this.live?.send({ type: 'broadcast', event: 'changed', payload: { from: this.userId, topic } });
   }
 
   async sendSignal(event: SignalEvent) {

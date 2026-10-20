@@ -5,14 +5,7 @@ import { useCouple } from '@us/shared/react';
 import { PrivacyBadge } from '@/components/ui/privacy';
 import { Sheet } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
-
-const ACCENT: Record<ModuleId, { wash: string; ink: string; sheet: 'rose' | 'teal' | 'plum' | 'gold' | 'sage' }> = {
-  talk: { wash: 'bg-rose-100', ink: 'text-rose-700', sheet: 'rose' },
-  connect: { wash: 'bg-teal-100', ink: 'text-teal-700', sheet: 'teal' },
-  plan: { wash: 'bg-plum-100', ink: 'text-plum-600', sheet: 'plum' },
-  memory: { wash: 'bg-gold-100', ink: 'text-gold-700', sheet: 'gold' },
-  growth: { wash: 'bg-sage-100', ink: 'text-sage-700', sheet: 'sage' },
-};
+import { MODULE_ACCENT } from './module-header';
 
 /**
  * Placeholder for a module that isn't built yet. It already shows the
@@ -23,7 +16,7 @@ const ACCENT: Record<ModuleId, { wash: string; ink: string; sheet: 'rose' | 'tea
 export function ModulePlaceholder({ id }: { id: ModuleId }) {
   const mod = moduleById(id);
   const { partner } = useCouple();
-  const accent = ACCENT[id];
+  const accent = MODULE_ACCENT[id];
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-10 sm:px-10 sm:py-16">

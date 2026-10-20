@@ -3,7 +3,7 @@
  *
  * Hand-maintained in the shape `supabase gen types typescript` produces, so it
  * can be swapped for generated output (`npm run db:types`) at any time.
- * Phase 3–6 tables are intentionally omitted until those features are built.
+ * Phase 3 tables are omitted until those features are built.
  */
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -110,6 +110,101 @@ export type Database = {
           },
         ];
       };
+      // ------------------------------------------------------------ Phase 4
+      calendar_events: {
+        Row: {
+          id: string;
+          couple_id: string;
+          created_by: string;
+          title: string;
+          starts_at: string;
+          ends_at: string | null;
+          all_day: boolean;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          couple_id: string;
+          created_by: string;
+          title: string;
+          starts_at: string;
+          ends_at?: string | null;
+          all_day?: boolean;
+          notes?: string | null;
+        };
+        Update: {
+          title?: string;
+          starts_at?: string;
+          ends_at?: string | null;
+          all_day?: boolean;
+          notes?: string | null;
+        };
+        Relationships: [];
+      };
+      decision_options: {
+        Row: {
+          id: string;
+          couple_id: string;
+          category: string;
+          label: string;
+          weight: number;
+          times_picked: number;
+          last_picked_at: string | null;
+          created_at: string;
+        };
+        Insert: { id?: string; couple_id: string; category: string; label: string; weight?: number };
+        Update: { category?: string; label?: string; weight?: number };
+        Relationships: [];
+      };
+      labor_entries: {
+        Row: {
+          id: string;
+          couple_id: string;
+          done_by: string;
+          task: string;
+          effort: number;
+          done_on: string;
+          created_at: string;
+        };
+        Insert: { id?: string; couple_id: string; done_by: string; task: string; effort?: number; done_on?: string };
+        Update: { done_by?: string; task?: string; effort?: number; done_on?: string };
+        Relationships: [];
+      };
+      expenses: {
+        Row: {
+          id: string;
+          couple_id: string;
+          paid_by: string;
+          description: string;
+          amount_cents: number;
+          currency: string;
+          split_a_pct: number;
+          spent_on: string;
+          is_settlement: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          couple_id: string;
+          paid_by: string;
+          description: string;
+          amount_cents: number;
+          currency?: string;
+          split_a_pct?: number;
+          spent_on?: string;
+          is_settlement?: boolean;
+        };
+        Update: {
+          paid_by?: string;
+          description?: string;
+          amount_cents?: number;
+          currency?: string;
+          split_a_pct?: number;
+          spent_on?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -123,6 +218,10 @@ export type Database = {
       expire_stale_calls: { Args: Record<PropertyKey, never>; Returns: number };
       current_couple_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       current_partner_id: { Args: Record<PropertyKey, never>; Returns: string | null };
+      pick_decision: {
+        Args: { p_category: string };
+        Returns: Database['public']['Tables']['decision_options']['Row'];
+      };
     };
     Enums: {
       call_media: CallMedia;
@@ -140,6 +239,10 @@ export type Couple = Tables['couples']['Row'];
 export type Invite = Tables['invites']['Row'];
 export type Call = Tables['calls']['Row'];
 export type MessageRow = Tables['messages']['Row'];
+export type CalendarEvent = Tables['calendar_events']['Row'];
+export type DecisionOption = Tables['decision_options']['Row'];
+export type LaborEntry = Tables['labor_entries']['Row'];
+export type Expense = Tables['expenses']['Row'];
 
 /** A message as rendered in the thread: call log entries carry their call. */
 export type Message = MessageRow & {

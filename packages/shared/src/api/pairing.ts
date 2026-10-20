@@ -96,3 +96,13 @@ export function formatInviteCode(input: string): string {
   const clean = input.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
   return clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean;
 }
+
+/** Colour slot and display name for whichever of the two of you `userId` is. */
+export function personFor(ctx: Pick<CoupleContext, 'me' | 'partner' | 'mySlot' | 'partnerSlot'>, userId: string) {
+  const mine = userId === ctx.me.id;
+  return {
+    mine,
+    slot: mine ? ctx.mySlot : ctx.partnerSlot,
+    name: mine ? 'You' : ctx.partner.display_name,
+  };
+}

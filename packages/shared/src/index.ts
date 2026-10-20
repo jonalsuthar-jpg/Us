@@ -10,6 +10,7 @@ export * from './api/pairing';
 export * from './api/messages';
 export * from './api/calls';
 export * from './api/push';
+export * from './api/plan';
 
 export * from './realtime/couple-channel';
 export * from './realtime/typing';
