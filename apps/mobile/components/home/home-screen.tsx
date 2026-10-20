@@ -3,18 +3,21 @@ import {
   formatEventTime,
   freshStatus,
   getHome,
+  sendTap,
   setCouplePhoto,
   setMyStatus,
   STATUS_MAX,
   STATUS_PRESETS,
+  TAP_TOPIC,
   timeAgo,
   type PartnerSlot,
   type Status,
 } from '@us/shared';
 import { useCallManager, useCouple, useCoupleData, useTyping } from '@us/shared/react';
+import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { CalendarHeart, Camera, ChevronRight, HeartHandshake, MessageCircleHeart, Phone, Settings, Sparkles, Video } from 'lucide-react-native';
+import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Phone, Settings, Sparkles, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +32,8 @@ import { PhotoViewer } from '../ui/photo-viewer';
 import { Chip } from '../ui/segmented';
 import { Sheet } from '../ui/sheet';
 import { Display, Text } from '../ui/text';
+import { ComingUp } from './countdowns';
+import { SafetyCard } from './safety';
 
 function greeting(now = new Date()) {
   const h = now.getHours();
@@ -55,6 +60,19 @@ export function HomeScreen() {
       void home.reload();
     }, [home.reload]),
   );
+
+  const [tapState, setTapState] = useState<'idle' | 'sent' | 'wait'>('idle');
+  async function tap() {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    try {
+      await sendTap(sb, couple.id, me.id);
+      channel.sendChanged(TAP_TOPIC);
+      setTapState('sent');
+    } catch (e) {
+      setTapState(String((e as Error).message).includes('too_soon') ? 'wait' : 'idle');
+    }
+    setTimeout(() => setTapState('idle'), 2500);
+  }
 
   const d = home.data;
   const myStatus = d ? freshStatus(d.me) : null;
@@ -152,7 +170,20 @@ export function HomeScreen() {
         <Action label="Video call" onPress={() => void calls.startCall('video')}>
           <Video size={22} color={c.roseStrong} />
         </Action>
+        <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onPress={() => void tap()}>
+          <HeartPulse size={22} color={c.roseStrong} />
+        </Action>
       </View>
+
+      {d?.taps ? (
+        <Sheet tone="note" accent="rose" pad="sm" className="flex-row items-center gap-3">
+          <Text className="text-[24px] leading-[30px]">💗</Text>
+          <Text className="flex-1 text-small">
+            <Text className="font-sans-medium text-small">{theirName}</Text>
+            {` is thinking of you · ${d.taps.count > 1 ? `${d.taps.count} times today, last ` : ''}${timeAgo(d.taps.latest)}`}
+          </Text>
+        </Sheet>
+      ) : null}
 
       {d?.nudged ? (
         <Sheet tone="note" accent="rose" className="gap-1">
@@ -165,6 +196,9 @@ export function HomeScreen() {
 
       {home.error && !d ? <ErrorNote>{home.error}</ErrorNote> : null}
       {!d && home.loading ? <ActivityIndicator color={c.rose} /> : null}
+
+      {d ? <ComingUp countdowns={d.countdowns} mutate={home.mutate} /> : null}
+      {d ? <SafetyCard /> : null}
 
       {d ? (
         <Card
@@ -348,7 +382,9 @@ function Action({ label, onPress, badge, children }: { label: string; onPress: (
       className="flex-1 items-center gap-1.5 rounded-sheet border border-paper-edge bg-paper-raised py-3.5 active:bg-paper-sunken"
     >
       <View className="h-11 w-11 items-center justify-center rounded-full bg-rose-50">{children}</View>
-      <Text className="font-sans-medium text-small">{label}</Text>
+      <Text className="px-1 font-sans-medium text-small" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+        {label}
+      </Text>
       {badge ? (
         <View className="absolute right-3 top-2 min-w-[20px] items-center rounded-full bg-rose-600 px-1.5 py-0.5">
           <Text className="text-[11px] font-sans-semibold leading-[13px] text-white">{badge > 99 ? '99+' : badge}</Text>

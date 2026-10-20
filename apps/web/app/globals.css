@@ -53,3 +53,12 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* "Thinking of you": the heart rises, swells and fades. */
+@keyframes us-heart {
+  0% { opacity: 0; transform: translateY(40px) scale(0.6); }
+  20% { opacity: 1; transform: translateY(0) scale(1.1); }
+  35% { transform: scale(0.95); }
+  50% { transform: scale(1.05); }
+  100% { opacity: 0; transform: translateY(-60px) scale(1); }
+}

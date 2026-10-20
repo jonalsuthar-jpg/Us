@@ -6,7 +6,10 @@ import {
   fetchMessages,
   mergeMessage,
   PAGE_SIZE,
+  pinMessage,
+  reactToMessage,
   sendMessage,
+  type DraftExtras,
 } from '../api/messages';
 import { notifyPartner } from '../api/push';
 import type { Message } from '../database.types';
@@ -116,15 +119,50 @@ export function useMessages({ viewing }: Options) {
     [sb, upsert],
   );
 
+  /** Send text, optionally replying to a message and/or with a photo or voice note. */
   const send = useCallback(
-    (body: string) => {
+    (body: string, extras: DraftExtras = {}) => {
       const text = body.trim();
-      if (!text) return;
-      const draft = draftMessage(couple.id, me.id, text);
+      if (!text && !extras.media) return;
+      const draft = draftMessage(couple.id, me.id, text || null, extras);
       upsert(draft);
       void deliver(draft);
     },
     [couple.id, me.id, upsert, deliver],
+  );
+
+  /** Patch a message locally; server state arrives over Postgres Changes. */
+  const patch = useCallback((id: string, change: (m: Message) => Partial<Message>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...change(m) } : m)));
+  }, []);
+
+  /** Set (or with null, clear) my reaction. Optimistic, rolled back on failure. */
+  const react = useCallback(
+    async (id: string, emoji: string | null) => {
+      const before = messages.find((m) => m.id === id)?.reactions ?? {};
+      patch(id, (m) => {
+        const next = { ...m.reactions };
+        if (emoji) next[me.id] = emoji;
+        else delete next[me.id];
+        return { reactions: next };
+      });
+      try {
+        upsert(await reactToMessage(sb, id, emoji));
+      } catch (e) {
+        patch(id, () => ({ reactions: before }));
+        throw e;
+      }
+    },
+    [sb, me.id, messages, patch, upsert],
+  );
+
+  const pin = useCallback(
+    async (id: string, pinned: boolean) => {
+      const saved = await pinMessage(sb, id, pinned);
+      upsert(saved);
+      channel.sendChanged('chat:pins');
+    },
+    [sb, channel, upsert],
   );
 
   const retry = useCallback(
@@ -138,5 +176,5 @@ export function useMessages({ viewing }: Options) {
     [messages, deliver],
   );
 
-  return { messages, loading, hasOlder, loadOlder, send, retry, markRead };
+  return { messages, loading, hasOlder, loadOlder, send, retry, markRead, react, pin };
 }

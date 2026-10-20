@@ -5,16 +5,18 @@ import {
   formatEventTime,
   freshStatus,
   getHome,
+  sendTap,
   setCouplePhoto,
   setMyStatus,
   STATUS_MAX,
   STATUS_PRESETS,
+  TAP_TOPIC,
   timeAgo,
   type PartnerSlot,
   type Status,
 } from '@us/shared';
 import { useCallManager, useCouple, useCoupleData, useTyping } from '@us/shared/react';
-import { CalendarHeart, Camera, ChevronRight, HeartHandshake, MessageCircleHeart, Phone, Sparkles, Video } from 'lucide-react';
+import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Phone, Sparkles, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
@@ -29,6 +31,8 @@ import { Chip } from '@/components/ui/segmented';
 import { Sheet } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
 import { shrinkPhoto } from '@/lib/image';
+import { ComingUp } from './countdowns';
+import { SafetyCard } from './safety';
 
 function greeting(now = new Date()) {
   const h = now.getHours();
@@ -52,6 +56,29 @@ export function Home() {
   const { reload } = home;
   useEffect(() => channel.changes.on((e) => e.from !== me.id && void reload()), [channel, me.id, reload]);
   useEffect(() => setHello(greeting()), []);
+
+  // "Thinking of you": send one, and show a heart when theirs arrives while Home is open.
+  const [tapState, setTapState] = useState<'idle' | 'sent' | 'wait'>('idle');
+  const [heart, setHeart] = useState(false);
+  useEffect(
+    () =>
+      channel.changes.on((e) => {
+        if (e.topic !== TAP_TOPIC || e.from === me.id) return;
+        setHeart(true);
+        setTimeout(() => setHeart(false), 2600);
+      }),
+    [channel, me.id],
+  );
+  async function tap() {
+    try {
+      await sendTap(sb, couple.id, me.id);
+      channel.sendChanged(TAP_TOPIC);
+      setTapState('sent');
+    } catch (e) {
+      setTapState(String((e as Error).message).includes('too_soon') ? 'wait' : 'idle');
+    }
+    setTimeout(() => setTapState('idle'), 2500);
+  }
 
   const d = home.data;
   const myStatus = d ? freshStatus(d.me) : null;
@@ -155,7 +182,7 @@ export function Home() {
           </div>
 
           {/* Reach each other */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-2 sm:gap-3">
             <Action label="Message" href="/talk" badge={unread}>
               <MessageCircleHeart className="h-5 w-5" />
             </Action>
@@ -165,7 +192,26 @@ export function Home() {
             <Action label="Video call" onClick={() => void calls.startCall('video')}>
               <Video className="h-5 w-5" />
             </Action>
+            <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onClick={() => void tap()}>
+              <HeartPulse className={cn('h-5 w-5', tapState === 'sent' && 'animate-ping')} />
+            </Action>
           </div>
+
+          {d?.taps ? (
+            <Sheet tone="note" accent="rose" pad="sm" className="flex items-center gap-3">
+              <span className="text-[26px]" aria-hidden>
+                💗
+              </span>
+              <p className="text-small text-ink">
+                <span className="font-medium">{theirName}</span> is thinking of you
+                <span className="text-ink-muted" suppressHydrationWarning>
+                  {' '}
+                  · {d.taps.count > 1 ? `${d.taps.count} times today, last ` : ''}
+                  {timeAgo(d.taps.latest)}
+                </span>
+              </p>
+            </Sheet>
+          ) : null}
 
           {d?.nudged ? (
             <Sheet tone="note" accent="rose" pad="sm">
@@ -180,6 +226,13 @@ export function Home() {
       {!d && home.loading ? (
         <div className="flex justify-center py-6">
           <Spinner className="h-5 w-5 text-rose-400" />
+        </div>
+      ) : null}
+
+      {d ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <ComingUp countdowns={d.countdowns} mutate={home.mutate} />
+          <SafetyCard />
         </div>
       ) : null}
 
@@ -234,6 +287,14 @@ export function Home() {
         ) : null}
       </Dialog>
       <Lightbox src={viewing} label="Photo of you two" onClose={() => setViewing(null)} />
+      {heart ? (
+        <div role="status" className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+          <span className="animate-[us-heart_2.6s_ease-out_forwards] text-[120px] drop-shadow-xl motion-reduce:animate-none" aria-hidden>
+            💗
+          </span>
+          <span className="sr-only">{theirName} is thinking of you</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -361,7 +422,7 @@ function StatusForm({ initial, onSave }: { initial: Status | null; onSave: (s: {
 
 function Action({ label, href, onClick, badge, children }: { label: string; href?: string; onClick?: () => void; badge?: number; children: ReactNode }) {
   const cls =
-    'relative flex flex-col items-center gap-2 rounded-sheet border border-paper-edge bg-paper-raised py-4 text-small font-medium text-ink transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-paper-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';
+    'relative flex flex-col items-center gap-2 rounded-sheet border border-paper-edge bg-paper-raised px-1 py-4 text-center text-micro font-medium text-ink sm:text-small transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-paper-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';
   const inner = (
     <>
       <span className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-700" aria-hidden>

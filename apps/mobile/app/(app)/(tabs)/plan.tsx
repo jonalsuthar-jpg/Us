@@ -5,10 +5,11 @@ import { PlanCalendar } from '@/components/plan/calendar';
 import { PlanCosts } from '@/components/plan/costs';
 import { PlanDecide } from '@/components/plan/decide';
 import { PlanLabour } from '@/components/plan/labour';
+import { PlanLists } from '@/components/plan/lists';
 import { PrivacyBadge } from '@/components/ui/privacy';
 import { Segmented } from '@/components/ui/segmented';
 
-type Tab = 'calendar' | 'decide' | 'labour' | 'costs';
+type Tab = 'calendar' | 'lists' | 'decide' | 'labour' | 'costs';
 
 export default function Plan() {
   const { partner } = useCouple();
@@ -17,8 +18,10 @@ export default function Plan() {
     <ModuleScreen id="plan" aside={<PrivacyBadge privacy="shared" partnerName={partner.display_name} />}>
       <Segmented
         label="Plan section"
+        size="sm"
         options={[
           { value: 'calendar', label: 'Calendar' },
+          { value: 'lists', label: 'Lists' },
           { value: 'decide', label: 'Decide' },
           { value: 'labour', label: 'Labour' },
           { value: 'costs', label: 'Costs' },
@@ -27,6 +30,7 @@ export default function Plan() {
         onChange={setTab}
       />
       {tab === 'calendar' && <PlanCalendar />}
+      {tab === 'lists' && <PlanLists />}
       {tab === 'decide' && <PlanDecide />}
       {tab === 'labour' && <PlanLabour />}
       {tab === 'costs' && <PlanCosts />}

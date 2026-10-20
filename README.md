@@ -20,12 +20,13 @@ scripts/      test-db (RLS tests on PGlite) · generate-sounds · generate-icons
 | Phase | Status |
 |---|---|
 | 1 · Foundation | Monorepo (npm workspaces + Turborepo), Supabase schema, email/password + magic-link auth, password reset (link signs you in and opens Settings → Password), invite-code pairing, design system on web and mobile |
-| 2 · Talk | 1:1 WebRTC video and voice calls, signaled over a private Supabase Realtime channel. Mute, camera, front/back camera flip (mobile, and web when the device has two cameras), speaker/earpiece toggle on mobile (`react-native-incall-manager`, headsets take over automatically), output-device picker on desktop browsers, web screen sharing (mobile gets a nudge to use the web app). TURN via Metered. Persistent chat with sent ✓ / delivered ✓✓ / read ✓✓ receipts, typing indicator, presence, missed-call entries with call-back, push notifications, custom chime and ringtone |
+| 2 · Talk | **Chat extras:** photos and voice notes (private `chat` Storage bucket, `<couple_id>/<message_id>.<ext>`), reply-to with tap-to-jump quotes, one reaction each (❤️ 😂 😮 😢 👍 🔥) via `react_to_message()`, pinned messages for both via `pin_message()` with a pinned bar, and search over the thread. Reactions and pins are updates on the message row, so they arrive live through the existing Postgres Changes stream. 1:1 WebRTC video and voice calls, signaled over a private Supabase Realtime channel. Mute, camera, front/back camera flip (mobile, and web when the device has two cameras), speaker/earpiece toggle on mobile (`react-native-incall-manager`, headsets take over automatically), output-device picker on desktop browsers, web screen sharing (mobile gets a nudge to use the web app). TURN via Metered. Persistent chat with sent ✓ / delivered ✓✓ / read ✓✓ receipts, typing indicator, presence, missed-call entries with call-back, push notifications, custom chime and ringtone |
 | 3 · Connect | **Daily Question**: one shared prompt a day from a 40-question bank (no repeats per couple), answers sealed once sent and hidden until you've both answered (`daily_history()` reveals), a both-answered streak, and a push to your partner when you answer. Fight Translator, Future Letters and Inside Jokes have tightened RLS (authors are always yourself; reveal and unlock state is server-only) but no UI yet (`TODO(phase-3)`) |
-| 4 · Plan | Shared calendar (month grid, all-day / timed plans), decision picker (weighted, recently-picked options deprioritised, server-side `pick_decision`), invisible-labour balance over 30 days, shared costs with per-currency settle-up |
+| 4 · Plan | **Shared lists** (groceries, bucket list, to watch, to read) that either of you ticks off. Shared calendar (month grid, all-day / timed plans), decision picker (weighted, recently-picked options deprioritised, server-side `pick_decision`), invisible-labour balance over 30 days, shared costs with per-currency settle-up |
 | 5 · Memory | Timeline with photos in a private Storage bucket (`memories/<couple_id>/…`, signed URLs), moments / dates / trips, *On this day*, a private "how it felt" rating and note on each memory |
 | 6 · Growth | Goal board (yours / theirs / ours), private mood check-ins with an optional soft nudge (partner sees only *that* you asked — `partner_nudges()` returns timestamps), worry space with opt-in sharing, love-language quiz with opt-in sharing and a daily idea |
 | Dark mode | Web and mobile. Follows the device by default; Settings → Appearance overrides it per device |
+| Together (Home) | **Coming up:** your countdowns (trips, yearly birthdays and anniversaries) merged with relationship milestones (100, 200, 500, 1,000 days… and each anniversary of pairing). **Thinking of you:** one tap sends a push and, if your partner has Us open, a heart and a haptic pulse anywhere in the app (at most one every 10 s). **Safe home:** ask your partner to say when they're home, or offer to; only the traveller can mark it arrived (`mark_arrived()`), and a "home spot" saved on the device (never uploaded) lets the app mark it for you when it sees you're back. **Location sharing:** opt-in for 1, 8 or 24 hours; your partner can read it only while the window is open, and stopping wipes the coordinates server-side |
 | Leaving | Settings → Leaving. **Unpair** (`unpair()`) deletes everything the couple shared, including the photo folder, and keeps each person's private data. **Delete my account** calls the `delete-account` Edge Function. A partner with the app open is moved to the pair screen |
 
 ## Prerequisites
@@ -58,6 +59,7 @@ npm install
    npx supabase functions deploy push
    npx supabase functions deploy turn-credentials
    npx supabase functions deploy delete-account
+   # after pulling new push categories (thinking of you, location, arrival), redeploy push too
    npx supabase functions deploy fight-translator   # phase 3 stub, optional
    ```
 
@@ -156,3 +158,6 @@ Tokens live in `packages/shared/src/tokens.js` and feed one Tailwind preset used
 - Dark mode was checked on web; on mobile the bundle compiles with the theme variables, but give it a look on a device.
 - **Future letter bodies** are stored as `bytea` without encryption yet (pgsodium / Vault is the plan) — build that before the Future Letters UI.
 - **Daily Question** uses each person's local date, so partners in very different time zones can briefly be on different days' questions.
+- **Location** updates only while Us is open (foreground permission only), and "I'm home" is detected when you open the app, not by a background geofence. Background tracking would need `expo-task-manager` and "Always" permission, which Us deliberately doesn't ask for.
+- **New native module:** the mobile app now uses `expo-location`, so build a new development / store binary; an over-the-air update alone won't include it.
+- **Voice notes** are recorded as WebM/Opus in Chrome and Firefox and as M4A on phones and Safari. Very old iPhones may not play WebM.

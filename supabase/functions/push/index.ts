@@ -3,6 +3,7 @@
  *
  * Body: { category: 'new_message', messageId } | { category: 'incoming_call' | 'call_ended', callId }
  *     | { category: 'wellbeing_nudge', checkinId } | { category: 'daily_question', questionId }
+ *     | { category: 'thinking_of_you', tapId } | { category: 'location_shared' } | { category: 'arrival', checkId }
  *
  * The record is re-read with the service role and the caller must be its
  * sender/caller, so a client can't push arbitrary content. Each category maps
@@ -21,7 +22,10 @@ type Category =
   | 'wellbeing_nudge'
   | 'memory_resurfaced'
   | 'letter_unlocked'
-  | 'daily_question';
+  | 'daily_question'
+  | 'thinking_of_you'
+  | 'location_shared'
+  | 'arrival';
 
 interface Style {
   iosSound?: string;
@@ -55,6 +59,10 @@ const CATEGORIES: Record<Category, Style> = {
   memory_resurfaced: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'memories' },
   letter_unlocked: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'letters' },
   daily_question: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'daily' },
+  thinking_of_you: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'taps' },
+  location_shared: { priority: 5, iosInterruption: 'passive', threadId: 'location' },
+  // "Got home safe" should reach someone waiting up, even in a focus mode.
+  arrival: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'time-sensitive', threadId: 'arrival' },
 };
 
 Deno.serve(async (req) => {
@@ -83,7 +91,10 @@ Deno.serve(async (req) => {
     const { data: msg } = await admin.from('messages').select('*').eq('id', body.messageId).maybeSingle();
     if (!msg || msg.sender_id !== userId || msg.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
     category = 'new_message';
-    content = truncate(msg.body ?? '', 160);
+    content = truncate(
+      msg.body?.trim() || (msg.media_kind === 'image' ? '📷 Photo' : msg.media_kind === 'audio' ? '🎤 Voice note' : ''),
+      160,
+    );
     data = { category, url: '/talk', messageId: msg.id };
     // TODO: true inline reply needs a native notification category (iOS) /
     // RemoteInput (Android); for now "Reply" deep-links into the composer.
@@ -145,6 +156,41 @@ Deno.serve(async (req) => {
       : `${name} answered today’s question. Answer yours to see theirs.`;
     collapseId = `daily-${q.id}`;
     data = { category, url: '/connect' };
+  } else if (body.category === 'thinking_of_you') {
+    const { data: tap } = await admin.from('taps').select('id, couple_id, from_id, created_at').eq('id', body.tapId).maybeSingle();
+    if (!tap || tap.from_id !== userId || tap.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
+    if (Date.now() - Date.parse(tap.created_at) > 2 * 60_000) return json({ skipped: 'stale' });
+    category = 'thinking_of_you';
+    heading = `${name} 💗`;
+    content = 'is thinking of you.';
+    collapseId = `tap-${userId}`;
+    data = { category, url: '/home' };
+  } else if (body.category === 'location_shared') {
+    const { data: share } = await admin.from('location_shares').select('couple_id, sharing_until').eq('owner_id', userId).maybeSingle();
+    if (!share || share.couple_id !== coupleId || !share.sharing_until || Date.parse(share.sharing_until) <= Date.now()) {
+      return json({ error: 'forbidden' }, 403);
+    }
+    const hours = Math.max(1, Math.round((Date.parse(share.sharing_until) - Date.now()) / 3_600_000));
+    category = 'location_shared';
+    content = `${name} is sharing their location with you for ${hours === 1 ? 'the next hour' : `${hours} hours`}.`;
+    collapseId = `location-${userId}`;
+    data = { category, url: '/home' };
+  } else if (body.category === 'arrival') {
+    const { data: check } = await admin.from('arrival_checks').select('*').eq('id', body.checkId).maybeSingle();
+    if (!check || check.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
+    category = 'arrival';
+    collapseId = `arrival-${check.id}`;
+    data = { category, url: '/home', checkId: check.id };
+    if (check.arrived_at && check.traveller_id === userId) {
+      if (Date.now() - Date.parse(check.arrived_at) > 10 * 60_000) return json({ skipped: 'stale' });
+      content = `Got to ${check.label} safe. 🏡`;
+    } else if (!check.arrived_at && !check.cancelled_at && check.requested_by === userId && check.traveller_id === partnerId) {
+      content = `Asked you to let them know when you get ${check.label === 'home' ? 'home' : `to ${check.label}`}.`;
+    } else if (!check.arrived_at && !check.cancelled_at && check.requested_by === userId && check.traveller_id === userId) {
+      content = `Will let you know when they get ${check.label === 'home' ? 'home' : `to ${check.label}`}.`;
+    } else {
+      return json({ skipped: 'nothing_to_say' });
+    }
   } else {
     return json({ error: 'unknown_category' }, 400);
   }

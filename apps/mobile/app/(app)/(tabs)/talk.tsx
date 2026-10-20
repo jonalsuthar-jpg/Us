@@ -1,18 +1,24 @@
-import { clusters, groupByDay, type Message } from '@us/shared';
-import { useCallManager, useCouple, useMessages, useTyping } from '@us/shared/react';
+import { clusters, formatDay, groupByDay, listPinned, messagePreview, QUICK_REACTIONS, searchMessages, type Message } from '@us/shared';
+import { useCallManager, useChatMedia, useCouple, useCoupleData, useMessages, useTyping } from '@us/shared/react';
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { Phone, Settings, Video } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, View } from 'react-native';
+import { Copy, Phone, Pin, PinOff, Reply, Search, Settings, Video } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, AppState, FlatList, Modal, Pressable, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bubble, CallEntry } from '@/components/chat/bubble';
+import { Bubble, CallEntry, type ReplyQuote } from '@/components/chat/bubble';
 import { Composer } from '@/components/chat/composer';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
 import { IconButton } from '@/components/ui/button';
 import { Display, Text } from '@/components/ui/text';
 import { usePalette } from '@/components/ui/palette';
+import { FormSheet } from '@/components/ui/form-sheet';
+import { PhotoViewer } from '@/components/ui/photo-viewer';
+import { cn } from '@/components/ui/cn';
 
 type Row =
   | { kind: 'day'; key: string; label: string }
@@ -37,9 +43,64 @@ function useViewing() {
 
 export default function Talk() {
   const insets = useSafeAreaInsets();
-  const { me, partner, mySlot, partnerSlot, partnerOnline } = useCouple();
+  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline } = useCouple();
   const viewing = useViewing();
-  const { messages, loading, hasOlder, loadOlder, send, retry } = useMessages({ viewing });
+  const { messages, loading, hasOlder, loadOlder, send, retry, react, pin } = useMessages({ viewing });
+  const media = useChatMedia(messages);
+  const [acting, setActing] = useState<Message | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const [panel, setPanel] = useState<'search' | 'pins' | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const list = useRef<FlatList<Row>>(null);
+
+  const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id), [sb, couple.id]);
+  const pinSignature = messages.map((m) => (m.pinned_at ? m.id : '')).join('');
+  useEffect(() => {
+    void pins.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinSignature]);
+
+  const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+  const authorOf = (m: Pick<Message, 'sender_id'>) => (m.sender_id === me.id ? 'You' : partner.display_name);
+  const quoteFor = (m: Message): ReplyQuote | null => {
+    if (!m.reply_to) return null;
+    const r = byId.get(m.reply_to);
+    return r ? { id: r.id, author: authorOf(r), text: messagePreview(r) } : { id: m.reply_to, author: 'Earlier message', text: 'Scroll up to see it' };
+  };
+  const say = (text: string) => {
+    setNotice(text);
+    setTimeout(() => setNotice(null), 4000);
+  };
+  const fail = (e: unknown) => say((e as Error).message ?? 'That didn’t work. Try again.');
+
+  function sendWithReply(text: string, extras: Parameters<typeof send>[1] = {}) {
+    send(text, { ...extras, replyTo: replyTo?.id ?? null });
+    setReplyTo(null);
+  }
+
+  async function sendPhoto(caption: string) {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+    const asset = res.canceled ? null : res.assets[0];
+    if (!asset) return;
+    const bytes = await (await fetch(asset.uri)).arrayBuffer();
+    sendWithReply(caption, {
+      media: {
+        kind: 'image',
+        meta: asset.width && asset.height ? { width: asset.width, height: asset.height } : null,
+        localUri: asset.uri,
+        upload: { body: bytes, contentType: asset.mimeType ?? 'image/jpeg' },
+      },
+    });
+  }
+
+  async function sendVoice(uri: string, durationMs: number) {
+    const bytes = await (await fetch(uri)).arrayBuffer();
+    sendWithReply('', {
+      media: { kind: 'audio', meta: { duration_ms: Math.round(durationMs) }, localUri: uri, upload: { body: bytes, contentType: 'audio/mp4' } },
+    });
+  }
   const { partnerTyping, onComposerChange, onComposerSent } = useTyping();
   const calls = useCallManager();
   const c = usePalette();
@@ -55,6 +116,20 @@ export default function Talk() {
     }
     return out.reverse();
   }, [messages]);
+
+  function jumpTo(id: string) {
+    const index = rows.findIndex((r) => r.key === id);
+    if (index < 0) return false;
+    list.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    setHighlight(id);
+    setTimeout(() => setHighlight(null), 1600);
+    return true;
+  }
+  const pick = (m: Message) => {
+    setPanel(null);
+    if (!jumpTo(m.id)) say(`That one is from ${formatDay(m.created_at)}. Scroll up to load it.`);
+  };
+  const latestPin = pins.data?.[0];
 
   return (
     // Android draws edge-to-edge, so the window no longer resizes for the keyboard:
@@ -76,10 +151,30 @@ export default function Talk() {
         <IconButton label={`Video call ${partner.display_name}`} tone="rose" size="sm" onPress={() => void calls.startCall('video')}>
           <Video size={19} color={c.onRose} />
         </IconButton>
+        <IconButton label="Search messages" size="sm" onPress={() => setPanel('search')}>
+          <Search size={19} color={c.inkSoft} />
+        </IconButton>
         <IconButton label="Settings" size="sm" onPress={() => router.push('/settings')}>
           <Settings size={19} color={c.inkSoft} />
         </IconButton>
       </View>
+
+      {latestPin ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Pinned: ${messagePreview(latestPin)}. Show all pinned`}
+          onPress={() => setPanel('pins')}
+          className="flex-row items-center gap-3 border-b border-paper-edge bg-gold-50 px-4 py-2"
+        >
+          <Pin size={15} color={c.onGold} />
+          <View className="flex-1">
+            <Text className="font-sans-medium text-micro text-gold-700">{`Pinned${pins.data!.length > 1 ? ` · ${pins.data!.length}` : ''}`}</Text>
+            <Text numberOfLines={1} className="text-small">
+              {messagePreview(latestPin)}
+            </Text>
+          </View>
+        </Pressable>
+      ) : null}
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
@@ -87,6 +182,8 @@ export default function Talk() {
         </View>
       ) : (
         <FlatList
+          ref={list}
+          onScrollToIndexFailed={(info) => setTimeout(() => list.current?.scrollToIndex({ index: info.index, viewPosition: 0.5 }), 250)}
           inverted
           className="flex-1 px-4"
           data={rows}
@@ -118,9 +215,21 @@ export default function Talk() {
                 mine={item.message.sender_id === me.id}
                 slot={item.message.sender_id === me.id ? mySlot : partnerSlot}
                 authorName={partner.display_name}
+                myId={me.id}
                 first={item.first}
                 last={item.last}
+                mediaUrl={item.message.media_path ? media[item.message.media_path] : undefined}
+                quote={quoteFor(item.message)}
+                highlighted={highlight === item.message.id}
                 onRetry={() => retry(item.message.id)}
+                onLongPress={() => {
+                  if (item.message.pending || item.message.failed) return;
+                  void Haptics.selectionAsync().catch(() => {});
+                  setActing(item.message);
+                }}
+                onReact={(emoji) => void react(item.message.id, emoji).catch(fail)}
+                onOpenPhoto={setPhoto}
+                onJumpTo={(id) => !jumpTo(id) && say('That message is further up. Scroll up to load it.')}
               />
             )
           }
@@ -128,15 +237,154 @@ export default function Talk() {
       )}
 
       <View style={{ paddingBottom: 8 }} className="px-3 pt-1">
+        {notice ? <Text className="mb-2 px-2 text-small text-rose-700">{notice}</Text> : null}
         <Composer
           partnerName={partner.display_name}
           onChange={onComposerChange}
+          replyTo={replyTo ? { id: replyTo.id, author: authorOf(replyTo), text: messagePreview(replyTo) } : null}
+          onCancelReply={() => setReplyTo(null)}
           onSend={(t) => {
             onComposerSent();
-            send(t);
+            sendWithReply(t);
           }}
+          onPhoto={(caption) => void sendPhoto(caption).catch(fail)}
+          onVoice={(uri, ms) => void sendVoice(uri, ms).catch(fail)}
         />
       </View>
+
+      <MessageActions
+        message={acting}
+        myId={me.id}
+        onClose={() => setActing(null)}
+        onReact={(m, emoji) => void react(m.id, emoji).catch(fail)}
+        onReply={(m) => setReplyTo(m)}
+        onPin={(m, p) => void pin(m.id, p).catch(fail)}
+      />
+      <FormSheet open={panel !== null} title={panel === 'pins' ? 'Pinned' : 'Search messages'} onClose={() => setPanel(null)}>
+        {panel === 'search' ? <SearchPanel onPick={pick} authorOf={authorOf} /> : null}
+        {panel === 'pins' ? <MessageList items={pins.data ?? []} empty="Nothing pinned." onPick={pick} authorOf={authorOf} /> : null}
+      </FormSheet>
+      <PhotoViewer uri={photo} label="Photo" onClose={() => setPhoto(null)} />
     </KeyboardAvoidingView>
+  );
+}
+
+/** Long-press sheet: quick reactions, reply, pin, copy. */
+function MessageActions({
+  message,
+  myId,
+  onClose,
+  onReact,
+  onReply,
+  onPin,
+}: {
+  message: Message | null;
+  myId: string;
+  onClose: () => void;
+  onReact: (m: Message, emoji: string | null) => void;
+  onReply: (m: Message) => void;
+  onPin: (m: Message, pinned: boolean) => void;
+}) {
+  const c = usePalette();
+  const mine = message?.reactions?.[myId] ?? null;
+  const act = (fn: (m: Message) => void) => () => {
+    if (message) fn(message);
+    onClose();
+  };
+  return (
+    <Modal visible={!!message} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable accessibilityLabel="Close" onPress={onClose} className="flex-1 justify-end bg-plum-900/40">
+        <Pressable className="gap-4 rounded-t-[28px] bg-paper-raised px-5 pb-10 pt-5">
+          {message ? (
+            <Text numberOfLines={2} className="text-small text-ink-soft">
+              {messagePreview(message)}
+            </Text>
+          ) : null}
+          <View className="flex-row justify-between">
+            {QUICK_REACTIONS.map((e) => (
+              <Pressable
+                key={e}
+                accessibilityRole="button"
+                accessibilityLabel={mine === e ? `Remove ${e}` : `React ${e}`}
+                accessibilityState={{ selected: mine === e }}
+                onPress={act((m) => onReact(m, mine === e ? null : e))}
+                className={cn('h-12 w-12 items-center justify-center rounded-full', mine === e ? 'bg-rose-50' : 'active:bg-paper-sunken')}
+              >
+                <Text className="text-[26px] leading-[32px]">{e}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <ActionRow label="Reply" onPress={act(onReply)} icon={<Reply size={20} color={c.ink} />} />
+          <ActionRow
+            label={message?.pinned_at ? 'Unpin' : 'Pin for both of you'}
+            onPress={act((m) => onPin(m, !m.pinned_at))}
+            icon={message?.pinned_at ? <PinOff size={20} color={c.ink} /> : <Pin size={20} color={c.ink} />}
+          />
+          {message?.body?.trim() ? (
+            <ActionRow label="Copy text" onPress={act((m) => void Clipboard.setStringAsync(m.body ?? ''))} icon={<Copy size={20} color={c.ink} />} />
+          ) : null}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function ActionRow({ label, onPress, icon }: { label: string; onPress: () => void; icon: ReactNode }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} className="flex-row items-center gap-4 rounded-control px-2 py-3 active:bg-paper-sunken">
+      {icon}
+      <Text>{label}</Text>
+    </Pressable>
+  );
+}
+
+function MessageList({ items, empty, onPick, authorOf }: { items: Message[]; empty: string; onPick: (m: Message) => void; authorOf: (m: Message) => string }) {
+  if (!items.length) return <Text className="py-6 text-center text-small text-ink-muted">{empty}</Text>;
+  return (
+    <View className="gap-1">
+      {items.map((m) => (
+        <Pressable key={m.id} accessibilityRole="button" onPress={() => onPick(m)} className="rounded-control px-2 py-2.5 active:bg-paper-sunken">
+          <Text className="text-micro text-ink-muted">{`${authorOf(m)} · ${formatDay(m.created_at)}`}</Text>
+          <Text numberOfLines={2} className="text-small">
+            {messagePreview(m)}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; authorOf: (m: Message) => string }) {
+  const { sb, couple } = useCouple();
+  const c = usePalette();
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<Message[] | null>(null);
+  useEffect(() => {
+    if (q.trim().length < 2) return setResults(null);
+    let cancelled = false;
+    const t = setTimeout(() => {
+      void searchMessages(sb, couple.id, q)
+        .then((r) => !cancelled && setResults(r))
+        .catch(() => !cancelled && setResults([]));
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [q, sb, couple.id]);
+  return (
+    <>
+      <TextInput
+        autoFocus
+        value={q}
+        onChangeText={setQ}
+        placeholder="Words you remember…"
+        placeholderTextColor={c.placeholder}
+        accessibilityLabel="Search messages"
+        returnKeyType="search"
+        className="h-11 rounded-control border border-paper-edge bg-paper px-4 font-sans text-body text-ink"
+      />
+      {results ? <MessageList items={results} empty="Nothing found." onPick={onPick} authorOf={authorOf} /> : null}
+    </>
   );
 }

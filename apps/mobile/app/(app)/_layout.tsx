@@ -4,6 +4,7 @@ import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { CallScreen } from '@/components/call/call-screen';
+import { TapHeart } from '@/components/tap-heart';
 import { env } from '@/lib/env';
 import { initPush, onPush } from '@/lib/push';
 import { nativeRtc } from '@/lib/rtc';
@@ -50,6 +51,7 @@ export default function AppLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
         </Stack>
+        <TapHeart />
         <CallScreen />
       </CallProvider>
     </CoupleProvider>

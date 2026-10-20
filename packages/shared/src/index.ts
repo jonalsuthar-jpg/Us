@@ -18,6 +18,7 @@ export * from './api/growth';
 export * from './api/home';
 export * from './api/connect';
 export * from './api/account';
+export * from './api/together';
 
 export * from './realtime/couple-channel';
 export * from './realtime/typing';

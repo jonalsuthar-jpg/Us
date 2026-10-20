@@ -67,6 +67,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     [
+      'expo-location',
+      {
+        // Foreground only: sharing updates while Us is open, and "I'm home" is checked when you open it.
+        locationWhenInUsePermission:
+          'Us uses your location only when you choose to share it with your partner, or to notice that you got home.',
+        isIosBackgroundLocationEnabled: false,
+        isAndroidBackgroundLocationEnabled: false,
+      },
+    ],
+    [
       '@config-plugins/react-native-webrtc',
       {
         cameraPermission: 'Us uses your camera for video calls with your partner.',

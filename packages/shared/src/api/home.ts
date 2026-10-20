@@ -1,8 +1,9 @@
-import type { CalendarEvent, Couple, Memory, Profile } from '../database.types';
+import type { CalendarEvent, Countdown, Couple, Memory, Profile } from '../database.types';
 import type { UsClient } from '../supabase';
 import { partnerNudges } from './growth';
 import { listMemories, onThisDay, removeMemoryPhoto, signedPhotoUrls, uploadMemoryPhoto } from './memory';
 import { listEvents } from './plan';
+import { listCountdowns, partnerTaps } from './together';
 
 function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
   if (error) throw error;
@@ -96,21 +97,26 @@ export interface HomeData {
   memoryPhotoUrl: string | null;
   /** My partner asked for a little care recently. */
   nudged: boolean;
+  countdowns: Countdown[];
+  /** My partner's "thinking of you" taps in the last day. */
+  taps: { count: number; latest: string } | null;
 }
 
 /** Everything the Home page shows, in one round of requests. */
 export async function getHome(sb: UsClient, ids: { coupleId: string; meId: string }, now = new Date()): Promise<HomeData> {
-  const [couple, profiles, events, memories, nudges] = await Promise.all([
+  const [couple, profiles, events, memories, nudges, countdowns] = await Promise.all([
     sb.from('couples').select('*').eq('id', ids.coupleId).single().then(unwrap<Couple>),
     sb.from('profiles').select('*').then(unwrap<Profile[]>),
     listEvents(sb, ids.coupleId, now, new Date(now.getTime() + 30 * 86_400_000)).catch(() => []),
     listMemories(sb, ids.coupleId).catch(() => []),
     partnerNudges(sb, 24).catch(() => []),
+    listCountdowns(sb, ids.coupleId).catch(() => []),
   ]);
   const me = profiles.find((p) => p.id === ids.meId);
   const partner = profiles.find((p) => p.id !== ids.meId);
   if (!me || !partner) throw new Error('Couldn’t load the two of you.');
 
+  const taps = await partnerTaps(sb, ids.coupleId, partner.id, now).catch(() => null);
   const memory = featuredMemory(memories, now);
   const paths = [couple.photo_path, memory?.photo_path].filter((p): p is string => !!p);
   const urls = paths.length ? await signedPhotoUrls(sb, paths).catch(() => ({}) as Record<string, string>) : {};
@@ -124,6 +130,8 @@ export async function getHome(sb: UsClient, ids: { coupleId: string; meId: strin
     memory,
     memoryPhotoUrl: (memory?.photo_path && urls[memory.photo_path]) || null,
     nudged: nudges.length > 0,
+    countdowns,
+    taps,
   };
 }
 

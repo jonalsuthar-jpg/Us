@@ -12,13 +12,19 @@ export type PushCategory =
   | 'wellbeing_nudge' // partner asked for a little care (never carries details)
   | 'memory_resurfaced' // TODO(phase-3/5)
   | 'letter_unlocked' // TODO(phase-3)
-  | 'daily_question'; // my partner answered today's question (never carries the answer)
+  | 'daily_question' // my partner answered today's question (never carries the answer)
+  | 'thinking_of_you' // a one-tap "thinking of you"
+  | 'location_shared' // my partner started sharing their location with me
+  | 'arrival'; // asked to say when home / got home safe
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }
   | { category: 'incoming_call' | 'call_ended'; callId: string }
   | { category: 'wellbeing_nudge'; checkinId: string }
-  | { category: 'daily_question'; questionId: string };
+  | { category: 'daily_question'; questionId: string }
+  | { category: 'thinking_of_you'; tapId: string }
+  | { category: 'location_shared' }
+  | { category: 'arrival'; checkId: string };
 
 /** Payload attached to every notification (`data`) for deep-link routing. */
 export interface PushData {
@@ -27,6 +33,7 @@ export interface PushData {
   messageId?: string;
   callId?: string;
   checkinId?: string;
+  checkId?: string;
 }
 
 /**

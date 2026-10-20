@@ -278,9 +278,10 @@ await test('decisions: weighted pick within a category, recorded, couple-scoped'
   }
   assert.equal(counts.Ramen + counts.Tacos, 300, 'only the requested category');
   assert.ok(counts.Ramen > 220, `weight 9:1 should dominate (got ${counts.Ramen}:${counts.Tacos})`);
-  const ramen = await one(`select times_picked, last_picked_at from public.decision_options where label = 'Ramen'`);
+  const ramen = await one(`select times_picked from public.decision_options where label = 'Ramen'`);
   assert.equal(ramen.times_picked, counts.Ramen);
-  assert.ok(ramen.last_picked_at);
+  // Whichever option won the final pick carries its timestamp.
+  assert.equal((await one(`select count(*)::int as n from public.decision_options where category = 'dinner' and last_picked_at is not null`)).n, 1);
   await rejects(as(alice, () => q(`select public.pick_decision('nothing here')`)), /no_options/, 'empty');
   await rejects(as(carol, () => q(`select public.pick_decision('dinner')`)), /not_paired/, 'outsider');
 });
@@ -560,6 +561,141 @@ await test('daily question: answers stay hidden until both of us have answered, 
     /row-level security|daily_answers_answer_len/,
     'empty answer',
   );
+});
+
+console.log('\nTogether');
+
+await test('countdowns: shared, added as yourself, editable by either of us', async () => {
+  await rejects(
+    as(alice, () => q(`insert into public.countdowns (couple_id, created_by, title, on_date) values ($1, $2, 'x', current_date)`, [couple.id, bob])),
+    /row-level security/,
+    'spoof creator',
+  );
+  await as(alice, () => q(`insert into public.countdowns (couple_id, created_by, title, emoji, on_date, yearly) values ($1, $2, 'Bob''s birthday', '🎂', '1995-03-14', true)`, [couple.id, alice]));
+  assert.equal((await as(bob, () => q(`update public.countdowns set title = 'My birthday' returning 1`))).length, 1);
+  await rejects(as(bob, () => q(`update public.countdowns set created_by = $1`, [bob])), /permission denied/, 'reassign creator');
+  assert.equal((await as(carol, () => q(`select * from public.countdowns`))).length, 0, 'outsider');
+});
+
+await test('lists: shared; ticked off by one of us, never by an outsider', async () => {
+  await rejects(
+    as(alice, () => q(`insert into public.list_items (couple_id, list, text, added_by) values ($1, 'shopping', 'x', $2)`, [couple.id, alice])),
+    /list_items_list_check/,
+    'unknown list',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.list_items (couple_id, list, text, added_by, done_at, done_by) values ($1, 'groceries', 'x', $2, now(), $2)`, [couple.id, alice])),
+    /row-level security/,
+    'pre-ticked',
+  );
+  const item = (await as(alice, () => one(`insert into public.list_items (couple_id, list, text, added_by) values ($1, 'groceries', 'Oat milk', $2) returning id`, [couple.id, alice]))).id;
+  assert.equal((await as(bob, () => q(`update public.list_items set done_at = now(), done_by = $1 where id = $2 returning 1`, [bob, item]))).length, 1);
+  await rejects(as(bob, () => q(`update public.list_items set done_by = $1 where id = $2`, [carol, item])), /row-level security/, 'outsider ticks');
+  await rejects(as(bob, () => q(`update public.list_items set done_at = null where id = $1`, [item])), /list_items_done_shape/, 'half-ticked');
+  assert.equal((await as(carol, () => q(`select * from public.list_items`))).length, 0, 'outsider');
+});
+
+await test('taps: sent as yourself, at most one every 10 seconds', async () => {
+  await rejects(as(alice, () => q(`insert into public.taps (couple_id, from_id) values ($1, $2)`, [couple.id, bob])), /row-level security/, 'spoof sender');
+  await as(alice, () => q(`insert into public.taps (couple_id, from_id) values ($1, $2)`, [couple.id, alice]));
+  await rejects(as(alice, () => q(`insert into public.taps (couple_id, from_id) values ($1, $2)`, [couple.id, alice])), /too_soon/, 'flood');
+  await as(bob, () => q(`insert into public.taps (couple_id, from_id) values ($1, $2)`, [couple.id, bob]));
+  assert.equal((await as(alice, () => q(`select * from public.taps`))).length, 2);
+  assert.equal((await as(carol, () => q(`select * from public.taps`))).length, 0, 'outsider');
+});
+
+await test('location: partner sees it only while I share; stopping clears it', async () => {
+  await as(alice, () => q(
+    `insert into public.location_shares (owner_id, couple_id, lat, lng, accuracy_m, sharing_until) values ($1, $2, 38.72, -9.14, 12, now() + interval '1 hour')`,
+    [alice, couple.id],
+  ));
+  const seen = await as(bob, () => q(`select lat, lng from public.location_shares`));
+  assert.deepEqual(seen, [{ lat: 38.72, lng: -9.14 }]);
+  assert.equal((await as(carol, () => q(`select * from public.location_shares`))).length, 0, 'outsider');
+  await rejects(as(bob, () => q(`insert into public.location_shares (owner_id, couple_id, sharing_until) values ($1, $2, now())`, [alice, couple.id])), /row-level security/, 'write theirs');
+  assert.equal((await as(bob, () => q(`update public.location_shares set lat = 0 returning 1`))).length, 0, 'edit theirs');
+  await rejects(
+    as(alice, () => q(`update public.location_shares set sharing_until = now() + interval '30 days'`)),
+    /location_shares_max_window/,
+    'open-ended sharing',
+  );
+  await as(alice, () => q(`update public.location_shares set sharing_until = null`));
+  assert.equal((await as(bob, () => q(`select * from public.location_shares`))).length, 0, 'hidden once stopped');
+  const mine = await as(alice, () => one(`select lat, lng from public.location_shares`));
+  assert.deepEqual(mine, { lat: null, lng: null }, 'coordinates scrubbed');
+});
+
+await test('arrival: either of us asks; only the traveller arrives; one open check each', async () => {
+  await rejects(
+    as(alice, () => q(`insert into public.arrival_checks (couple_id, requested_by, traveller_id) values ($1, $2, $3)`, [couple.id, alice, carol])),
+    /row-level security/,
+    'outsider traveller',
+  );
+  const check = (await as(alice, () => one(`insert into public.arrival_checks (couple_id, requested_by, traveller_id) values ($1, $2, $3) returning id`, [couple.id, alice, bob]))).id;
+  await rejects(
+    as(alice, () => q(`insert into public.arrival_checks (couple_id, requested_by, traveller_id) values ($1, $2, $3)`, [couple.id, alice, bob])),
+    /duplicate key/,
+    'second open check',
+  );
+  await rejects(as(alice, () => q(`select public.mark_arrived($1)`, [check])), /only the traveller/, 'requester arrives');
+  await rejects(as(carol, () => q(`select public.mark_arrived($1)`, [check])), /check_not_found/, 'outsider');
+  await rejects(as(bob, () => q(`update public.arrival_checks set arrived_at = now()`)), /permission denied/, 'direct update');
+  assert.ok((await as(bob, () => one(`select arrived_at from public.mark_arrived($1)`, [check]))).arrived_at);
+  const offer = (await as(bob, () => one(`insert into public.arrival_checks (couple_id, requested_by, traveller_id, label) values ($1, $2, $2, 'the office') returning id`, [couple.id, bob]))).id;
+  assert.ok((await as(alice, () => one(`select cancelled_at from public.cancel_arrival($1)`, [offer]))).cancelled_at, 'either can cancel');
+});
+
+console.log('\nChat');
+
+await test('chat: replies stay in our thread; media lives in our folder', async () => {
+  const reply = (await as(bob, () => one(
+    `insert into public.messages (couple_id, sender_id, body, reply_to) values ($1, $2, 'replying', $3) returning id`,
+    [couple.id, bob, msgId],
+  ))).id;
+  assert.ok(reply);
+  const carolMsg = (await as(carol, () => one(`insert into public.messages (couple_id, sender_id, body) values ($1, $2, 'theirs') returning id`, [otherCouple.id, carol]))).id;
+  await rejects(
+    as(alice, () => q(`insert into public.messages (couple_id, sender_id, body, reply_to) values ($1, $2, 'x', $3)`, [couple.id, alice, carolMsg])),
+    /row-level security/,
+    'reply across couples',
+  );
+  await as(alice, () => q(
+    `insert into public.messages (couple_id, sender_id, media_path, media_kind, media_meta) values ($1::uuid, $2, $1::text || '/v.m4a', 'audio', '{"duration_ms": 4200}')`,
+    [couple.id, alice],
+  ));
+  await rejects(
+    as(alice, () => q(`insert into public.messages (couple_id, sender_id, media_path, media_kind) values ($1, $2, $3, 'image')`, [couple.id, alice, `${otherCouple.id}/x.jpg`])),
+    /messages_media_in_couple_folder/,
+    'foreign folder',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.messages (couple_id, sender_id, media_path) values ($1::uuid, $2, $1::text || '/x.jpg')`, [couple.id, alice])),
+    /messages_media_shape/,
+    'media without kind',
+  );
+  await rejects(as(alice, () => q(`insert into public.messages (couple_id, sender_id) values ($1, $2)`, [couple.id, alice])), /messages_shape/, 'empty');
+  await rejects(
+    as(alice, () => q(`insert into public.messages (couple_id, sender_id, body, reactions) values ($1, $2, 'x', '{"a":"❤️"}')`, [couple.id, alice])),
+    /row-level security/,
+    'pre-reacted',
+  );
+});
+
+await test('chat: one reaction each, pins by either of us, nothing for outsiders', async () => {
+  await as(alice, () => q(`select public.react_to_message($1, '❤️')`, [msgId]));
+  await as(bob, () => q(`select public.react_to_message($1, '😂')`, [msgId]));
+  let row = await as(alice, () => one(`select (public.react_to_message($1, '🔥')).reactions`, [msgId]));
+  assert.deepEqual(row.reactions, { [alice]: '🔥', [bob]: '😂' }, 'replaced, not added');
+  row = await as(bob, () => one(`select (public.react_to_message($1, null)).reactions`, [msgId]));
+  assert.deepEqual(row.reactions, { [alice]: '🔥' }, 'removed');
+  await rejects(as(carol, () => q(`select public.react_to_message($1, '👀')`, [msgId])), /message_not_found/, 'outsider reacts');
+  await rejects(as(alice, () => q(`update public.messages set reactions = '{}'`)), /permission denied/, 'direct edit');
+
+  const pinned = await as(bob, () => one(`select pinned_at, pinned_by from public.pin_message($1, true)`, [msgId]));
+  assert.ok(pinned.pinned_at);
+  assert.equal(pinned.pinned_by, bob);
+  assert.equal((await as(alice, () => one(`select pinned_at from public.pin_message($1, false)`, [msgId]))).pinned_at, null, 'unpinned');
+  await rejects(as(carol, () => q(`select public.pin_message($1, true)`, [msgId])), /message_not_found/, 'outsider pins');
 });
 
 console.log('\nLeaving');

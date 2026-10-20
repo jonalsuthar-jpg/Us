@@ -3,12 +3,21 @@
  *
  * Hand-maintained in the shape `supabase gen types typescript` produces, so it
  * can be swapped for generated output (`npm run db:types`) at any time.
- * Phase 3 tables are omitted until those features are built.
+ * Phase 3 tables without a UI yet (letters, fights, jokes) are omitted.
  */
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type CallMedia = 'audio' | 'video';
+export type MediaKind = 'image' | 'audio';
+/** Small, optional hints for rendering before the file loads. */
+export interface MediaMeta {
+  width?: number;
+  height?: number;
+  duration_ms?: number;
+  [key: string]: number | undefined;
+}
+export type ListName = 'groceries' | 'bucket' | 'watch' | 'read';
 export type CallStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'declined';
 export type MessageKind = 'text' | 'call';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
@@ -101,14 +110,27 @@ export type Database = {
           delivered_at: string | null;
           read_at: string | null;
           created_at: string;
+          reply_to: string | null;
+          /** "<couple_id>/<uuid>.<ext>" in the private chat bucket. */
+          media_path: string | null;
+          media_kind: MediaKind | null;
+          media_meta: MediaMeta | null;
+          /** One reaction per person: { [userId]: emoji }. Set via react_to_message(). */
+          reactions: Record<string, string>;
+          pinned_at: string | null;
+          pinned_by: string | null;
         };
         Insert: {
           id?: string;
           couple_id: string;
           sender_id: string;
           kind?: 'text';
-          body: string;
+          body?: string | null;
           created_at?: string;
+          reply_to?: string | null;
+          media_path?: string | null;
+          media_kind?: MediaKind | null;
+          media_meta?: MediaMeta | null;
         };
         Update: never;
         Relationships: [
@@ -263,6 +285,71 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      // --------------------------------------------------------- Together
+      countdowns: {
+        Row: { id: string; couple_id: string; created_by: string; title: string; emoji: string | null; on_date: string; yearly: boolean; created_at: string };
+        Insert: { id?: string; couple_id: string; created_by: string; title: string; emoji?: string | null; on_date: string; yearly?: boolean };
+        Update: { title?: string; emoji?: string | null; on_date?: string; yearly?: boolean };
+        Relationships: [];
+      };
+      list_items: {
+        Row: {
+          id: string;
+          couple_id: string;
+          list: ListName;
+          text: string;
+          note: string | null;
+          added_by: string;
+          done_at: string | null;
+          done_by: string | null;
+          created_at: string;
+        };
+        Insert: { id?: string; couple_id: string; list: ListName; text: string; note?: string | null; added_by: string };
+        Update: { text?: string; note?: string | null; done_at?: string | null; done_by?: string | null };
+        Relationships: [];
+      };
+      taps: {
+        Row: { id: string; couple_id: string; from_id: string; created_at: string };
+        Insert: { id?: string; couple_id: string; from_id: string };
+        Update: never;
+        Relationships: [];
+      };
+      location_shares: {
+        Row: {
+          owner_id: string;
+          couple_id: string;
+          lat: number | null;
+          lng: number | null;
+          accuracy_m: number | null;
+          updated_at: string | null;
+          sharing_until: string | null;
+        };
+        Insert: {
+          owner_id: string;
+          couple_id: string;
+          lat?: number | null;
+          lng?: number | null;
+          accuracy_m?: number | null;
+          sharing_until?: string | null;
+        };
+        Update: { lat?: number | null; lng?: number | null; accuracy_m?: number | null; sharing_until?: string | null };
+        Relationships: [];
+      };
+      arrival_checks: {
+        Row: {
+          id: string;
+          couple_id: string;
+          requested_by: string;
+          traveller_id: string;
+          label: string;
+          created_at: string;
+          arrived_at: string | null;
+          cancelled_at: string | null;
+        };
+        Insert: { id?: string; couple_id: string; requested_by: string; traveller_id: string; label?: string };
+        Update: never;
+        Relationships: [];
+      };
       // ------------------------------------------------------------ Phase 6
       goals: {
         Row: {
@@ -334,6 +421,10 @@ export type Database = {
         }[];
       };
       unpair: { Args: Record<PropertyKey, never>; Returns: undefined };
+      mark_arrived: { Args: { p_id: string }; Returns: Database['public']['Tables']['arrival_checks']['Row'] };
+      cancel_arrival: { Args: { p_id: string }; Returns: Database['public']['Tables']['arrival_checks']['Row'] };
+      react_to_message: { Args: { p_id: string; p_emoji: string | null }; Returns: Database['public']['Tables']['messages']['Row'] };
+      pin_message: { Args: { p_id: string; p_pinned: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };
     };
     Enums: {
       call_media: CallMedia;
@@ -362,6 +453,11 @@ export type MoodCheckin = Tables['mood_checkins']['Row'];
 export type Worry = Tables['insecurity_checkins']['Row'];
 export type LoveLanguageResult = Tables['love_language_results']['Row'];
 export type DailyQuestion = Tables['daily_questions']['Row'];
+export type Countdown = Tables['countdowns']['Row'];
+export type ListItem = Tables['list_items']['Row'];
+export type Tap = Tables['taps']['Row'];
+export type LocationShare = Tables['location_shares']['Row'];
+export type ArrivalCheck = Tables['arrival_checks']['Row'];
 export type DailyEntry = Database['public']['Functions']['daily_history']['Returns'][number];
 
 /** A message as rendered in the thread: call log entries carry their call. */
@@ -371,4 +467,8 @@ export type Message = MessageRow & {
   pending?: boolean;
   /** Client-only: send failed; can be retried. */
   failed?: boolean;
+  /** Client-only: a local preview (object URL / file URI) while media uploads. */
+  localUri?: string;
+  /** Client-only: the file still to upload, kept so a failed send can retry. */
+  upload?: { body: Blob | ArrayBuffer | Uint8Array; contentType: string };
 };

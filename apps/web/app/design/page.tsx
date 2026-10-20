@@ -176,6 +176,35 @@ export default function DesignPage() {
             <Bubble message={sample('6', 'a', 'Sending…', 'sent', { pending: true })} mine slot="a" authorName="Rosa" first={false} last={false} />
             <Bubble message={sample('7', 'a', 'This one failed', 'sent', { failed: true })} mine slot="a" authorName="Rosa" first={false} last onRetry={() => {}} />
             <CallEntry message={sample('8', 'b', '', 'read', { kind: 'call', body: null, call })} myId="a" onCallBack={() => {}} />
+            <Bubble
+              message={sample('9', 'b', 'Perfect, see you there', 'read', { reply_to: '3', reactions: { a: '❤️', b: '❤️' } })}
+              quote={{ id: '3', author: 'You', text: 'Yes!! 8pm?' }}
+              mine={false}
+              slot="b"
+              authorName="Theo"
+              myId="a"
+              first
+              last
+            />
+            <Bubble
+              message={sample('10', 'a', 'Don’t forget the tickets', 'read', { pinned_at: SAMPLE_AT, reactions: { b: '👍' } })}
+              mine
+              slot="a"
+              authorName="Rosa"
+              myId="a"
+              first
+              last={false}
+              active
+            />
+            <Bubble
+              message={sample('11', 'a', '', 'delivered', { body: null, media_kind: 'audio', media_meta: { duration_ms: 14_000 } })}
+              mine
+              slot="a"
+              authorName="Rosa"
+              myId="a"
+              first={false}
+              last
+            />
           </ol>
           <TypingBubble visible name="Theo" slot="b" />
         </Sheet>
