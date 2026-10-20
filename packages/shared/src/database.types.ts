@@ -12,6 +12,7 @@ export type CallMedia = 'audio' | 'video';
 export type CallStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'declined';
 export type MessageKind = 'text' | 'call';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
+export type MemoryKind = 'moment' | 'trip' | 'date';
 
 export type Database = {
   public: {
@@ -205,6 +206,38 @@ export type Database = {
         };
         Relationships: [];
       };
+      // ------------------------------------------------------------ Phase 5
+      memories: {
+        Row: {
+          id: string;
+          couple_id: string;
+          created_by: string;
+          title: string;
+          body: string | null;
+          happened_on: string;
+          photo_path: string | null;
+          kind: MemoryKind;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          couple_id: string;
+          created_by: string;
+          title: string;
+          body?: string | null;
+          happened_on: string;
+          photo_path?: string | null;
+          kind?: MemoryKind;
+        };
+        Update: { title?: string; body?: string | null; happened_on?: string; photo_path?: string | null; kind?: MemoryKind };
+        Relationships: [];
+      };
+      memory_ratings: {
+        Row: { memory_id: string; owner_id: string; rating: number | null; note: string | null };
+        Insert: { memory_id: string; owner_id: string; rating?: number | null; note?: string | null };
+        Update: { rating?: number | null; note?: string | null };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -243,6 +276,8 @@ export type CalendarEvent = Tables['calendar_events']['Row'];
 export type DecisionOption = Tables['decision_options']['Row'];
 export type LaborEntry = Tables['labor_entries']['Row'];
 export type Expense = Tables['expenses']['Row'];
+export type Memory = Tables['memories']['Row'];
+export type MemoryRating = Tables['memory_ratings']['Row'];
 
 /** A message as rendered in the thread: call log entries carry their call. */
 export type Message = MessageRow & {

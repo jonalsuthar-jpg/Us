@@ -39,6 +39,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-splash-screen', { backgroundColor: PAPER, image: './assets/images/icon.png', imageWidth: 120 }],
     ['expo-build-properties', { android: { minSdkVersion: 24 } }],
     [
+      'expo-image-picker',
+      {
+        photosPermission: 'Us lets you add photos to the memories you keep together.',
+        cameraPermission: 'Us uses your camera for video calls and for photos of your memories.',
+      },
+    ],
+    [
       '@config-plugins/react-native-webrtc',
       {
         cameraPermission: 'Us uses your camera for video calls with your partner.',

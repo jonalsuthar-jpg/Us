@@ -1,6 +1,13 @@
-import { ModulePlaceholder } from '@/components/module-placeholder';
+import { useCouple } from '@us/shared/react';
+import { MemoryTimeline } from '@/components/memory/timeline';
+import { ModuleScreen } from '@/components/module-screen';
+import { PrivacyBadge } from '@/components/ui/privacy';
 
-// TODO(phase-5): timeline + photos, on-this-day, trip/date log with private ratings.
 export default function Memory() {
-  return <ModulePlaceholder id="memory" />;
+  const { partner } = useCouple();
+  return (
+    <ModuleScreen id="memory" aside={<PrivacyBadge privacy="shared" partnerName={partner.display_name} />}>
+      <MemoryTimeline />
+    </ModuleScreen>
+  );
 }

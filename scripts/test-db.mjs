@@ -326,5 +326,50 @@ await test('costs: paid by a member, valid currency, settlements recorded', asyn
   assert.equal((await as(carol, () => q(`select * from public.expenses`))).length, 0);
 });
 
+console.log('\nPhase 5 · Memory');
+
+// A second couple, so cross-couple isolation is tested against real rows.
+const otherCouple = await (async () => {
+  const { code } = await as(carol, () => one(`select code from public.create_invite()`));
+  return as(dave, () => one(`select * from public.redeem_invite($1)`, [code]));
+})();
+
+let memoryId;
+await test('memories: shared with the couple, created as yourself, photos in the couple folder', async () => {
+  memoryId = (await as(alice, () => one(
+    `insert into public.memories (couple_id, created_by, title, happened_on, kind, photo_path)
+     values ($1::uuid, $2, 'Lisbon', '2025-06-01', 'trip', $1::text || '/lisbon.jpg') returning id`,
+    [couple.id, alice],
+  ))).id;
+  assert.equal((await as(bob, () => q(`select * from public.memories`))).length, 1);
+  assert.equal((await as(carol, () => q(`select * from public.memories`))).length, 0);
+  await rejects(
+    as(bob, () => q(`insert into public.memories (couple_id, created_by, title, happened_on) values ($1, $2, 'x', current_date)`, [couple.id, alice])),
+    /row-level security/,
+    'spoof creator',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.memories (couple_id, created_by, title, happened_on, photo_path) values ($1, $2, 'x', current_date, $3)`, [couple.id, alice, `${otherCouple.id}/steal.jpg`])),
+    /photo_in_couple_folder/,
+    'foreign folder',
+  );
+});
+
+await test('memory ratings: private to each of us, only on our own memories', async () => {
+  await as(alice, () => q(`insert into public.memory_ratings (memory_id, owner_id, rating, note) values ($1, $2, 5, 'best week')`, [memoryId, alice]));
+  await as(bob, () => q(`insert into public.memory_ratings (memory_id, owner_id, rating, note) values ($1, $2, 3, 'too hot')`, [memoryId, bob]));
+  const aliceSees = await as(alice, () => q(`select owner_id, note from public.memory_ratings`));
+  assert.deepEqual(aliceSees, [{ owner_id: alice, note: 'best week' }]);
+  const carolMemory = (await as(carol, () => one(
+    `insert into public.memories (couple_id, created_by, title, happened_on) values ($1, $2, 'Theirs', current_date) returning id`,
+    [otherCouple.id, carol],
+  ))).id;
+  await rejects(
+    as(alice, () => q(`insert into public.memory_ratings (memory_id, owner_id, rating) values ($1, $2, 1)`, [carolMemory, alice])),
+    /row-level security/,
+    'rate another couple’s memory',
+  );
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 await db.close();

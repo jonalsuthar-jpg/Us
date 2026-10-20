@@ -80,7 +80,7 @@ export const MODULES: AppModule[] = [
     title: 'Memory',
     tagline: 'Keep the small moments that turned out to be big ones.',
     phase: 5,
-    status: 'planned',
+    status: 'live',
     features: [
       { title: 'Timeline', blurb: 'Moments, with photos.', privacy: 'shared' },
       { title: 'On this day', blurb: 'A gentle tap from the past.', privacy: 'shared' },
