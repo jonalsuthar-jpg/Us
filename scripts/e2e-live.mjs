@@ -192,6 +192,78 @@ await step('push function rejects spoofed sender', async () => {
   return error ? 'forbidden' : 'skipped (OneSignal not configured, check runs after config)';
 });
 
+// ---------------------------------------------------------------- Phase 4–6
+// Rows created here are tagged "e2e" and removed at the end.
+const cleanup = [];
+
+await step('plan: calendar event shared, outsider blind', async () => {
+  const { data: ev, error } = await alice.sb
+    .from('calendar_events')
+    .insert({ couple_id: coupleId, created_by: alice.id, title: 'e2e dinner', starts_at: new Date().toISOString() })
+    .select()
+    .single();
+  if (error) throw error;
+  cleanup.push(() => alice.sb.from('calendar_events').delete().eq('id', ev.id));
+  const { data: seen } = await bob.sb.from('calendar_events').select('id').eq('id', ev.id);
+  const { data: leak } = await carol.sb.from('calendar_events').select('id');
+  if (seen.length !== 1 || leak.length) throw new Error('visibility wrong');
+});
+
+await step('plan: pick_decision RPC', async () => {
+  const { data: opts, error } = await alice.sb
+    .from('decision_options')
+    .insert([
+      { couple_id: coupleId, category: 'e2e', label: 'Ramen' },
+      { couple_id: coupleId, category: 'e2e', label: 'Tacos' },
+    ])
+    .select();
+  if (error) throw error;
+  cleanup.push(() => alice.sb.from('decision_options').delete().eq('category', 'e2e'));
+  const { data: pick, error: e2 } = await bob.sb.rpc('pick_decision', { p_category: 'e2e' });
+  if (e2) throw e2;
+  if (!opts.some((o) => o.id === pick.id) || pick.times_picked !== 1) throw new Error('bad pick');
+  return `picked ${pick.label}`;
+});
+
+await step('memory: private photo bucket scoped to the couple', async () => {
+  const path = `${coupleId}/e2e-${Date.now()}.png`;
+  const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='), (ch) => ch.charCodeAt(0));
+  const { error } = await alice.sb.storage.from('memories').upload(path, png, { contentType: 'image/png' });
+  if (error) throw error;
+  cleanup.push(() => alice.sb.storage.from('memories').remove([path]));
+  const { data: signed, error: e2 } = await bob.sb.storage.from('memories').createSignedUrl(path, 60);
+  if (e2) throw e2;
+  const res = await fetch(signed.signedUrl);
+  if (!res.ok) throw new Error(`partner fetch ${res.status}`);
+  const { error: e3 } = await carol.sb.storage.from('memories').createSignedUrl(path, 60);
+  if (!e3) throw new Error('outsider could read the photo');
+  const { error: e4 } = await carol.sb.storage.from('memories').upload(`${coupleId}/intruder.png`, png, { contentType: 'image/png' });
+  if (!e4) throw new Error('outsider could upload into the couple folder');
+  return 'partner reads, outsider blocked';
+});
+
+await step('growth: nudge exposes only a timestamp; push verifies ownership', async () => {
+  const { data: mood, error } = await bob.sb
+    .from('mood_checkins')
+    .insert({ owner_id: bob.id, score: 2, note: 'e2e private note', nudge_partner: true })
+    .select()
+    .single();
+  if (error) throw error;
+  cleanup.push(() => bob.sb.from('mood_checkins').delete().eq('id', mood.id));
+  const { data: nudges, error: e2 } = await alice.sb.rpc('partner_nudges', { p_hours: 1 });
+  if (e2) throw e2;
+  if (!nudges.length || Object.keys(nudges[0]).join() !== 'nudged_at') throw new Error('nudge shape leaked fields');
+  const { data: rows } = await alice.sb.from('mood_checkins').select('*');
+  if (rows.length) throw new Error('alice can read check-ins');
+  const { data: ok, error: e3 } = await bob.sb.functions.invoke('push', { body: { category: 'wellbeing_nudge', checkinId: mood.id } });
+  if (e3) throw e3;
+  const { error: spoof, data: spoofData } = await alice.sb.functions.invoke('push', { body: { category: 'wellbeing_nudge', checkinId: mood.id } });
+  if (!spoof && !spoofData?.skipped) throw new Error('alice could nudge as bob');
+  return `owner: ${JSON.stringify(ok)}, spoof: ${spoof ? 'forbidden' : 'skipped'}`;
+});
+
+for (const undo of cleanup.reverse()) await undo();
+
 for (const c of [aliceCh, bobCh]) await c?.ch.unsubscribe();
 await Promise.all([alice, bob, carol].map((u) => u.sb.removeAllChannels()));
 console.log(`\n${failed ? `${failed} FAILED` : 'all passed'} · test logins in .test-accounts.json`);
