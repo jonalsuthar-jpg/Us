@@ -215,9 +215,9 @@ export function Home() {
           <Card
             href="/connect"
             icon={<HeartHandshake className="h-5 w-5 text-teal-700" />}
-            eyebrow="Coming soon"
-            title="Connect"
-            detail="Daily questions, future letters and a gentler way through disagreements."
+            eyebrow="Connect"
+            title="Today’s question"
+            detail="One question a day. Your answers open once you’ve both replied."
           />
         </div>
       ) : null}

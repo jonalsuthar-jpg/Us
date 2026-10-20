@@ -1,9 +1,9 @@
-import { friendlyError, updateMyProfile } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { deleteAccount, friendlyError, unpair, updateMyProfile } from '@us/shared';
+import { COUPLE_ENDED_TOPIC, useCouple } from '@us/shared/react';
 import { router } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Alert, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, IconButton } from '@/components/ui/button';
@@ -21,13 +21,15 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
   const c = usePalette();
   const theme = useThemePref();
-  const { sb, me, partner, mySlot, partnerSlot, couple } = useCouple();
+  const { sb, me, partner, mySlot, partnerSlot, couple, channel } = useCouple();
   const [name, setName] = useState(me.display_name);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [push, setPush] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [leaving, setLeaving] = useState<'unpair' | 'delete' | null>(null);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
 
   return (
     <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 40 }} contentContainerClassName="gap-10 px-5">
@@ -132,6 +134,75 @@ export default function Settings() {
         )}
         <Button variant="quiet" className="self-start px-0" onPress={() => void playChime()}>
           Hear the chime
+        </Button>
+      </View>
+
+      <View className="gap-3">
+        <Display className="text-heading">Leaving</Display>
+        <Text className="text-small text-ink-soft">
+          Unpairing deletes everything you and {partner.display_name} share, for both of you: messages, plans, memories and their photos, and
+          your daily answers. Your private check-ins and worries stay yours. Deleting your account removes all of it, and you.
+        </Text>
+        {leaveError ? <Text className="text-small text-rose-700">{leaveError}</Text> : null}
+        <Button
+          variant="secondary"
+          className="self-start"
+          loading={leaving === 'unpair'}
+          disabled={!!leaving}
+          onPress={() =>
+            Alert.alert(`Unpair from ${partner.display_name}?`, 'Everything you share is deleted for both of you. This can’t be undone.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Unpair',
+                style: 'destructive',
+                onPress: async () => {
+                  setLeaveError(null);
+                  setLeaving('unpair');
+                  try {
+                    channel.sendChanged(COUPLE_ENDED_TOPIC);
+                    await unpair(sb, couple.id);
+                    router.replace('/pair');
+                  } catch (e) {
+                    setLeaveError(friendlyError(e));
+                    setLeaving(null);
+                  }
+                },
+              },
+            ])
+          }
+        >
+          Unpair
+        </Button>
+        <Button
+          variant="quiet"
+          className="self-start px-0"
+          disabled={!!leaving}
+          loading={leaving === 'delete'}
+          onPress={() =>
+            Alert.alert('Delete your account?', 'Your account and everything you share are deleted for good. This can’t be undone.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                  setLeaveError(null);
+                  setLeaving('delete');
+                  try {
+                    channel.sendChanged(COUPLE_ENDED_TOPIC);
+                    await deleteAccount(sb);
+                    logoutPush();
+                    await sb.auth.signOut().catch(() => {});
+                    router.replace('/sign-up');
+                  } catch (e) {
+                    setLeaveError(friendlyError(e));
+                    setLeaving(null);
+                  }
+                },
+              },
+            ])
+          }
+        >
+          Delete my account
         </Button>
       </View>
 

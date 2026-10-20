@@ -1,7 +1,7 @@
 'use client';
 
-import { friendlyError, updateMyProfile } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { deleteAccount, friendlyError, unpair, updateMyProfile } from '@us/shared';
+import { COUPLE_ENDED_TOPIC, useCouple } from '@us/shared/react';
 import { BellRing, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -18,7 +18,7 @@ import { playChime } from '@/lib/sounds';
 import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme';
 
 export default function SettingsPage() {
-  const { sb, me, partner, mySlot, partnerSlot, couple } = useCouple();
+  const { sb, me, partner, mySlot, partnerSlot, couple, channel } = useCouple();
   const router = useRouter();
   const [name, setName] = useState(me.display_name);
   const [saved, setSaved] = useState(false);
@@ -28,6 +28,8 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [fromReset, setFromReset] = useState(false);
+  const [leaving, setLeaving] = useState<'unpair' | 'delete' | null>(null);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setPush(pushPermission());
@@ -184,6 +186,65 @@ export default function SettingsPage() {
             </button>
           </p>
         )}
+      </section>
+
+      <section aria-labelledby="leaving" className="space-y-4">
+        <h2 id="leaving" className="font-display text-heading text-ink">
+          Leaving
+        </h2>
+        <p className="text-small text-ink-soft">
+          Unpairing deletes everything you and {partner.display_name} share, for both of you: messages, plans, memories and their photos, and
+          your daily answers. Your private check-ins and worries stay yours. Deleting your account removes all of it, and you.
+        </p>
+        {leaveError && <p role="alert" className="text-small text-rose-700">{leaveError}</p>}
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="secondary"
+            loading={leaving === 'unpair'}
+            disabled={!!leaving}
+            onClick={async () => {
+              const typed = window.prompt(
+                `This deletes everything you share with ${partner.display_name}, for both of you, and can’t be undone.\n\nType UNPAIR to confirm.`,
+              );
+              if (typed?.trim().toUpperCase() !== 'UNPAIR') return;
+              setLeaveError(null);
+              setLeaving('unpair');
+              try {
+                channel.sendChanged(COUPLE_ENDED_TOPIC);
+                await unpair(sb, couple.id);
+                window.location.assign('/pair');
+              } catch (err) {
+                setLeaveError(friendlyError(err));
+                setLeaving(null);
+              }
+            }}
+          >
+            Unpair
+          </Button>
+          <Button
+            variant="quiet"
+            loading={leaving === 'delete'}
+            disabled={!!leaving}
+            onClick={async () => {
+              const typed = window.prompt('This permanently deletes your account and everything you share. It can’t be undone.\n\nType DELETE to confirm.');
+              if (typed?.trim().toUpperCase() !== 'DELETE') return;
+              setLeaveError(null);
+              setLeaving('delete');
+              try {
+                channel.sendChanged(COUPLE_ENDED_TOPIC);
+                await deleteAccount(sb);
+                await logoutPush();
+                await sb.auth.signOut().catch(() => {});
+                window.location.assign('/sign-up');
+              } catch (err) {
+                setLeaveError(friendlyError(err));
+                setLeaving(null);
+              }
+            }}
+          >
+            Delete my account
+          </Button>
+        </div>
       </section>
 
       <section className="flex flex-wrap items-center justify-between gap-4 border-t border-paper-edge pt-8">

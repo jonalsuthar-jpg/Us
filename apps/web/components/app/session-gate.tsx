@@ -46,7 +46,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <CoupleProvider sb={getSupabase()} context={ctx} platform="web">
+    <CoupleProvider sb={getSupabase()} context={ctx} platform="web" onEnded={() => window.location.assign('/pair')}>
       <CallProvider rtc={webRtc} forceRelay={env.forceRelay}>
         {children}
       </CallProvider>

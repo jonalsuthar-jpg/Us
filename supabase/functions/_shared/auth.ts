@@ -18,11 +18,17 @@ export interface Caller {
   admin: SupabaseClient;
 }
 
-/**
- * Resolve the calling user from their JWT and their couple. Every function
- * that acts for a user starts here; anything unpaired is rejected.
- */
-export async function requireCaller(req: Request): Promise<Caller | Response> {
+export interface User {
+  userId: string;
+  /** null when the caller isn't paired. */
+  coupleId: string | null;
+  partnerId: string | null;
+  /** Service-role client — bypasses RLS. Only use after authorising. */
+  admin: SupabaseClient;
+}
+
+/** Resolve the calling user from their JWT, and their couple if they have one. */
+export async function requireUser(req: Request): Promise<User | Response> {
   const url = Deno.env.get('SUPABASE_URL')!;
   const anon = Deno.env.get('SUPABASE_ANON_KEY')!;
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -38,12 +44,22 @@ export async function requireCaller(req: Request): Promise<Caller | Response> {
     .select('id, user_a_id, user_b_id')
     .or(`user_a_id.eq.${data.user.id},user_b_id.eq.${data.user.id}`)
     .maybeSingle();
-  if (!couple) return json({ error: 'not_paired' }, 403);
 
   return {
     userId: data.user.id,
-    coupleId: couple.id,
-    partnerId: couple.user_a_id === data.user.id ? couple.user_b_id : couple.user_a_id,
+    coupleId: couple?.id ?? null,
+    partnerId: couple ? (couple.user_a_id === data.user.id ? couple.user_b_id : couple.user_a_id) : null,
     admin,
   };
+}
+
+/**
+ * Resolve the calling user from their JWT and their couple. Every function
+ * that acts for a paired user starts here; anything unpaired is rejected.
+ */
+export async function requireCaller(req: Request): Promise<Caller | Response> {
+  const user = await requireUser(req);
+  if (user instanceof Response) return user;
+  if (!user.coupleId || !user.partnerId) return json({ error: 'not_paired' }, 403);
+  return { userId: user.userId, coupleId: user.coupleId, partnerId: user.partnerId, admin: user.admin };
 }

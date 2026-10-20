@@ -2,7 +2,7 @@
  * push — notify my partner via OneSignal.
  *
  * Body: { category: 'new_message', messageId } | { category: 'incoming_call' | 'call_ended', callId }
- *     | { category: 'wellbeing_nudge', checkinId }
+ *     | { category: 'wellbeing_nudge', checkinId } | { category: 'daily_question', questionId }
  *
  * The record is re-read with the service role and the caller must be its
  * sender/caller, so a client can't push arbitrary content. Each category maps
@@ -121,6 +121,30 @@ Deno.serve(async (req) => {
     content = `${name} could use a little extra care today.`;
     collapseId = `nudge-${userId}`;
     data = { category, url: '/growth' };
+  } else if (body.category === 'daily_question') {
+    // I just answered today's question. The push never carries the answer.
+    const { data: q } = await admin.from('daily_questions').select('id, couple_id').eq('id', body.questionId).maybeSingle();
+    if (!q || q.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
+    const { data: mine } = await admin
+      .from('daily_answers')
+      .select('created_at')
+      .eq('question_id', q.id)
+      .eq('owner_id', userId)
+      .maybeSingle();
+    if (!mine) return json({ error: 'forbidden' }, 403);
+    if (Date.now() - Date.parse(mine.created_at) > 10 * 60_000) return json({ skipped: 'stale' });
+    const { data: theirs } = await admin
+      .from('daily_answers')
+      .select('owner_id')
+      .eq('question_id', q.id)
+      .eq('owner_id', partnerId)
+      .maybeSingle();
+    category = 'daily_question';
+    content = theirs
+      ? `${name} answered today’s question. Both answers are open now.`
+      : `${name} answered today’s question. Answer yours to see theirs.`;
+    collapseId = `daily-${q.id}`;
+    data = { category, url: '/connect' };
   } else {
     return json({ error: 'unknown_category' }, 400);
   }

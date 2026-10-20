@@ -1,6 +1,6 @@
 # Us
 
-A private space for exactly two people: video and voice calls, screen sharing, a chat thread with read receipts and typing, and relationship tools for planning, remembering and growing together (Connect is next).
+A private space for exactly two people: video and voice calls, screen sharing, a chat thread with read receipts and typing, and relationship tools for connecting, planning, remembering and growing together.
 
 ```
 apps/
@@ -10,8 +10,8 @@ packages/
   shared/     design tokens + Tailwind preset · typed Supabase API · realtime channel ·
               WebRTC CallManager · React providers/hooks (used by both apps)
 supabase/
-  migrations/ schema + Row Level Security (phases 1–2 and 4–6 built, 3 stubbed)
-  functions/  push (OneSignal) · turn-credentials (Metered) · fight-translator (phase 3 stub)
+  migrations/ schema + Row Level Security (phases 1–6; Connect has Daily Question built, the rest schema-only)
+  functions/  push (OneSignal) · turn-credentials (Metered) · delete-account · fight-translator (phase 3 stub)
 scripts/      test-db (RLS tests on PGlite) · generate-sounds · generate-icons
 ```
 
@@ -21,11 +21,12 @@ scripts/      test-db (RLS tests on PGlite) · generate-sounds · generate-icons
 |---|---|
 | 1 · Foundation | Monorepo (npm workspaces + Turborepo), Supabase schema, email/password + magic-link auth, password reset (link signs you in and opens Settings → Password), invite-code pairing, design system on web and mobile |
 | 2 · Talk | 1:1 WebRTC video and voice calls, signaled over a private Supabase Realtime channel. Mute, camera, front/back camera flip (mobile, and web when the device has two cameras), speaker/earpiece toggle on mobile (`react-native-incall-manager`, headsets take over automatically), output-device picker on desktop browsers, web screen sharing (mobile gets a nudge to use the web app). TURN via Metered. Persistent chat with sent ✓ / delivered ✓✓ / read ✓✓ receipts, typing indicator, presence, missed-call entries with call-back, push notifications, custom chime and ringtone |
-| 3 · Connect | Tables and RLS exist; placeholder screen; `TODO(phase-3)` markers (Fight Translator, Future Letters, Inside Jokes, Daily Question) |
+| 3 · Connect | **Daily Question**: one shared prompt a day from a 40-question bank (no repeats per couple), answers sealed once sent and hidden until you've both answered (`daily_history()` reveals), a both-answered streak, and a push to your partner when you answer. Fight Translator, Future Letters and Inside Jokes have tightened RLS (authors are always yourself; reveal and unlock state is server-only) but no UI yet (`TODO(phase-3)`) |
 | 4 · Plan | Shared calendar (month grid, all-day / timed plans), decision picker (weighted, recently-picked options deprioritised, server-side `pick_decision`), invisible-labour balance over 30 days, shared costs with per-currency settle-up |
 | 5 · Memory | Timeline with photos in a private Storage bucket (`memories/<couple_id>/…`, signed URLs), moments / dates / trips, *On this day*, a private "how it felt" rating and note on each memory |
 | 6 · Growth | Goal board (yours / theirs / ours), private mood check-ins with an optional soft nudge (partner sees only *that* you asked — `partner_nudges()` returns timestamps), worry space with opt-in sharing, love-language quiz with opt-in sharing and a daily idea |
 | Dark mode | Web and mobile. Follows the device by default; Settings → Appearance overrides it per device |
+| Leaving | Settings → Leaving. **Unpair** (`unpair()`) deletes everything the couple shared, including the photo folder, and keeps each person's private data. **Delete my account** calls the `delete-account` Edge Function. A partner with the app open is moved to the pair screen |
 
 ## Prerequisites
 
@@ -56,6 +57,7 @@ npm install
    npx supabase secrets set --env-file supabase/functions/.env
    npx supabase functions deploy push
    npx supabase functions deploy turn-credentials
+   npx supabase functions deploy delete-account
    npx supabase functions deploy fight-translator   # phase 3 stub, optional
    ```
 
@@ -86,7 +88,7 @@ Calls try a direct peer-to-peer path first and fall back to TURN when NAT blocks
 
 Devices are linked to people by `external_id` = Supabase user id (`OneSignal.login`), so the `push` function targets the partner directly.
 
-**Notification categories** (see `supabase/functions/push/index.ts`): incoming call (time-sensitive, ring sound, 45 s TTL, Answer/Decline, replaced by "Missed call" on cancel) · new message (chime, sender avatar, preview, Reply) · typing (never pushed) · wellbeing nudge, resurfaced memory, unlocked letter, daily question (defined; triggered in later phases).
+**Notification categories** (see `supabase/functions/push/index.ts`): incoming call (time-sensitive, ring sound, 45 s TTL, Answer/Decline, replaced by "Missed call" on cancel) · new message (chime, sender avatar, preview, Reply) · typing (never pushed) · wellbeing nudge · daily question (your partner answered; never carries the answer) · resurfaced memory and unlocked letter (defined; triggered in later phases).
 
 **The sound.** `us_chime.wav` (a soft E5→B5 bell) and `us_ring.wav` are synthesized by `npm run sounds`, so they're reproducible and license-free. They're bundled into iOS and Android by `onesignal-expo-plugin` (`sounds` in `app.config.ts`) and played in-app on web. Browsers don't allow custom sounds for background web push; there the OS default plays.
 
@@ -138,6 +140,7 @@ Tokens live in `packages/shared/src/tokens.js` and feed one Tailwind preset used
 | `npm run typecheck` | all workspaces |
 | `npm run test` | shared unit tests (typing timers, receipts merge, CallManager state machine incl. glare / multi-device) |
 | `npm run test:db` | migrations + RLS/security assertions on PGlite |
+| CI | `.github/workflows/ci.yml` runs typecheck, unit tests, `test:db` and the web build on every PR |
 | `npm run build` | web production build |
 | `npm run sounds` / `node scripts/generate-icons.mjs` | regenerate audio / icons |
 | `npm run db:types` | regenerate DB types from a linked project |
@@ -151,3 +154,5 @@ Tokens live in `packages/shared/src/tokens.js` and feed one Tailwind preset used
 - Mobile date entry uses a day stepper and typed times rather than a native picker (no extra native module). Swap in `@react-native-community/datetimepicker` if you prefer.
 - Plan / Memory / Growth refresh live via a data-free "changed" ping on the private couple channel, not Postgres Changes, so nothing extra is published.
 - Dark mode was checked on web; on mobile the bundle compiles with the theme variables, but give it a look on a device.
+- **Future letter bodies** are stored as `bytea` without encryption yet (pgsodium / Vault is the plan) — build that before the Future Letters UI.
+- **Daily Question** uses each person's local date, so partners in very different time zones can briefly be on different days' questions.

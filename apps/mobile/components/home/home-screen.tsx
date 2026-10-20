@@ -205,9 +205,9 @@ export function HomeScreen() {
 
       <Card
         icon={<HeartHandshake size={18} color={c.onTeal} />}
-        eyebrow="Coming soon"
-        title="Connect"
-        detail="Daily questions, future letters and a gentler way through disagreements."
+        eyebrow="Connect"
+        title="Today’s question"
+        detail="One question a day. Your answers open once you’ve both replied."
         onPress={() => router.push('/connect')}
       />
 

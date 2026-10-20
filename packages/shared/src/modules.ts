@@ -8,6 +8,8 @@ export interface Feature {
   title: string;
   blurb: string;
   privacy: 'shared' | 'private' | 'private-until-reveal';
+  /** Not built yet, in a module that is otherwise live. */
+  soon?: boolean;
 }
 
 export interface AppModule {
@@ -38,24 +40,26 @@ export const MODULES: AppModule[] = [
     title: 'Connect',
     tagline: 'Say the hard things softly, and the sweet things often.',
     phase: 3,
-    status: 'planned',
+    status: 'live',
     features: [
-      {
-        title: 'Fight Translator',
-        blurb: 'Each of you writes privately. Underneath, a need — revealed only once you’ve both written, after a breath.',
-        privacy: 'private-until-reveal',
-      },
-      {
-        title: 'Future Letters',
-        blurb: 'Write now, sealed until a date or a milestone you choose.',
-        privacy: 'private-until-reveal',
-      },
-      { title: 'Inside Jokes', blurb: 'A dictionary of only-you-two moments, resurfaced now and then.', privacy: 'shared' },
       {
         title: 'Daily Question',
         blurb: 'One prompt a day. Answers stay hidden until you’ve both replied.',
         privacy: 'private-until-reveal',
       },
+      {
+        title: 'Fight Translator',
+        blurb: 'Each of you writes privately. Underneath, a need — revealed only once you’ve both written, after a breath.',
+        privacy: 'private-until-reveal',
+        soon: true,
+      },
+      {
+        title: 'Future Letters',
+        blurb: 'Write now, sealed until a date or a milestone you choose.',
+        privacy: 'private-until-reveal',
+        soon: true,
+      },
+      { title: 'Inside Jokes', blurb: 'A dictionary of only-you-two moments, resurfaced now and then.', privacy: 'shared', soon: true },
     ],
   },
   {

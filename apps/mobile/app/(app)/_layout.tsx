@@ -43,7 +43,7 @@ export default function AppLayout() {
   }
 
   return (
-    <CoupleProvider sb={supabase} context={ctx} platform={Platform.OS}>
+    <CoupleProvider sb={supabase} context={ctx} platform={Platform.OS} onEnded={() => router.replace('/pair')}>
       <CallProvider rtc={nativeRtc} forceRelay={env.forceRelay}>
         <Bridge />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.paper } }}>

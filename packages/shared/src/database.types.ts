@@ -248,6 +248,21 @@ export type Database = {
         Update: { rating?: number | null; note?: string | null };
         Relationships: [];
       };
+      // ------------------------------------------------------------ Phase 3
+      daily_questions: {
+        Row: { id: string; couple_id: string; prompt: string; for_date: string };
+        /** Created by todays_question() only. */
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      daily_answers: {
+        Row: { question_id: string; owner_id: string; answer: string; created_at: string };
+        Insert: { question_id: string; owner_id: string; answer: string };
+        /** Answers are sealed once sent. */
+        Update: never;
+        Relationships: [];
+      };
       // ------------------------------------------------------------ Phase 6
       goals: {
         Row: {
@@ -301,6 +316,24 @@ export type Database = {
         Args: { p_category: string };
         Returns: Database['public']['Tables']['decision_options']['Row'];
       };
+      todays_question: {
+        Args: { p_date?: string | null };
+        Returns: Database['public']['Tables']['daily_questions']['Row'];
+      };
+      daily_history: {
+        Args: { p_limit?: number };
+        Returns: {
+          question_id: string;
+          prompt: string;
+          for_date: string;
+          my_answer: string | null;
+          my_answered_at: string | null;
+          partner_answered: boolean;
+          /** Only once both of us have answered. */
+          partner_answer: string | null;
+        }[];
+      };
+      unpair: { Args: Record<PropertyKey, never>; Returns: undefined };
     };
     Enums: {
       call_media: CallMedia;
@@ -328,6 +361,8 @@ export type Goal = Tables['goals']['Row'];
 export type MoodCheckin = Tables['mood_checkins']['Row'];
 export type Worry = Tables['insecurity_checkins']['Row'];
 export type LoveLanguageResult = Tables['love_language_results']['Row'];
+export type DailyQuestion = Tables['daily_questions']['Row'];
+export type DailyEntry = Database['public']['Functions']['daily_history']['Returns'][number];
 
 /** A message as rendered in the thread: call log entries carry their call. */
 export type Message = MessageRow & {

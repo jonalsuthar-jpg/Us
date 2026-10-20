@@ -32,8 +32,13 @@ interface Props {
   context: CoupleContext;
   /** 'web' | 'ios' | 'android' — shown in presence for debugging. */
   platform: string;
+  /** My partner unpaired or deleted their account while I had the app open. */
+  onEnded?: () => void;
   children: ReactNode;
 }
+
+/** Topic my partner pings just before they unpair or delete their account. */
+export const COUPLE_ENDED_TOPIC = 'couple:ended';
 
 /**
  * Joins the couple's realtime channels for the lifetime of the signed-in,
@@ -42,7 +47,7 @@ interface Props {
  *   - delivery receipts (any open client marks incoming messages delivered)
  *   - unread count for navigation badges
  */
-export function CoupleProvider({ sb, context, platform, children }: Props) {
+export function CoupleProvider({ sb, context, platform, onEnded, children }: Props) {
   const { couple, me, partner } = context;
   const channel = useMemo(
     () => new CoupleChannel(sb, couple.id, me.id, platform),
@@ -69,13 +74,34 @@ export function CoupleProvider({ sb, context, platform, children }: Props) {
     [sb, couple.id, me.id],
   );
 
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
+
   useEffect(() => {
+    const endChecks: ReturnType<typeof setTimeout>[] = [];
+    let ended = false;
     const offs = [
       channel.presence.on((online) => setPartnerOnline(online.has(partner.id))),
       channel.status.on((s) => {
         setConnection(s);
         // Back online: anything that arrived while we were away is now delivered.
         if (s === 'live') void ackMessages(sb, 'delivered').catch(() => {});
+      }),
+      channel.changes.on((e) => {
+        if (e.topic !== COUPLE_ENDED_TOPIC || e.from === me.id) return;
+        // The ping comes first and their photos are removed before the couple
+        // row goes, so check a few times before concluding it's over.
+        for (const ms of [3_000, 10_000, 30_000]) {
+          endChecks.push(
+            setTimeout(async () => {
+              const { data, error } = await sb.from('couples').select('id').eq('id', couple.id).maybeSingle();
+              if (!error && !data && !ended) {
+                ended = true;
+                onEndedRef.current?.();
+              }
+            }, ms),
+          );
+        }
       }),
       channel.messages.on(({ type, row }) => {
         if (type === 'INSERT' && row.sender_id === partner.id && row.status === 'sent') {
@@ -89,9 +115,10 @@ export function CoupleProvider({ sb, context, platform, children }: Props) {
     refreshUnread();
     return () => {
       offs.forEach((off) => off());
+      endChecks.forEach(clearTimeout);
       void channel.leave();
     };
-  }, [channel, sb, partner.id, refreshUnread]);
+  }, [channel, sb, couple.id, me.id, partner.id, refreshUnread]);
 
   const value = useMemo<CoupleValue>(
     () => ({ ...context, sb, channel, partnerOnline, connection, unread, refreshUnread }),

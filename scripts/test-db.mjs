@@ -424,5 +424,160 @@ await test('home: couple photo is set by either partner, only inside our folder'
   await rejects(as(alice, () => q(`update public.couples set photo_path = 'x'`)), /permission denied/, 'no direct writes');
 });
 
+console.log('\nPhase 3 · Connect');
+
+await test('future letters: written as yourself; only the author edits a sealed letter; nobody unlocks it directly', async () => {
+  await rejects(
+    as(bob, () => q(`insert into public.future_letters (couple_id, author_id, title, unlock_at) values ($1, $2, 'x', now())`, [couple.id, alice])),
+    /row-level security/,
+    'spoof author',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.future_letters (couple_id, author_id, title, unlock_at, unlocked_at) values ($1, $2, 'x', now(), now())`, [couple.id, alice])),
+    /row-level security/,
+    'pre-unlocked',
+  );
+  const letter = (await as(alice, () => one(
+    `insert into public.future_letters (couple_id, author_id, title, unlock_at) values ($1, $2, 'For our 5th', now() + interval '5 years') returning id`,
+    [couple.id, alice],
+  ))).id;
+  assert.equal((await as(bob, () => q(`select title from public.future_letters`)))[0].title, 'For our 5th', 'partner sees the envelope');
+  assert.equal((await as(carol, () => q(`select * from public.future_letters`))).length, 0, 'outsider');
+  await rejects(as(bob, () => q(`update public.future_letters set unlocked_at = now()`)), /permission denied/, 'partner unlocks');
+  await rejects(as(alice, () => q(`update public.future_letters set unlocked_at = now()`)), /permission denied/, 'author unlocks');
+  assert.equal((await as(bob, () => q(`update public.future_letters set title = 'x' returning 1`))).length, 0, 'partner edits title');
+  assert.equal((await as(alice, () => q(`update public.future_letters set title = 'For our fifth' returning 1`))).length, 1, 'author edits title');
+
+  await as(alice, () => q(`insert into public.future_letter_bodies (letter_id, owner_id, ciphertext) values ($1, $2, 'sealed')`, [letter, alice]));
+  assert.equal((await as(bob, () => q(`select * from public.future_letter_bodies`))).length, 0, 'body hidden from partner');
+  const bobLetter = (await as(bob, () => one(
+    `insert into public.future_letters (couple_id, author_id, title, unlock_milestone) values ($1, $2, 'Bob''s', 'wedding') returning id`,
+    [couple.id, bob],
+  ))).id;
+  await rejects(
+    as(alice, () => q(`insert into public.future_letter_bodies (letter_id, owner_id, ciphertext) values ($1, $2, 'x')`, [bobLetter, alice])),
+    /row-level security/,
+    'body for partner’s letter',
+  );
+});
+
+await test('fight translator: start as yourself; entries go into our unrevealed sessions; reveal is server-only', async () => {
+  await rejects(
+    as(alice, () => q(`insert into public.fight_sessions (couple_id, started_by) values ($1, $2)`, [couple.id, bob])),
+    /row-level security/,
+    'spoof starter',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.fight_sessions (couple_id, started_by, revealed_at) values ($1, $2, now())`, [couple.id, alice])),
+    /row-level security/,
+    'pre-revealed',
+  );
+  const session = (await as(alice, () => one(`insert into public.fight_sessions (couple_id, started_by) values ($1, $2) returning id`, [couple.id, alice]))).id;
+  await rejects(as(bob, () => q(`update public.fight_sessions set revealed_at = now()`)), /permission denied/, 'client reveal');
+
+  await as(alice, () => q(`insert into public.fight_entries (session_id, owner_id, raw_text) values ($1, $2, 'I felt ignored')`, [session, alice]));
+  assert.equal((await as(bob, () => q(`select * from public.fight_entries`))).length, 0, 'raw text stays private');
+  await rejects(
+    as(bob, () => q(`insert into public.fight_entries (session_id, owner_id, raw_text, reframed_need) values ($1, $2, 'x', 'fake')`, [session, bob])),
+    /row-level security/,
+    'client writes the reframe',
+  );
+  await rejects(
+    as(carol, () => q(`insert into public.fight_entries (session_id, owner_id, raw_text) values ($1, $2, 'x')`, [session, carol])),
+    /row-level security/,
+    'another couple’s session',
+  );
+  await rejects(as(alice, () => q(`update public.fight_entries set raw_text = 'edited'`)), /permission denied/, 'edit after submit');
+});
+
+await test('inside jokes: added as yourself, edited by either of us', async () => {
+  await rejects(
+    as(alice, () => q(`insert into public.inside_jokes (couple_id, created_by, phrase) values ($1, $2, 'x')`, [couple.id, bob])),
+    /row-level security/,
+    'spoof creator',
+  );
+  await as(alice, () => q(`insert into public.inside_jokes (couple_id, created_by, phrase) values ($1, $2, 'the duck')`, [couple.id, alice]));
+  assert.equal((await as(bob, () => q(`update public.inside_jokes set story = 'Lisbon, 2025' returning 1`))).length, 1);
+  await rejects(as(bob, () => q(`update public.inside_jokes set created_by = $1`, [bob])), /permission denied/, 'reassign creator');
+  assert.equal((await as(carol, () => q(`select * from public.inside_jokes`))).length, 0);
+});
+
+await test('daily question: one shared prompt per day, created on demand, no repeats', async () => {
+  const a = await as(alice, () => one(`select * from public.todays_question(current_date)`));
+  const b = await as(bob, () => one(`select * from public.todays_question(current_date)`));
+  assert.equal(a.id, b.id, 'same question for both of us');
+  assert.ok(a.prompt.length > 5);
+  const tomorrow = await as(bob, () => one(`select * from public.todays_question(current_date + 1)`));
+  const yesterday = await as(bob, () => one(`select * from public.todays_question(current_date - 1)`));
+  assert.equal(new Set([a.prompt, tomorrow.prompt, yesterday.prompt]).size, 3, 'prompts do not repeat');
+  await rejects(as(alice, () => q(`select public.todays_question(current_date + 5)`)), /date_out_of_range/, 'far future');
+  const theirs = await as(carol, () => one(`select * from public.todays_question(current_date)`));
+  assert.notEqual(theirs.id, a.id, 'each couple has their own');
+  assert.equal((await as(carol, () => q(`select * from public.daily_questions where id = $1`, [a.id]))).length, 0, 'outsider');
+  await rejects(
+    as(alice, () => q(`insert into public.daily_questions (couple_id, prompt) values ($1, 'x')`, [couple.id])),
+    /permission denied/,
+    'client creates questions',
+  );
+  const [erin] = (await q(`insert into auth.users (email) values ('erin@example.com') returning id`)).map((r) => r.id);
+  await rejects(as(erin, () => q(`select public.todays_question()`)), /not_paired/, 'unpaired');
+});
+
+await test('daily question: answers stay hidden until both of us have answered, then are sealed', async () => {
+  const { id } = await as(alice, () => one(`select id from public.todays_question(current_date)`));
+  await as(alice, () => q(`insert into public.daily_answers (question_id, owner_id, answer) values ($1, $2, 'Coffee in bed')`, [id, alice]));
+
+  let bobView = (await as(bob, () => q(`select * from public.daily_history()`))).find((r) => r.question_id === id);
+  assert.equal(bobView.partner_answered, true, 'bob knows alice answered');
+  assert.equal(bobView.partner_answer, null, 'but not what she said');
+  assert.equal((await as(bob, () => q(`select * from public.daily_answers`))).length, 0, 'table stays private');
+
+  let aliceView = (await as(alice, () => q(`select * from public.daily_history()`))).find((r) => r.question_id === id);
+  assert.equal(aliceView.my_answer, 'Coffee in bed');
+  assert.equal(aliceView.partner_answered, false);
+
+  await as(bob, () => q(`insert into public.daily_answers (question_id, owner_id, answer) values ($1, $2, 'Dancing in the kitchen')`, [id, bob]));
+  bobView = (await as(bob, () => q(`select * from public.daily_history()`))).find((r) => r.question_id === id);
+  aliceView = (await as(alice, () => q(`select * from public.daily_history()`))).find((r) => r.question_id === id);
+  assert.equal(bobView.partner_answer, 'Coffee in bed', 'revealed to bob');
+  assert.equal(aliceView.partner_answer, 'Dancing in the kitchen', 'revealed to alice');
+  assert.equal((await as(carol, () => q(`select * from public.daily_history()`))).some((r) => r.question_id === id), false, 'outsider');
+
+  await rejects(as(alice, () => q(`update public.daily_answers set answer = 'changed'`)), /permission denied/, 'sealed');
+  await rejects(
+    as(alice, () => q(`insert into public.daily_answers (question_id, owner_id, answer) values ($1, $2, 'x')`, [id, alice])),
+    /duplicate key/,
+    'answer twice',
+  );
+  const carolQ = await as(carol, () => one(`select id from public.todays_question(current_date)`));
+  await rejects(
+    as(alice, () => q(`insert into public.daily_answers (question_id, owner_id, answer) values ($1, $2, 'x')`, [carolQ.id, alice])),
+    /row-level security/,
+    'answer another couple’s question',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.daily_answers (question_id, owner_id, answer) values ($1, $2, '')`, [carolQ.id, alice])),
+    /row-level security|daily_answers_answer_len/,
+    'empty answer',
+  );
+});
+
+console.log('\nLeaving');
+
+await test('unpair: removes everything we shared, keeps private data, frees both of us', async () => {
+  await rejects(as(null, () => q(`select public.unpair()`)), /not_paired/, 'signed out');
+  await as(alice, () => q(`select public.unpair()`));
+  assert.equal((await q(`select count(*)::int as n from public.couples where id = $1`, [couple.id]))[0].n, 0, 'couple gone');
+  for (const table of ['messages', 'calls', 'calendar_events', 'memories', 'goals', 'future_letters', 'daily_questions', 'inside_jokes']) {
+    const n = (await q(`select count(*)::int as n from public.${table} where couple_id = $1`, [couple.id]))[0].n;
+    assert.equal(n, 0, `${table} cleared`);
+  }
+  assert.ok((await as(alice, () => q(`select * from public.mood_checkins`))).length > 0, 'private check-ins kept');
+  assert.deepEqual((await as(bob, () => q(`select id from public.profiles`))).map((r) => r.id), [bob], 'no longer see each other');
+  assert.equal((await as(carol, () => q(`select * from public.couples`))).length, 1, 'other couples untouched');
+  await rejects(as(bob, () => q(`select public.unpair()`)), /not_paired/, 'already unpaired');
+  assert.match((await as(alice, () => one(`select code from public.create_invite()`))).code, /-/, 'can pair again');
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 await db.close();

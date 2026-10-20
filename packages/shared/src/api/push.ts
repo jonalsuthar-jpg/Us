@@ -12,12 +12,13 @@ export type PushCategory =
   | 'wellbeing_nudge' // partner asked for a little care (never carries details)
   | 'memory_resurfaced' // TODO(phase-3/5)
   | 'letter_unlocked' // TODO(phase-3)
-  | 'daily_question'; // TODO(phase-3)
+  | 'daily_question'; // my partner answered today's question (never carries the answer)
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }
   | { category: 'incoming_call' | 'call_ended'; callId: string }
-  | { category: 'wellbeing_nudge'; checkinId: string };
+  | { category: 'wellbeing_nudge'; checkinId: string }
+  | { category: 'daily_question'; questionId: string };
 
 /** Payload attached to every notification (`data`) for deep-link routing. */
 export interface PushData {
