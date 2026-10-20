@@ -30,6 +30,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'android.permission.BLUETOOTH_CONNECT',
       'android.permission.USE_FULL_SCREEN_INTENT',
       'android.permission.POST_NOTIFICATIONS',
+      // react-native-incall-manager: proximity sensor (screen off at your ear) during voice calls.
+      'android.permission.WAKE_LOCK',
     ],
   },
   plugins: [

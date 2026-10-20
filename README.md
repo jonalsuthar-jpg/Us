@@ -19,8 +19,8 @@ scripts/      test-db (RLS tests on PGlite) · generate-sounds · generate-icons
 
 | Phase | Status |
 |---|---|
-| 1 · Foundation | Monorepo (npm workspaces + Turborepo), Supabase schema, email/password + magic-link auth, invite-code pairing, design system on web and mobile |
-| 2 · Talk | 1:1 WebRTC video and voice calls, signaled over a private Supabase Realtime channel. Mute, camera, flip camera (mobile), web screen sharing (mobile gets a nudge to use the web app). TURN via Metered. Persistent chat with sent ✓ / delivered ✓✓ / read ✓✓ receipts, typing indicator, presence, missed-call entries with call-back, push notifications, custom chime and ringtone |
+| 1 · Foundation | Monorepo (npm workspaces + Turborepo), Supabase schema, email/password + magic-link auth, password reset (link signs you in and opens Settings → Password), invite-code pairing, design system on web and mobile |
+| 2 · Talk | 1:1 WebRTC video and voice calls, signaled over a private Supabase Realtime channel. Mute, camera, front/back camera flip (mobile, and web when the device has two cameras), speaker/earpiece toggle on mobile (`react-native-incall-manager`, headsets take over automatically), output-device picker on desktop browsers, web screen sharing (mobile gets a nudge to use the web app). TURN via Metered. Persistent chat with sent ✓ / delivered ✓✓ / read ✓✓ receipts, typing indicator, presence, missed-call entries with call-back, push notifications, custom chime and ringtone |
 | 3 · Connect | Tables and RLS exist; placeholder screen; `TODO(phase-3)` markers (Fight Translator, Future Letters, Inside Jokes, Daily Question) |
 | 4 · Plan | Shared calendar (month grid, all-day / timed plans), decision picker (weighted, recently-picked options deprioritised, server-side `pick_decision`), invisible-labour balance over 30 days, shared costs with per-currency settle-up |
 | 5 · Memory | Timeline with photos in a private Storage bucket (`memories/<couple_id>/…`, signed URLs), moments / dates / trips, *On this day*, a private "how it felt" rating and note on each memory |
@@ -146,7 +146,6 @@ Tokens live in `packages/shared/src/tokens.js` and feed one Tailwind preset used
 
 - **Lock-screen ringing:** incoming calls arrive as time-sensitive pushes with a ring sound and open the full-screen call UI when tapped. A native full-screen call UI while the phone is locked (CallKit + PushKit on iOS, ConnectionService on Android) needs `react-native-callkeep` and VoIP pushes. `USE_FULL_SCREEN_INTENT` is already declared.
 - **Inline notification reply:** the Reply action deep-links into the composer. A true text-input reply needs native notification categories.
-- **Audio routing:** add `react-native-incall-manager` to route video calls to the speaker and voice calls to the earpiece and Bluetooth.
 - **Edge Functions** were written against Supabase's Deno runtime but not executed here (no Deno or Docker in the build environment). Deploy them and run a first call to confirm.
 - **On this day** shows in-app; a scheduled `memory_resurfaced` push (pg_cron + Edge Function) isn't wired yet.
 - Mobile date entry uses a day stepper and typed times rather than a native picker (no extra native module). Swap in `@react-native-community/datetimepicker` if you prefer.

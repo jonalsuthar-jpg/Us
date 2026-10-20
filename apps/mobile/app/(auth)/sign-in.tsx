@@ -1,12 +1,13 @@
 import { friendlyError } from '@us/shared';
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 import { AuthFrame } from '@/components/auth-frame';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { Display, Text } from '@/components/ui/text';
+import { env } from '@/lib/env';
 import { supabase } from '@/lib/supabase';
 
 export default function SignIn() {
@@ -24,6 +25,18 @@ export default function SignIn() {
     else router.replace('/talk');
   }
 
+  async function forgot() {
+    const address = email.trim();
+    if (!address) return setError('Enter your email first, then tap “Forgot your password?”.');
+    setError(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      address,
+      env.webUrl ? { redirectTo: `${env.webUrl}/auth/callback?next=${encodeURIComponent('/settings?reset=1')}` } : undefined,
+    );
+    if (error) setError(friendlyError(error));
+    else Alert.alert('Check your inbox', `We sent a link to reset your password to ${address}. Open it to choose a new one.`);
+  }
+
   return (
     <AuthFrame>
       <Display className="text-title">Welcome back.</Display>
@@ -31,6 +44,9 @@ export default function SignIn() {
       <View className="mt-6 gap-4">
         <Field label="Email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} />
         <Field label="Password" secureTextEntry autoComplete="current-password" value={password} onChangeText={setPassword} onSubmitEditing={submit} />
+        <Pressable accessibilityRole="button" onPress={forgot} hitSlop={8} className="self-start">
+          <Text className="text-small text-ink-soft underline">Forgot your password?</Text>
+        </Pressable>
         {error && (
           <Sheet tone="note" accent="rose" pad="sm">
             <Text accessibilityRole="alert" className="text-small text-rose-800">

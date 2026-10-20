@@ -13,7 +13,7 @@ export function SignInForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next') || '/talk';
-  const [mode, setMode] = useState<'password' | 'magic'>('password');
+  const [mode, setMode] = useState<'password' | 'magic' | 'reset'>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +31,13 @@ export function SignInForm() {
         if (error) throw error;
         router.replace(next);
         router.refresh();
+      } else if (mode === 'reset') {
+        // The link signs them in and lands on Settings → Password.
+        const { error } = await sb.auth.resetPasswordForEmail(email, {
+          redirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent('/settings?reset=1')}`,
+        });
+        if (error) throw error;
+        setSent(true);
       } else {
         const { error } = await sb.auth.signInWithOtp({
           email,
@@ -54,7 +61,8 @@ export function SignInForm() {
       <div className="space-y-4">
         <h2 className="font-display text-title text-ink">Check your inbox.</h2>
         <p className="text-ink-soft">
-          We sent a sign-in link to <strong className="font-medium text-ink">{email}</strong>. It works once.
+          {mode === 'reset' ? 'We sent a link to reset your password to' : 'We sent a sign-in link to'}{' '}
+          <strong className="font-medium text-ink">{email}</strong>. It works once.
         </p>
         <Button variant="quiet" onClick={() => setSent(false)}>
           Use a different email
@@ -66,8 +74,10 @@ export function SignInForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
       <div>
-        <h2 className="font-display text-title text-ink">Welcome back.</h2>
-        <p className="mt-1 text-ink-soft">Sign in to your shared space.</p>
+        <h2 className="font-display text-title text-ink">{mode === 'reset' ? 'Reset your password.' : 'Welcome back.'}</h2>
+        <p className="mt-1 text-ink-soft">
+          {mode === 'reset' ? 'We’ll email you a link to choose a new one.' : 'Sign in to your shared space.'}
+        </p>
       </div>
 
       <div className="space-y-4">
@@ -89,6 +99,18 @@ export function SignInForm() {
             onChange={(e) => setPassword(e.target.value)}
           />
         )}
+        {mode === 'password' && (
+          <button
+            type="button"
+            onClick={() => {
+              setMode('reset');
+              setError(null);
+            }}
+            className="text-small text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+          >
+            Forgot your password?
+          </button>
+        )}
       </div>
 
       {error && (
@@ -99,7 +121,7 @@ export function SignInForm() {
 
       <div className="space-y-3">
         <Button type="submit" block size="lg" loading={busy}>
-          {mode === 'password' ? 'Sign in' : 'Email me a link'}
+          {mode === 'password' ? 'Sign in' : mode === 'reset' ? 'Email me a reset link' : 'Email me a link'}
         </Button>
         <Button
           type="button"

@@ -14,9 +14,13 @@ export interface RtcAdapter {
   getUserMedia(constraints: MediaStreamConstraints): Promise<MediaStream>;
   /** Web only. Absent on mobile, where the UI nudges toward the web app instead. */
   getDisplayMedia?: () => Promise<MediaStream>;
-  /** Mobile only: flip front/back camera on an existing track. */
-  switchCamera?: (track: MediaStreamTrack) => void;
+  /** Mobile: point an existing camera track at the front or back camera, in place. */
+  switchCamera?: (track: MediaStreamTrack, facing: CameraFacing) => void | Promise<void>;
+  /** Web: the cameras on this device, so calls can offer a flip when there's more than one. */
+  listCameras?: () => Promise<{ deviceId: string; label: string }[]>;
 }
+
+export type CameraFacing = 'user' | 'environment';
 
 export interface CallBackend {
   createCall(media: CallMedia): Promise<Call>;
@@ -81,6 +85,10 @@ export interface CallState {
   route: 'direct' | 'relay' | null;
   endReason: EndReason | null;
   error: string | null;
+  /** Which way my camera points; the self-view is mirrored only for 'user'. */
+  facing: CameraFacing;
+  /** True when this device has another camera to flip to. */
+  canSwitchCamera: boolean;
   /** Bumped whenever tracks on either stream change, so views can re-bind. */
   revision: number;
 }
@@ -98,6 +106,8 @@ const INITIAL: CallState = {
   route: null,
   endReason: null,
   error: null,
+  facing: 'user',
+  canSwitchCamera: false,
   revision: 0,
 };
 
@@ -135,6 +145,9 @@ export class CallManager {
   private iceServers: Promise<RTCIceServer[]> | null = null;
   private iceRestarts = 0;
   private glareInvite: string | null = null;
+  /** Web: the camera picked by the last flip, reused when the camera is turned back on. */
+  private cameraDeviceId: string | null = null;
+  private switching = false;
 
   private ringTimer: ReturnType<typeof setTimeout> | undefined;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -299,20 +312,79 @@ export class CallManager {
       return;
     }
     try {
-      const stream = await this.opts.rtc.getUserMedia({ video: VIDEO_CONSTRAINTS, audio: false });
-      const track = stream.getVideoTracks()[0];
+      const track = await this.openCamera();
       if (!track) return;
       this.cameraTrack = track;
       this.state.localStream?.addTrack(track);
       if (!this.state.local.screen) await this.videoTx?.sender.replaceTrack(track);
       this.setLocal({ camera: true });
+      void this.refreshCameraOptions();
     } catch (e) {
       this.set({ error: mediaErrorCopy(e) });
     }
   }
 
-  switchCamera() {
-    if (this.cameraTrack && this.opts.rtc.switchCamera) this.opts.rtc.switchCamera(this.cameraTrack);
+  /**
+   * Flip to the other camera. Mobile flips the live track in place; web opens
+   * the next camera and swaps it onto the same sender (no renegotiation).
+   */
+  async switchCamera() {
+    const old = this.cameraTrack;
+    if (!old || this.switching) return;
+    const next: CameraFacing = this.state.facing === 'user' ? 'environment' : 'user';
+
+    if (this.opts.rtc.switchCamera) {
+      await this.opts.rtc.switchCamera(old, next);
+      this.set({ facing: next, revision: this.state.revision + 1 });
+      return;
+    }
+
+    const cams = (await this.opts.rtc.listCameras?.().catch(() => [])) ?? [];
+    if (cams.length < 2) return;
+    const current = old.getSettings?.().deviceId;
+    const target = cams[(cams.findIndex((c) => c.deviceId === current) + 1) % cams.length]!;
+
+    this.switching = true;
+    try {
+      // Release the current camera first: many phones can't open two at once.
+      old.stop();
+      this.state.localStream?.removeTrack(old);
+      let fresh: MediaStreamTrack | null = null;
+      try {
+        fresh = await this.openCamera(target.deviceId);
+        this.cameraDeviceId = target.deviceId;
+      } catch {
+        fresh = await this.openCamera(current).catch(() => null); // put the old one back
+      }
+      this.cameraTrack = fresh;
+      if (fresh) this.state.localStream?.addTrack(fresh);
+      if (!this.state.local.screen) await this.videoTx?.sender.replaceTrack(fresh);
+      const facing = fresh ? facingOf(fresh, cams.find((c) => c.deviceId === fresh!.getSettings?.().deviceId)?.label) : this.state.facing;
+      this.set({ facing, revision: this.state.revision + 1 });
+      if (!fresh) this.setLocal({ camera: false });
+    } finally {
+      this.switching = false;
+    }
+  }
+
+  /** Open a camera track: a specific device (web flip), else the current facing. */
+  private async openCamera(deviceId?: string | null): Promise<MediaStreamTrack | null> {
+    const id = deviceId ?? this.cameraDeviceId;
+    const video: MediaTrackConstraints = id
+      ? { ...VIDEO_CONSTRAINTS, facingMode: undefined, deviceId: { exact: id } }
+      : { ...VIDEO_CONSTRAINTS, facingMode: this.state.facing };
+    const stream = await this.opts.rtc.getUserMedia({ video, audio: false });
+    return stream.getVideoTracks()[0] ?? null;
+  }
+
+  private async refreshCameraOptions() {
+    if (this.opts.rtc.switchCamera) {
+      if (!this.state.canSwitchCamera) this.set({ canSwitchCamera: true });
+      return;
+    }
+    // Device labels (and the full list) are only available once permission is granted.
+    const cams = (await this.opts.rtc.listCameras?.().catch(() => [])) ?? [];
+    if (cams.length > 1 !== this.state.canSwitchCamera) this.set({ canSwitchCamera: cams.length > 1 });
   }
 
   get canScreenShare() {
@@ -434,6 +506,7 @@ export class CallManager {
     this.cameraTrack = stream.getVideoTracks()[0] ?? null;
     this.set({ localStream: stream });
     this.setLocal({ mic: true, camera: Boolean(this.cameraTrack), screen: false }, false);
+    void this.refreshCameraOptions();
   }
 
   private async createPeer() {
@@ -656,6 +729,7 @@ export class CallManager {
     this.pendingIce = [];
     this.iceServers = null;
     this.glareInvite = null;
+    this.cameraDeviceId = null;
   }
 
   private set(patch: Partial<CallState>) {
@@ -666,6 +740,13 @@ export class CallManager {
   private log(...args: unknown[]) {
     (this.opts.log ?? (() => {}))('[call]', ...args);
   }
+}
+
+/** Best guess at which way a camera faces (browsers often leave facingMode unset on laptops). */
+function facingOf(track: MediaStreamTrack, label = ''): CameraFacing {
+  const f = track.getSettings?.().facingMode;
+  if (f === 'environment' || f === 'user') return f;
+  return /back|rear|environment/i.test(label || track.label || '') ? 'environment' : 'user';
 }
 
 function mediaErrorCopy(e: unknown): string {

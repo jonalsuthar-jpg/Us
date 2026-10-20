@@ -26,6 +26,8 @@ export default function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [push, setPush] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   return (
     <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 40 }} contentContainerClassName="gap-10 px-5">
@@ -53,6 +55,36 @@ export default function Settings() {
           }}
         >
           {saved ? 'Saved' : 'Save'}
+        </Button>
+      </View>
+
+      <View className="gap-3">
+        <Display className="text-heading">Password</Display>
+        <Field
+          label="New password"
+          secureTextEntry
+          autoComplete="new-password"
+          value={newPassword}
+          onChangeText={setNewPassword}
+          hint="At least 8 characters."
+          error={passwordMsg && !passwordMsg.ok ? passwordMsg.text : null}
+        />
+        {passwordMsg?.ok ? <Text className="text-small text-sage-700">{passwordMsg.text}</Text> : null}
+        <Button
+          variant="secondary"
+          className="self-start"
+          disabled={newPassword.length < 8}
+          onPress={async () => {
+            setPasswordMsg(null);
+            const { error: err } = await sb.auth.updateUser({ password: newPassword });
+            if (err) setPasswordMsg({ ok: false, text: friendlyError(err) });
+            else {
+              setPasswordMsg({ ok: true, text: 'Password updated.' });
+              setNewPassword('');
+            }
+          }}
+        >
+          Update password
         </Button>
       </View>
 

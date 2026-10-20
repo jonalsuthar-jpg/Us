@@ -11,8 +11,10 @@ import {
   Phone,
   PhoneOff,
   Radio,
+  SwitchCamera,
   Video,
   VideoOff,
+  Volume2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '@/components/ui/avatar';
@@ -20,7 +22,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
 import { useElapsed } from '@/lib/hooks';
-import { StreamAudio, StreamVideo } from './media';
+import { StreamAudio, StreamVideo, useAudioOutputs } from './media';
 
 /**
  * Full-screen call surface, mounted once for the whole app. Plum, quiet, and
@@ -37,6 +39,9 @@ function CallScreen({ state }: { state: CallState }) {
   const m = useCallManager();
   const { partner, partnerSlot, me } = useCouple();
   const [shareNudge, setShareNudge] = useState(false);
+  const [outputPicker, setOutputPicker] = useState(false);
+  // undefined = the browser's default output.
+  const [sinkId, setSinkId] = useState<string | undefined>(undefined);
   const elapsed = useElapsed(state.connectedAt);
   const primary = useRef<HTMLButtonElement>(null);
 
@@ -44,6 +49,8 @@ function CallScreen({ state }: { state: CallState }) {
   const ringing = state.phase === 'outgoing' || state.phase === 'incoming' || state.phase === 'connecting';
   const remoteVideo = live && (state.remote.camera || state.remote.screen);
   const isVideo = state.media === 'video';
+  const outputs = useAudioOutputs(state.phase !== 'idle' && state.phase !== 'ended');
+  const currentOutput = sinkId ?? outputs.find((o) => o.deviceId === 'default')?.deviceId ?? outputs[0]?.deviceId;
 
   useEffect(() => primary.current?.focus(), [state.phase]);
 
@@ -67,12 +74,12 @@ function CallScreen({ state }: { state: CallState }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.4 } }}
     >
-      <StreamAudio stream={state.remoteStream} revision={state.revision} />
+      <StreamAudio stream={state.remoteStream} revision={state.revision} sinkId={sinkId} />
 
       {/* While ringing on a video call, my own camera glows faintly behind the veil. */}
       {ringing && isVideo && state.localStream && (
         <div className="absolute inset-0 opacity-25 blur-2xl" aria-hidden>
-          <StreamVideo stream={state.localStream} revision={state.revision} mirrored />
+          <StreamVideo stream={state.localStream} revision={state.revision} mirrored={state.facing === 'user'} />
         </div>
       )}
 
@@ -112,14 +119,21 @@ function CallScreen({ state }: { state: CallState }) {
         ) : (
           <span />
         )}
-        {live && state.route === 'relay' && (
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-micro text-paper/80"
-            title="Connected through a relay server because a direct path wasn't available."
-          >
-            <Radio className="h-3.5 w-3.5" aria-hidden /> Relayed
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {live && state.route === 'relay' && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-micro text-paper/80"
+              title="Connected through a relay server because a direct path wasn't available."
+            >
+              <Radio className="h-3.5 w-3.5" aria-hidden /> Relayed
+            </span>
+          )}
+          {outputs.length > 1 && state.phase !== 'ended' && (
+            <IconButton label="Choose speaker or headphones" tone="night" size="sm" onClick={() => setOutputPicker(true)}>
+              <Volume2 className="h-4 w-4" />
+            </IconButton>
+          )}
+        </div>
       </header>
 
       {/* Centre: the breathing initial (ringing, voice calls, camera off) */}
@@ -161,7 +175,7 @@ function CallScreen({ state }: { state: CallState }) {
       )}
 
       {/* Controls */}
-      <footer className="relative z-10 flex items-center justify-center gap-4 bg-gradient-to-t from-plum-900/80 to-transparent px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-10 sm:gap-5">
+      <footer className="relative z-10 flex items-center justify-center gap-3 bg-gradient-to-t from-plum-900/80 to-transparent px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-10 sm:gap-5">
         {state.phase === 'incoming' ? (
           <>
             <ControlStack label="Decline">
@@ -199,6 +213,16 @@ function CallScreen({ state }: { state: CallState }) {
             >
               {state.local.camera ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
             </IconButton>
+            {state.local.camera && state.canSwitchCamera && !state.local.screen && (
+              <IconButton
+                label={state.facing === 'user' ? 'Switch to back camera' : 'Switch camera'}
+                tone="night"
+                size="lg"
+                onClick={() => void m.switchCamera()}
+              >
+                <SwitchCamera className="h-6 w-6" />
+              </IconButton>
+            )}
             {live && (
               <IconButton
                 label={state.local.screen ? 'Stop sharing' : 'Share your screen'}
@@ -221,6 +245,35 @@ function CallScreen({ state }: { state: CallState }) {
         )}
       </footer>
 
+      <Dialog open={outputPicker} onOpenChange={setOutputPicker} title="Play the call through">
+        <ul className="space-y-1" role="radiogroup" aria-label="Audio output">
+          {outputs.map((o) => {
+            const selected = o.deviceId === currentOutput;
+            return (
+              <li key={o.deviceId}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    setSinkId(o.deviceId);
+                    setOutputPicker(false);
+                  }}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left text-ink transition-colors hover:bg-paper-sunken',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+                    selected && 'bg-paper-sunken font-medium',
+                  )}
+                >
+                  <span className={cn('h-2 w-2 rounded-full', selected ? 'bg-rose-600' : 'bg-plum-200')} aria-hidden />
+                  {o.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </Dialog>
+
       <Dialog
         open={shareNudge}
         onOpenChange={setShareNudge}
@@ -238,7 +291,7 @@ function SelfView({ state }: { state: CallState }) {
     const track = m.selfViewTrack;
     setStream(track ? new MediaStream([track]) : null);
   }, [m, state.revision, state.local.camera, state.local.screen]);
-  return <StreamVideo stream={stream} revision={state.revision} mirrored={!state.local.screen} />;
+  return <StreamVideo stream={stream} revision={state.revision} mirrored={!state.local.screen && state.facing === 'user'} />;
 }
 
 function ControlStack({ label, children }: { label: string; children: React.ReactNode }) {

@@ -2,7 +2,7 @@
 
 import type { RtcAdapter } from '@us/shared';
 
-/** Browser WebRTC. Screen sharing is web-only by design. */
+/** Browser WebRTC. Screen sharing is web-only by design; camera flips cycle real devices. */
 export const webRtc: RtcAdapter = {
   RTCPeerConnection: globalThis.RTCPeerConnection,
   MediaStream: globalThis.MediaStream,
@@ -15,4 +15,8 @@ export const webRtc: RtcAdapter = {
             audio: false,
           })
       : undefined,
+  listCameras: async () =>
+    (await navigator.mediaDevices.enumerateDevices())
+      .filter((d) => d.kind === 'videoinput' && d.deviceId)
+      .map((d) => ({ deviceId: d.deviceId, label: d.label })),
 };

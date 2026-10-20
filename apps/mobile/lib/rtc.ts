@@ -12,9 +12,12 @@ export const nativeRtc: RtcAdapter = {
   RTCPeerConnection: RTCPeerConnection as unknown as RtcAdapter['RTCPeerConnection'],
   MediaStream: MediaStream as unknown as RtcAdapter['MediaStream'],
   getUserMedia: (c) => mediaDevices.getUserMedia(c as never) as unknown as Promise<globalThis.MediaStream>,
-  switchCamera: (track) => {
-    const t = track as unknown as { getSettings(): { facingMode?: string }; applyConstraints(c: object): Promise<void> };
-    const facing = t.getSettings().facingMode === 'environment' ? 'user' : 'environment';
-    void t.applyConstraints({ facingMode: facing });
+  switchCamera: async (track, facing) => {
+    const t = track as unknown as { applyConstraints(c: object): Promise<void>; _switchCamera?: () => void };
+    try {
+      await t.applyConstraints({ facingMode: facing });
+    } catch {
+      t._switchCamera?.(); // older react-native-webrtc builds
+    }
   },
 };

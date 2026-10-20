@@ -25,11 +25,31 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [push, setPush] = useState(false);
   const [theme, setTheme] = useState<ThemePref>('system');
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [fromReset, setFromReset] = useState(false);
 
   useEffect(() => {
     setPush(pushPermission());
     setTheme(getThemePref());
+    // Arrived from a password-reset email: jump straight to choosing a new one.
+    if (new URLSearchParams(location.search).has('reset')) {
+      setFromReset(true);
+      document.getElementById('new-password')?.focus();
+    }
   }, []);
+
+  async function changePassword(e: FormEvent) {
+    e.preventDefault();
+    setPasswordMsg(null);
+    const { error: err } = await sb.auth.updateUser({ password: newPassword });
+    if (err) setPasswordMsg({ ok: false, text: friendlyError(err) });
+    else {
+      setPasswordMsg({ ok: true, text: 'Password updated.' });
+      setNewPassword('');
+      setFromReset(false);
+    }
+  }
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -62,6 +82,36 @@ export default function SettingsPage() {
             {saved ? 'Saved' : 'Save'}
           </Button>
         </form>
+      </section>
+
+      <section aria-labelledby="password" className="space-y-4">
+        <h2 id="password" className="font-display text-heading text-ink">
+          Password
+        </h2>
+        {fromReset && <p className="text-small text-ink-soft">You’re signed in from the reset link. Choose a new password.</p>}
+        <form onSubmit={changePassword} className="flex items-end gap-3">
+          <div className="flex-1">
+            <Field
+              id="new-password"
+              label="New password"
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              hint="At least 8 characters."
+              error={passwordMsg && !passwordMsg.ok ? passwordMsg.text : null}
+            />
+          </div>
+          <Button type="submit" variant="secondary" disabled={newPassword.length < 8} className="mb-7">
+            Update
+          </Button>
+        </form>
+        {passwordMsg?.ok && (
+          <p className="text-small text-sage-700" role="status">
+            {passwordMsg.text}
+          </p>
+        )}
       </section>
 
       <section aria-labelledby="pair" className="space-y-4">

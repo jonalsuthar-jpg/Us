@@ -11,7 +11,14 @@ class FakeTrack {
   enabled = true;
   stopped = false;
   id = Math.random().toString(36).slice(2);
-  constructor(readonly kind: 'audio' | 'video') {}
+  label = '';
+  constructor(
+    readonly kind: 'audio' | 'video',
+    readonly deviceId = 'default',
+  ) {}
+  getSettings() {
+    return { deviceId: this.deviceId };
+  }
   stop() {
     this.stopped = true;
   }
@@ -160,7 +167,8 @@ function makeWorld() {
     };
   }
 
-  function manager(me: string, partner: string, extra: { ringTimeoutMs?: number } = {}) {
+  function manager(me: string, partner: string, extra: { ringTimeoutMs?: number; rtc?: Partial<RtcAdapter> } = {}) {
+    const { rtc: rtcExtra, ...rest } = extra;
     const clientId = nextClient++;
     const owned: FakePC[] = [];
     const m = new CallManager({
@@ -174,9 +182,10 @@ function makeWorld() {
             owned.push(this);
           }
         },
+        ...rtcExtra,
       } as unknown as RtcAdapter,
       endedLingerMs: 10,
-      ...extra,
+      ...rest,
       backend: backendFor(me, partner),
       signaling: {
         send: async (event) => {
@@ -308,5 +317,62 @@ describe('CallManager', () => {
     await until(alice, 'connected', 1000);
     await until(bob, 'connected', 1000);
     expect(alice.getState().call?.id).toBe(bob.getState().call?.id);
+  });
+
+  it('mobile: flips the camera in place and un-mirrors the back camera', async () => {
+    const w = makeWorld();
+    const flips: string[] = [];
+    const alice = w.manager('alice', 'bob', { rtc: { switchCamera: (_t, facing) => void flips.push(facing) } });
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('video');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+    await vi.waitFor(() => expect(alice.getState().canSwitchCamera).toBe(true));
+    expect(alice.getState().facing).toBe('user');
+    await alice.switchCamera();
+    expect(flips).toEqual(['environment']);
+    expect(alice.getState().facing).toBe('environment');
+    await alice.switchCamera();
+    expect(alice.getState().facing).toBe('user');
+  });
+
+  it('web: swaps to the next camera on the same sender, stopping the old one', async () => {
+    const w = makeWorld();
+    const cams = [
+      { deviceId: 'front', label: 'Front camera' },
+      { deviceId: 'back', label: 'Back camera' },
+    ];
+    const opened: (string | undefined)[] = [];
+    const alice = w.manager('alice', 'bob', {
+      rtc: {
+        listCameras: async () => cams,
+        getUserMedia: (async (c: MediaStreamConstraints) => {
+          const v = c.video as MediaTrackConstraints | false;
+          const id = v && typeof v.deviceId === 'object' ? (v.deviceId as { exact: string }).exact : v ? 'front' : undefined;
+          if (v) opened.push(id);
+          return new FakeStream([...(c.audio ? [new FakeTrack('audio')] : []), ...(v ? [new FakeTrack('video', id)] : [])]);
+        }) as unknown as RtcAdapter['getUserMedia'],
+      },
+    });
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('video');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+    await vi.waitFor(() => expect(alice.getState().canSwitchCamera).toBe(true));
+
+    const sender = pcOf(alice).transceivers.find((t) => t.receiver.track.kind === 'video')!.sender;
+    const before = sender.track!;
+    await alice.switchCamera();
+    expect(before.stopped).toBe(true);
+    expect(sender.track?.deviceId).toBe('back');
+    expect(alice.getState().facing).toBe('environment');
+    expect(alice.selfViewTrack).toBe(sender.track);
+
+    // Camera off and on again keeps the camera we flipped to.
+    await alice.toggleCamera();
+    await alice.toggleCamera();
+    expect(opened.at(-1)).toBe('back');
   });
 });
