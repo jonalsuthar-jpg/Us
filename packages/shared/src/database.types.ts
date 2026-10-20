@@ -23,6 +23,10 @@ export type Database = {
           id: string;
           display_name: string;
           avatar_url: string | null;
+          /** Shared "how I am right now" status, shown on Home (fades after 24h). */
+          status_emoji: string | null;
+          status_text: string | null;
+          status_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -30,6 +34,9 @@ export type Database = {
         Update: {
           display_name?: string;
           avatar_url?: string | null;
+          status_emoji?: string | null;
+          status_text?: string | null;
+          status_at?: string | null;
         };
         Relationships: [];
       };
@@ -39,6 +46,8 @@ export type Database = {
           user_a_id: string;
           user_b_id: string;
           paired_at: string;
+          /** "Photo of us": a key in the private memories bucket, under the couple's folder. */
+          photo_path: string | null;
         };
         Insert: never;
         Update: never;
@@ -287,6 +296,7 @@ export type Database = {
       current_couple_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       current_partner_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       partner_nudges: { Args: { p_hours?: number }; Returns: { nudged_at: string }[] };
+      set_couple_photo: { Args: { p_path: string | null }; Returns: Database['public']['Tables']['couples']['Row'] };
       pick_decision: {
         Args: { p_category: string };
         Returns: Database['public']['Tables']['decision_options']['Row'];

@@ -9,5 +9,5 @@ export default async function Home() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  redirect(user ? '/talk' : '/sign-in');
+  redirect(user ? '/home' : '/sign-in');
 }

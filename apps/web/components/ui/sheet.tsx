@@ -13,7 +13,7 @@ const styles = cva('', {
   variants: {
     tone: {
       paper:
-        'rounded-sheet border border-paper-edge bg-paper-raised shadow-[0_1px_0_rgba(42,31,45,0.04),0_12px_32px_-18px_rgba(42,31,45,0.28)]',
+        'rounded-sheet border border-paper-edge bg-paper-raised shadow-[0_1px_0_rgba(36,25,51,0.04),0_12px_32px_-18px_rgba(36,25,51,0.28)]',
       inset: 'rounded-sheet bg-paper-sunken',
       note: 'rounded-r-sheet border-l-[3px] bg-paper-raised',
       night: 'rounded-sheet bg-plum-800 text-paper',

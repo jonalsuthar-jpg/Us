@@ -2,7 +2,7 @@
 
 import { MODULES, type ModuleId } from '@us/shared';
 import { useCouple } from '@us/shared/react';
-import { HeartHandshake, MessageCircleHeart, NotebookPen, Settings, Sparkles, Sprout } from 'lucide-react';
+import { HeartHandshake, House, MessageCircleHeart, NotebookPen, Settings, Sparkles, Sprout } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         aria-label="Main"
         className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-paper-edge/80 px-6 py-8 lg:flex"
       >
-        <Link href="/talk" className="flex items-center gap-2.5 rounded-control focus-visible:ring-2 focus-visible:ring-gold-400">
+        <Link href="/home" className="flex items-center gap-2.5 rounded-control focus-visible:ring-2 focus-visible:ring-gold-400">
           <Seal size={30} />
           <span className="font-display text-heading italic text-ink">Us</span>
         </Link>
@@ -67,6 +67,20 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <ul className="mt-10 space-y-1">
+          <li>
+            <Link
+              href="/home"
+              aria-current={pathname.startsWith('/home') ? 'page' : undefined}
+              className={cn(
+                'group flex items-center gap-3 rounded-control px-3 py-2.5 transition-colors duration-quick',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+                pathname.startsWith('/home') ? 'bg-paper-sunken text-ink' : 'text-ink-soft hover:text-ink',
+              )}
+            >
+              <span className={cn('h-1.5 w-1.5 rounded-full bg-ink transition-transform', pathname.startsWith('/home') ? 'scale-150' : 'opacity-60')} />
+              <span className={cn('flex-1', pathname.startsWith('/home') ? 'font-display text-lead italic' : 'text-body')}>Home</span>
+            </Link>
+          </li>
           {MODULES.map((m) => {
             const active = pathname.startsWith(`/${m.id}`);
             return (
@@ -107,6 +121,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         aria-label="Main"
         className="fixed inset-x-0 bottom-0 z-30 flex border-t border-paper-edge bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
       >
+        <BottomTab href="/home" label="Home" icon={House} active={pathname.startsWith('/home')} />
         {MODULES.map((m) => {
           const Icon = ICONS[m.id];
           const active = pathname.startsWith(`/${m.id}`);
@@ -118,7 +133,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className={cn(
                 'relative flex h-16 flex-1 flex-col items-center justify-center gap-1 text-micro',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-400',
-                active ? 'text-ink' : 'text-ink-muted',
+                active ? 'text-rose-700' : 'text-ink-muted',
               )}
             >
               <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
@@ -134,6 +149,42 @@ export function AppShell({ children }: { children: ReactNode }) {
         })}
       </nav>
     </div>
+  );
+}
+
+/** Settings lives in the desktop rail; on phone widths it sits in each page's header instead. */
+export function MobileSettingsLink({ className }: { className?: string }) {
+  return (
+    <Link
+      href="/settings"
+      aria-label="Settings"
+      title="Settings"
+      className={cn(
+        'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-paper-edge bg-paper-raised text-ink-soft transition-colors hover:text-ink lg:hidden',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+        className,
+      )}
+    >
+      <Settings className="h-[18px] w-[18px]" aria-hidden />
+    </Link>
+  );
+}
+
+function BottomTab({ href, label, icon: Icon, active }: { href: string; label: string; icon: typeof House; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'relative flex h-16 flex-1 flex-col items-center justify-center gap-1 text-micro',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-400',
+        active ? 'text-rose-700' : 'text-ink-muted',
+      )}
+    >
+      <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
+      <span className={active ? 'font-medium' : undefined}>{label}</span>
+      {active && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-rose-400" />}
+    </Link>
   );
 }
 

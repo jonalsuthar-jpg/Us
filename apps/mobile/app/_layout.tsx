@@ -13,8 +13,10 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, usePalette } from '@/components/ui/palette';
+import { UpdateBanner } from '@/components/update-banner';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -38,9 +40,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <Screens />
-        </ThemeProvider>
+        <KeyboardProvider>
+          <ThemeProvider>
+            <Screens />
+          </ThemeProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -52,6 +56,7 @@ function Screens() {
     <>
       <StatusBar style={c.scheme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.paper } }} />
+      <UpdateBanner />
     </>
   );
 }

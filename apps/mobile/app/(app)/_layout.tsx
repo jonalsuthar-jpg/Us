@@ -1,7 +1,6 @@
-import { getCoupleContext, MODULES, tokens, type CoupleContext, type ModuleId } from '@us/shared';
-import { CallProvider, CoupleProvider, useCallState, useCouple } from '@us/shared/react';
-import { router, Tabs, usePathname } from 'expo-router';
-import { HeartHandshake, MessageCircleHeart, NotebookPen, Sparkles, Sprout } from 'lucide-react-native';
+import { getCoupleContext, tokens, type CoupleContext } from '@us/shared';
+import { CallProvider, CoupleProvider, useCallManager, useCallState, useCouple } from '@us/shared/react';
+import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { CallScreen } from '@/components/call/call-screen';
@@ -12,17 +11,10 @@ import { playChime, startRing, stopRing } from '@/lib/sounds';
 import { supabase } from '@/lib/supabase';
 import { usePalette } from '@/components/ui/palette';
 
-const ICONS: Record<ModuleId, typeof MessageCircleHeart> = {
-  talk: MessageCircleHeart,
-  connect: HeartHandshake,
-  plan: NotebookPen,
-  memory: Sparkles,
-  growth: Sprout,
-};
-
-/** Resolves the couple, then mounts realtime + calls for every tab. */
+/** Resolves the couple, then mounts realtime + calls for every screen (tabs and settings). */
 export default function AppLayout() {
   const [ctx, setCtx] = useState<CoupleContext | null>(null);
+  const c = usePalette();
 
   useEffect(() => {
     let cancelled = false;
@@ -54,44 +46,13 @@ export default function AppLayout() {
     <CoupleProvider sb={supabase} context={ctx} platform={Platform.OS}>
       <CallProvider rtc={nativeRtc} forceRelay={env.forceRelay}>
         <Bridge />
-        <AppTabs />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.paper } }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+        </Stack>
         <CallScreen />
       </CallProvider>
     </CoupleProvider>
-  );
-}
-
-function AppTabs() {
-  const { unread } = useCouple();
-  const c = usePalette();
-  return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: c.ink,
-        tabBarInactiveTintColor: c.inkMuted,
-        tabBarStyle: { backgroundColor: c.paper, borderTopColor: c.edge },
-        tabBarLabelStyle: { fontFamily: 'WorkSans_500Medium', fontSize: 11 },
-        sceneStyle: { backgroundColor: c.paper },
-      }}
-    >
-      {MODULES.map((m) => {
-        const Icon = ICONS[m.id];
-        return (
-          <Tabs.Screen
-            key={m.id}
-            name={m.id}
-            options={{
-              title: m.title,
-              tabBarIcon: ({ color, focused }) => <Icon size={22} color={color} strokeWidth={focused ? 2.25 : 1.75} />,
-              tabBarBadge: m.id === 'talk' && unread > 0 ? unread : undefined,
-              tabBarBadgeStyle: { backgroundColor: c.roseStrong, fontSize: 11 },
-            }}
-          />
-        );
-      })}
-      <Tabs.Screen name="settings" options={{ href: null }} />
-    </Tabs>
   );
 }
 
@@ -99,14 +60,28 @@ function AppTabs() {
 function Bridge() {
   const { me, partner, channel } = useCouple();
   const call = useCallState();
+  const calls = useCallManager();
   const pathname = usePathname();
   const path = useRef(pathname);
   path.current = pathname;
+  // Answer/Decline tapped on a call notification: acted on once that call is ringing here.
+  const [callAction, setCallAction] = useState<{ callId: string; action: 'answer' | 'decline' } | null>(null);
 
   useEffect(() => {
     initPush(me.id);
-    return onPush({ click: (d) => d?.url && router.push(d.url as never) });
+    return onPush({
+      click: (d, actionId) => {
+        if (d?.callId && (actionId === 'answer' || actionId === 'decline')) setCallAction({ callId: d.callId, action: actionId });
+        if (d?.url) router.push(d.url as never);
+      },
+    });
   }, [me.id]);
+
+  useEffect(() => {
+    if (!callAction || call.phase !== 'incoming' || call.call?.id !== callAction.callId) return;
+    setCallAction(null);
+    void (callAction.action === 'answer' ? calls.accept() : calls.decline());
+  }, [callAction, call.phase, call.call?.id, calls]);
 
   useEffect(
     () =>

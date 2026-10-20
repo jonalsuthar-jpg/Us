@@ -403,5 +403,26 @@ await test('love languages: private until the owner shares', async () => {
   await rejects(as(bob, () => q(`insert into public.love_language_results (owner_id, scores, primary_language) values ($1, '{}', 'hugs')`, [bob])), /primary_valid/, 'unknown language');
 });
 
+console.log('\nHome');
+
+await test('home: status is shared with my partner only, and only I can set mine', async () => {
+  await as(alice, () => q(`update public.profiles set status_emoji = '😴', status_text = 'sleepy', status_at = now() where id = $1`, [alice]));
+  assert.equal((await as(bob, () => q(`select status_text from public.profiles where id = $1`, [alice])))[0].status_text, 'sleepy');
+  assert.equal((await as(carol, () => q(`select * from public.profiles where id = $1`, [alice]))).length, 0, 'outsider');
+  assert.equal((await as(bob, () => q(`update public.profiles set status_text = 'x' where id = $1 returning 1`, [alice]))).length, 0, 'partner cannot set mine');
+  await rejects(as(alice, () => q(`update public.profiles set status_text = repeat('a', 61) where id = $1`, [alice])), /status_text_len/, 'too long');
+});
+
+await test('home: couple photo is set by either partner, only inside our folder', async () => {
+  const path = `${couple.id}/us.jpg`;
+  assert.equal((await as(bob, () => one(`select photo_path from public.set_couple_photo($1)`, [path]))).photo_path, path);
+  assert.equal((await as(alice, () => one(`select photo_path from public.couples`))).photo_path, path);
+  await rejects(as(alice, () => q(`select public.set_couple_photo('someone-else/x.jpg')`)), /couple's folder/, 'foreign folder');
+  await rejects(as(alice, () => q(`select public.set_couple_photo($1)`, [`${couple.id}/../x.jpg`])), /couple's folder/, 'traversal');
+  await rejects(as(dave, () => q(`select public.set_couple_photo($1)`, [path])), /couple's folder/, 'another couple');
+  assert.equal((await as(alice, () => one(`select photo_path from public.set_couple_photo(null)`))).photo_path, null, 'clear');
+  await rejects(as(alice, () => q(`update public.couples set photo_path = 'x'`)), /permission denied/, 'no direct writes');
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 await db.close();

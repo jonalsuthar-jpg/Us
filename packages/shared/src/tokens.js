@@ -9,78 +9,78 @@
  */
 
 const colors = {
-  // Ink, dark surfaces, call screens. Brand: plum.800 #2A1F2D
+  // Ink, dark surfaces, call screens. Brand: plum.800 #241933
   plum: {
-    50: '#F5F1F5',
-    100: '#E7DEE8',
-    200: '#CDBCCF',
-    300: '#A994AC',
-    400: '#7F6683', // muted text on paper (4.7:1)
-    500: '#5C4660', // soft text on paper (8:1)
-    600: '#46344A',
-    700: '#382A3B',
-    800: '#2A1F2D', // brand ink
-    900: '#1C141E',
-    950: '#120C13',
+    50: '#F6F2FA',
+    100: '#EBE1F4',
+    200: '#D4C2E6',
+    300: '#B39ACC',
+    400: '#7A5E9A', // muted text on paper (5.2:1)
+    500: '#634882', // soft text on paper (7.3:1)
+    600: '#4B3468',
+    700: '#392751',
+    800: '#241933', // brand ink
+    900: '#170F21',
+    950: '#0D0814',
   },
-  // Light surfaces. Brand: paper.DEFAULT #FAF6F1
+  // Light surfaces: clean, barely-warm white.
   paper: {
-    DEFAULT: '#FAF6F1',
-    raised: '#FFFDFA', // a sheet lifted off the page
-    sunken: '#F2EBE2', // wells, inputs, inactive tracks
-    edge: '#E4D9CC', // hairlines
+    DEFAULT: '#FCFAFB',
+    raised: '#FFFFFF', // a sheet lifted off the page
+    sunken: '#F4F0F3', // wells, inputs, inactive tracks
+    edge: '#E9E2E8', // hairlines
   },
-  // Primary accent, partner A, primary actions. Brand: rose.400 #C8686B
+  // Primary accent, partner A, primary actions. Brand: rose.400 #F5547C
   rose: {
-    50: '#FBEFEE',
-    100: '#F5DCDA',
-    200: '#EBB9B7',
-    300: '#DD9192',
-    400: '#C8686B', // brand — large accents, rings, illustration
-    500: '#B5555A',
-    600: '#9E4247', // button fills / rose text on paper (5.6:1 with white)
-    700: '#7F3439',
-    800: '#5E282C',
-    900: '#3E1C1F',
+    50: '#FFF0F3',
+    100: '#FFDDE5',
+    200: '#FFB8C9',
+    300: '#FF86A3',
+    400: '#F5547C', // brand — large accents, rings, illustration
+    500: '#E2336A',
+    600: '#C41D55', // button fills / rose text on paper (5.7:1 with white)
+    700: '#9C1645',
+    800: '#701136',
+    900: '#460B22',
   },
-  // Secondary accent, partner B. Brand: teal.500 #4A6670
+  // Secondary accent, partner B. Brand: teal.500 #0C8F82
   teal: {
-    50: '#EEF3F4',
-    100: '#D8E3E6',
-    200: '#B2C7CD',
-    300: '#86A3AC',
-    400: '#62828C',
-    500: '#4A6670', // brand (5.7:1 on paper)
-    600: '#3D555E',
-    700: '#31454C',
-    800: '#25353A',
-    900: '#1A2529',
+    50: '#E9FBF7',
+    100: '#C8F2EA',
+    200: '#91E3D5',
+    300: '#50CBB9',
+    400: '#1BAE9C',
+    500: '#0C8F82', // brand — fills and large accents
+    600: '#0A776D', // fills behind white text (5.4:1)
+    700: '#095F58',
+    800: '#084844',
+    900: '#052F2C',
   },
-  // Highlights, memories, resurfaced content. Brand: gold.400 #C99A44
+  // Highlights, memories, resurfaced content. Brand: gold.400 #F3A823
   gold: {
-    50: '#FBF5E9',
-    100: '#F4E6C8',
-    200: '#E9CD93',
-    300: '#DDB468',
-    400: '#C99A44', // brand
-    500: '#AE8033',
-    600: '#8C6628',
-    700: '#6B4E1F', // gold text on paper
-    800: '#4B3716',
-    900: '#2E220E',
+    50: '#FFF8E5',
+    100: '#FFEDC0',
+    200: '#FFD98A',
+    300: '#FCC24F',
+    400: '#F3A823', // brand
+    500: '#D88C0C',
+    600: '#AE6F08',
+    700: '#7C5006', // gold text on paper
+    800: '#563805',
+    900: '#352203',
   },
-  // Growth & wellbeing. Brand: sage.400 #7C8B6F
+  // Growth & wellbeing. Brand: sage.400 #37AC5F
   sage: {
-    50: '#F1F3EE',
-    100: '#DFE4DA',
-    200: '#C2CBB8',
-    300: '#A1AE94',
-    400: '#7C8B6F', // brand
-    500: '#66745A',
-    600: '#525E49',
-    700: '#3F4838',
-    800: '#2D3328',
-    900: '#1C2019',
+    50: '#ECFAF0',
+    100: '#D0F2DA',
+    200: '#A3E2B5',
+    300: '#69C987',
+    400: '#37AC5F', // brand
+    500: '#258F4C',
+    600: '#1D743E',
+    700: '#185B32',
+    800: '#134526',
+    900: '#0C2C18',
   },
 };
 

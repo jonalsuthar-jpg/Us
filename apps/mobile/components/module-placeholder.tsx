@@ -1,8 +1,12 @@
 import { moduleById, type ModuleId } from '@us/shared';
 import { useCouple } from '@us/shared/react';
+import { router } from 'expo-router';
+import { Settings } from 'lucide-react-native';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { IconButton } from './ui/button';
 import { cn } from './ui/cn';
+import { usePalette } from './ui/palette';
 import { PrivacyBadge } from './ui/privacy';
 import { Sheet } from './ui/sheet';
 import { Display, Text } from './ui/text';
@@ -21,10 +25,16 @@ export function ModulePlaceholder({ id }: { id: ModuleId }) {
   const { partner } = useCouple();
   const insets = useSafeAreaInsets();
   const a = ACCENT[id];
+  const c = usePalette();
   return (
     <ScrollView contentContainerStyle={{ paddingTop: insets.top + 24, paddingBottom: 32 }} contentContainerClassName="px-5">
       <View className={cn('absolute -left-10 -top-6 h-40 w-40 rounded-full opacity-70', a.wash)} />
-      <Text className={cn('font-sans-medium text-small', a.ink)}>Coming in phase {mod.phase}</Text>
+      <View className="flex-row items-center justify-between">
+        <Text className={cn('font-sans-medium text-small', a.ink)}>Coming in phase {mod.phase}</Text>
+        <IconButton label="Settings" size="sm" tone="raised" onPress={() => router.push('/settings')}>
+          <Settings size={19} color={c.inkSoft} />
+        </IconButton>
+      </View>
       <Display className="mt-2 text-[40px] leading-[44px]">{mod.title}</Display>
       <Display light italic className="mt-3 text-lead text-ink-soft">
         {mod.tagline}

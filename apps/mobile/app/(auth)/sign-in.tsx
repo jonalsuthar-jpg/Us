@@ -22,7 +22,7 @@ export default function SignIn() {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setBusy(false);
     if (error) setError(friendlyError(error));
-    else router.replace('/talk');
+    else router.replace('/home');
   }
 
   async function forgot() {

@@ -5,6 +5,7 @@ import { useCouple } from '@us/shared/react';
 import { PrivacyBadge } from '@/components/ui/privacy';
 import { Sheet } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
+import { MobileSettingsLink } from './app-shell';
 import { MODULE_ACCENT } from './module-header';
 
 /**
@@ -22,6 +23,7 @@ export function ModulePlaceholder({ id }: { id: ModuleId }) {
     <div className="mx-auto max-w-4xl px-5 py-10 sm:px-10 sm:py-16">
       <header className="relative">
         <span aria-hidden className={cn('absolute -left-10 -top-10 h-40 w-40 rounded-full opacity-70 blur-2xl', accent.wash)} />
+        <MobileSettingsLink className="absolute right-0 top-0" />
         <p className={cn('relative text-small font-medium', accent.ink)}>Coming in phase {mod.phase}</p>
         <h1 className="relative mt-2 font-display text-[40px] leading-[1.05] text-ink sm:text-[52px]">{mod.title}</h1>
         <p className="relative mt-4 max-w-xl text-balance font-display text-lead font-light italic text-ink-soft">

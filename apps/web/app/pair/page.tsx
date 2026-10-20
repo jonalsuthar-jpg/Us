@@ -40,7 +40,7 @@ export default function PairPage() {
       if (!data.user) return router.replace('/sign-in');
       setUserId(data.user.id);
       const ctx = await getCoupleContext(sb, data.user.id).catch(() => null);
-      if (ctx) router.replace('/talk');
+      if (ctx) router.replace('/home');
       else setStep('choose');
     });
   }, [router]);
@@ -54,7 +54,7 @@ export default function PairPage() {
   function onPaired(ctx: CoupleContext) {
     setPaired(ctx);
     setStep('paired');
-    setTimeout(() => router.replace('/talk'), 2200);
+    setTimeout(() => router.replace('/home'), 2200);
   }
 
   async function startInvite() {
@@ -280,7 +280,7 @@ function ChoiceCard({
       disabled={busy}
       className={cn(
         'group relative overflow-hidden rounded-sheet border border-paper-edge bg-paper-raised p-6 text-left',
-        'transition-[transform,box-shadow] duration-base ease-out hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-20px_rgba(42,31,45,0.4)]',
+        'transition-[transform,box-shadow] duration-base ease-out hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-20px_rgba(36,25,51,0.4)]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 focus-visible:ring-offset-paper',
       )}
     >

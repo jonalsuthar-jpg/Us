@@ -53,7 +53,7 @@ export function Segmented<T extends string>({
               'flex-1 whitespace-nowrap rounded-[9px] font-medium transition-[background-color,color,box-shadow] duration-quick',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
               size === 'sm' ? 'px-3 py-1.5 text-small' : 'px-4 py-2 text-small sm:text-body',
-              selected ? 'bg-paper-raised text-ink shadow-[0_1px_2px_rgba(42,31,45,0.12)]' : 'text-ink-soft hover:text-ink',
+              selected ? 'bg-paper-raised text-ink shadow-[0_1px_2px_rgba(36,25,51,0.12)]' : 'text-ink-soft hover:text-ink',
             )}
           >
             {o.label}

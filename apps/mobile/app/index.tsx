@@ -31,5 +31,5 @@ export default function Index() {
     );
   }
   if (session === undefined) return null;
-  return <Redirect href={session ? '/talk' : '/sign-in'} />;
+  return <Redirect href={session ? '/home' : '/sign-in'} />;
 }

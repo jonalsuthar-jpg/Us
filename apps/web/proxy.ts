@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const APP_ROUTES = ['/talk', '/connect', '/plan', '/memory', '/growth', '/settings', '/pair'];
+const APP_ROUTES = ['/home', '/talk', '/connect', '/plan', '/memory', '/growth', '/settings', '/pair'];
 const AUTH_ROUTES = ['/sign-in', '/sign-up'];
 
 /**
@@ -42,7 +42,7 @@ export async function proxy(request: NextRequest) {
   }
   if (user && inAuth) {
     const to = request.nextUrl.clone();
-    to.pathname = '/talk';
+    to.pathname = '/home';
     to.search = '';
     return NextResponse.redirect(to);
   }

@@ -75,7 +75,7 @@ export default function DesignPage() {
           ))}
         </div>
         <p className="mt-4 text-small text-ink-muted">
-          Brand anchors are used for large accents. Text and button fills use deeper stops (e.g. rose-600 #9E4247 —
+          Brand anchors are used for large accents. Text and button fills use deeper stops (e.g. rose-600 #C41D55 —
           5.6:1 with white) so everything meets WCAG AA.
         </p>
       </Section>

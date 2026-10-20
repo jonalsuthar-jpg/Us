@@ -4,6 +4,7 @@ import { formatDuration, type CallState } from '@us/shared';
 import { useCallManager, useCallState, useCouple } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  ChevronDown,
   Mic,
   MicOff,
   MonitorUp,
@@ -32,10 +33,72 @@ import { StreamAudio, StreamVideo, useAudioOutputs } from './media';
 export function CallOverlay() {
   const state = useCallState();
   const visible = state.phase !== 'idle';
-  return <AnimatePresence>{visible && <CallScreen key={state.call?.id ?? 'pending'} state={state} />}</AnimatePresence>;
+  const [minimised, setMinimised] = useState(false);
+  const canMinimise = visible && state.phase !== 'incoming' && state.phase !== 'ended';
+  // A new ring or the end of the call always brings the full screen back.
+  useEffect(() => {
+    if (!canMinimise) setMinimised(false);
+  }, [canMinimise]);
+  return (
+    <>
+      <AnimatePresence>
+        {visible && (
+          <CallScreen
+            key={state.call?.id ?? 'pending'}
+            state={state}
+            minimised={minimised}
+            onMinimise={canMinimise ? () => setMinimised(true) : undefined}
+          />
+        )}
+      </AnimatePresence>
+      {minimised && <CallBar state={state} onExpand={() => setMinimised(false)} />}
+    </>
+  );
 }
 
-function CallScreen({ state }: { state: CallState }) {
+/** The minimised call, floating over the app: who, how long, mute and hang up. */
+function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }) {
+  const m = useCallManager();
+  const { partner } = useCouple();
+  const elapsed = useElapsed(state.connectedAt);
+  const status =
+    state.phase === 'connected' ? formatDuration(elapsed) : state.phase === 'reconnecting' ? 'Reconnecting…' : 'Calling…';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 mx-auto flex max-w-md items-center gap-3 rounded-full bg-sage-600 py-1.5 pl-2 pr-1.5 text-white shadow-[0_12px_32px_-12px_rgba(0,0,0,0.45)]"
+    >
+      <button
+        type="button"
+        onClick={onExpand}
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-full py-0.5 pl-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+      >
+        <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-white" aria-hidden />
+        <span className="min-w-0">
+          <span className="block truncate text-small font-semibold">{partner.display_name}</span>
+          <span className="block text-micro tabular-nums text-white/80" aria-live="polite">
+            {status} · back to call
+          </span>
+        </span>
+      </button>
+      <IconButton
+        label={state.local.mic ? 'Mute' : 'Unmute'}
+        pressed={!state.local.mic}
+        tone={state.local.mic ? 'night' : 'nightOff'}
+        size="sm"
+        onClick={() => m.toggleMic()}
+      >
+        {state.local.mic ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+      </IconButton>
+      <IconButton label="End call" tone="end" size="sm" onClick={() => void m.hangup()}>
+        <PhoneOff className="h-4 w-4" />
+      </IconButton>
+    </motion.div>
+  );
+}
+
+function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimised: boolean; onMinimise?: () => void }) {
   const m = useCallManager();
   const { partner, partnerSlot, me } = useCouple();
   const [shareNudge, setShareNudge] = useState(false);
@@ -69,7 +132,9 @@ function CallScreen({ state }: { state: CallState }) {
       role="dialog"
       aria-modal="true"
       aria-label={`Call with ${partner.display_name}`}
-      className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-plum-800 text-paper"
+      // Minimised: stays mounted (its <audio> keeps the call playing) but out of the way.
+      aria-hidden={minimised || undefined}
+      className={cn('fixed inset-0 z-50 flex-col overflow-hidden bg-plum-800 text-paper', minimised ? 'hidden' : 'flex')}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.4 } }}
@@ -109,15 +174,20 @@ function CallScreen({ state }: { state: CallState }) {
 
       {/* Top bar */}
       <header className="relative z-10 flex items-center justify-between gap-4 bg-gradient-to-b from-plum-900/70 to-transparent px-5 pb-10 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-8">
+        {onMinimise && (
+          <IconButton label="Minimise call" tone="night" size="sm" onClick={onMinimise}>
+            <ChevronDown className="h-5 w-5" />
+          </IconButton>
+        )}
         {remoteVideo ? (
-          <div>
+          <div className="flex-1">
             <p className="font-display text-heading">{partner.display_name}</p>
             <p className="text-small tabular-nums text-paper/70" aria-live="polite">
               {statusLine}
             </p>
           </div>
         ) : (
-          <span />
+          <span className="flex-1" />
         )}
         <div className="flex items-center gap-2">
           {live && state.route === 'relay' && (

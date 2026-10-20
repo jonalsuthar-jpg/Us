@@ -3,7 +3,8 @@ import { useCallManager, useCouple, useMessages, useTyping } from '@us/shared/re
 import { router, useFocusEffect } from 'expo-router';
 import { Phone, Settings, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bubble, CallEntry } from '@/components/chat/bubble';
 import { Composer } from '@/components/chat/composer';
@@ -56,7 +57,9 @@ export default function Talk() {
   }, [messages]);
 
   return (
-    <KeyboardAvoidingView className="flex-1 bg-paper" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    // Android draws edge-to-edge, so the window no longer resizes for the keyboard:
+    // lift the composer ourselves on both platforms.
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.paper }} behavior="padding">
       <View style={{ paddingTop: insets.top + 8 }} className="flex-row items-center gap-3 border-b border-paper-edge px-4 pb-3">
         <Avatar name={partner.display_name} slot={partnerSlot} online={partnerOnline} />
         <View className="flex-1">

@@ -2,10 +2,14 @@ import { formatClock, type Message, type PartnerSlot } from '@us/shared';
 import { Ticks } from '@/components/ui/ticks';
 import { cn } from '@/lib/cn';
 
-const MINE: Record<PartnerSlot, string> = { a: 'bg-rose-600 text-white', b: 'bg-teal-600 text-white' };
+const MINE: Record<PartnerSlot, string> = {
+  a: 'bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-[0_6px_16px_-10px_rgba(196,29,85,0.7)]',
+  b: 'bg-gradient-to-br from-teal-500 to-teal-600 text-white shadow-[0_6px_16px_-10px_rgba(10,119,109,0.7)]',
+};
+// Their messages: a clean raised card, tinted only at the edge with their colour.
 const THEIRS: Record<PartnerSlot, string> = {
-  a: 'bg-rose-50 text-ink border border-rose-200/70',
-  b: 'bg-teal-50 text-ink border border-teal-200/70',
+  a: 'bg-paper-raised text-ink border border-rose-200/60 shadow-[0_4px_14px_-10px_rgba(36,25,51,0.35)]',
+  b: 'bg-paper-raised text-ink border border-teal-200/60 shadow-[0_4px_14px_-10px_rgba(36,25,51,0.35)]',
 };
 
 interface BubbleProps {

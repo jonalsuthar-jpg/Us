@@ -4,6 +4,7 @@ import { clusters, groupByDay } from '@us/shared';
 import { useCallManager, useCouple, useMessages, useTyping } from '@us/shared/react';
 import { Phone, Video } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
+import { MobileSettingsLink } from '@/components/app/app-shell';
 import { Bubble } from '@/components/chat/bubble';
 import { CallEntry } from '@/components/chat/call-entry';
 import { Composer } from '@/components/chat/composer';
@@ -51,6 +52,7 @@ export default function TalkPage() {
         <IconButton label={`Video call ${partner.display_name}`} tone="rose" onClick={() => void calls.startCall('video')}>
           <Video className="h-5 w-5" />
         </IconButton>
+        <MobileSettingsLink />
       </header>
 
       <div

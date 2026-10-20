@@ -39,7 +39,7 @@ export function Composer({ partnerName, onSend, onChange }: ComposerProps) {
 
   return (
     <form
-      className="flex items-end gap-2 rounded-[26px] border border-paper-edge bg-paper-raised p-1.5 pl-4 shadow-[0_8px_24px_-16px_rgba(42,31,45,0.35)] focus-within:border-rose-300"
+      className="flex items-end gap-2 rounded-[26px] border border-paper-edge bg-paper-raised p-1.5 pl-4 shadow-[0_8px_24px_-16px_rgba(36,25,51,0.35)] focus-within:border-rose-300"
       onSubmit={(e) => {
         e.preventDefault();
         send();

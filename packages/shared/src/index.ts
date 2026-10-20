@@ -15,6 +15,7 @@ export * from './api/push';
 export * from './api/plan';
 export * from './api/memory';
 export * from './api/growth';
+export * from './api/home';
 
 export * from './realtime/couple-channel';
 export * from './realtime/typing';

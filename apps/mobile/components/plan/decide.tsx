@@ -107,7 +107,7 @@ export function PlanDecide() {
           <Sheet tone="night" pad="lg" className="min-h-[200px] items-center justify-center">
             {spinning ? (
               <Animated.View key="spin" entering={ZoomIn} exiting={FadeOut}>
-                <Dices size={40} color="#E9CD93" />
+                <Dices size={40} color="#FFD98A" />
               </Animated.View>
             ) : picked ? (
               <Animated.View key={picked.id + picked.times_picked} entering={ZoomIn.springify()} className="items-center">
@@ -123,7 +123,7 @@ export function PlanDecide() {
                 </Display>
               </Animated.View>
             )}
-            <Button variant="night" className="mt-6" disabled={inList.length < 2 || spinning} onPress={choose} icon={<Dices size={16} color="#FAF6F1" />}>
+            <Button variant="night" className="mt-6" disabled={inList.length < 2 || spinning} onPress={choose} icon={<Dices size={16} color="#FCFAFB" />}>
               {picked ? 'Choose again' : 'Choose for us'}
             </Button>
           </Sheet>

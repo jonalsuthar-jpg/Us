@@ -60,9 +60,9 @@ function png(size, pixel) {
   ]);
 }
 
-const plum = hex('#2A1F2D');
-const rose = hex('#C8686B');
-const teal = hex('#4A6670');
+const plum = hex('#241933');
+const rose = hex('#F5547C');
+const teal = hex('#0C8F82');
 const inCircle = (x, y, cx, cy, r) => (x - cx) ** 2 + (y - cy) ** 2 <= r * r;
 
 // Full-bleed app icon (stores apply their own mask).

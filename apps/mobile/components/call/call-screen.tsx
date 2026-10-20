@@ -1,8 +1,8 @@
 import { formatDuration, type CallState } from '@us/shared';
 import { useCallManager, useCallState, useCouple } from '@us/shared/react';
-import { Ear, Mic, MicOff, MonitorUp, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
+import { ChevronDown, Ear, Mic, MicOff, MonitorUp, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, View } from 'react-native';
+import { Modal, Pressable, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
@@ -20,14 +20,80 @@ import { Avatar } from '../ui/avatar';
 import { Button, IconButton } from '../ui/button';
 import { Display, Text } from '../ui/text';
 
-/** Full-screen call surface, mounted once in the app layout. */
+/**
+ * Full-screen call surface, mounted once in the app layout. A call in progress
+ * can be minimised to a bar over the app (back button or the chevron), so the
+ * rest of Us stays usable while you talk.
+ */
 export function CallScreen() {
   const state = useCallState();
+  const [minimised, setMinimised] = useState(false);
   useCallAudio(state);
+  const canMinimise = state.phase !== 'idle' && state.phase !== 'incoming' && state.phase !== 'ended';
+  // A new ring or the end of the call always brings the full screen back.
+  useEffect(() => {
+    if (!canMinimise) setMinimised(false);
+  }, [canMinimise]);
+  const minimise = () => {
+    if (canMinimise) setMinimised(true);
+  };
   return (
-    <Modal visible={state.phase !== 'idle'} animationType="fade" presentationStyle="fullScreen" statusBarTranslucent>
-      {state.phase !== 'idle' && <Surface state={state} />}
-    </Modal>
+    <>
+      <Modal
+        visible={state.phase !== 'idle' && !minimised}
+        animationType="fade"
+        presentationStyle="fullScreen"
+        statusBarTranslucent
+        onRequestClose={minimise}
+      >
+        {state.phase !== 'idle' && <Surface state={state} onMinimise={canMinimise ? minimise : undefined} />}
+      </Modal>
+      {minimised && <CallBar state={state} onExpand={() => setMinimised(false)} />}
+    </>
+  );
+}
+
+/** The minimised call: who, how long, mute and hang up. Tap to go back to the call. */
+function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }) {
+  const m = useCallManager();
+  const { partner } = useCouple();
+  const insets = useSafeAreaInsets();
+  const elapsed = useElapsed(state.connectedAt);
+  const status =
+    state.phase === 'connected' ? formatDuration(elapsed) : state.phase === 'reconnecting' ? 'Reconnecting…' : 'Calling…';
+  return (
+    <Animated.View
+      entering={FadeIn.duration(220)}
+      pointerEvents="box-none"
+      style={{ position: 'absolute', top: insets.top + 6, left: 12, right: 12 }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Call with ${partner.display_name}, ${status}. Return to call`}
+        onPress={onExpand}
+        className="flex-row items-center gap-3 rounded-full bg-sage-600 py-1.5 pl-4 pr-1.5 shadow-lg active:bg-sage-700"
+        style={{ elevation: 8 }}
+      >
+        <View className="h-2 w-2 rounded-full bg-white" />
+        <View className="flex-1">
+          <Text className="font-sans-semibold text-small text-white" numberOfLines={1}>
+            {partner.display_name}
+          </Text>
+          <Text className="text-micro text-white/80">{status} · tap to return</Text>
+        </View>
+        <IconButton
+          label={state.local.mic ? 'Mute' : 'Unmute'}
+          size="sm"
+          tone={state.local.mic ? 'night' : 'nightOff'}
+          onPress={() => m.toggleMic()}
+        >
+          {state.local.mic ? <Mic size={18} color="#fff" /> : <MicOff size={18} color="#241933" />}
+        </IconButton>
+        <IconButton label="End call" size="sm" tone="end" onPress={() => void m.hangup()}>
+          <PhoneOff size={18} color="#fff" />
+        </IconButton>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -62,7 +128,7 @@ function useElapsed(start: number | null) {
   return start ? now - start : 0;
 }
 
-function Surface({ state }: { state: CallState }) {
+function Surface({ state, onMinimise }: { state: CallState; onMinimise?: () => void }) {
   const m = useCallManager();
   const { partner, partnerSlot } = useCouple();
   const insets = useSafeAreaInsets();
@@ -101,18 +167,23 @@ function Surface({ state }: { state: CallState }) {
         </Animated.View>
       )}
 
-      <View style={{ paddingTop: insets.top + 12 }} className="flex-row items-center justify-between px-5">
+      <View style={{ paddingTop: insets.top + 12 }} className="flex-row items-center justify-between gap-3 px-5">
+        {onMinimise && (
+          <IconButton label="Minimise call" tone="night" size="sm" onPress={onMinimise}>
+            <ChevronDown size={22} color="#FCFAFB" />
+          </IconButton>
+        )}
         {remoteVideo ? (
-          <View>
+          <View className="flex-1">
             <Display className="text-heading text-paper">{partner.display_name}</Display>
             <Text className="text-small text-paper/70">{status}</Text>
           </View>
         ) : (
-          <View />
+          <View className="flex-1" />
         )}
         {live && state.route === 'relay' && (
           <View className="flex-row items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1">
-            <Radio size={13} color="#E7DEE8" />
+            <Radio size={13} color="#EBE1F4" />
             <Text className="text-micro text-paper/80">Relayed</Text>
           </View>
         )}
@@ -177,7 +248,7 @@ function Surface({ state }: { state: CallState }) {
                   setSpeakerOn(!speaker);
                 }}
               >
-                {speaker ? <Volume2 size={20} color="#2A1F2D" /> : <Ear size={20} color="#FAF6F1" />}
+                {speaker ? <Volume2 size={20} color="#241933" /> : <Ear size={20} color="#FCFAFB" />}
               </IconButton>
               {state.local.camera && state.canSwitchCamera && (
                 <IconButton
@@ -185,12 +256,12 @@ function Surface({ state }: { state: CallState }) {
                   tone="night"
                   onPress={() => void m.switchCamera()}
                 >
-                  <SwitchCamera size={20} color="#FAF6F1" />
+                  <SwitchCamera size={20} color="#FCFAFB" />
                 </IconButton>
               )}
               {live && (
                 <IconButton label="Share screen" tone="night" onPress={() => setNudge(true)}>
-                  <MonitorUp size={20} color="#FAF6F1" />
+                  <MonitorUp size={20} color="#FCFAFB" />
                 </IconButton>
               )}
             </View>
@@ -202,7 +273,7 @@ function Surface({ state }: { state: CallState }) {
                 size="lg"
                 onPress={() => m.toggleMic()}
               >
-                {state.local.mic ? <Mic size={24} color="#FAF6F1" /> : <MicOff size={24} color="#2A1F2D" />}
+                {state.local.mic ? <Mic size={24} color="#FCFAFB" /> : <MicOff size={24} color="#241933" />}
               </IconButton>
               <IconButton
                 label={state.local.camera ? 'Turn camera off' : 'Turn camera on'}
@@ -211,7 +282,7 @@ function Surface({ state }: { state: CallState }) {
                 size="lg"
                 onPress={() => void m.toggleCamera()}
               >
-                {state.local.camera ? <Video size={24} color="#FAF6F1" /> : <VideoOff size={24} color="#2A1F2D" />}
+                {state.local.camera ? <Video size={24} color="#FCFAFB" /> : <VideoOff size={24} color="#241933" />}
               </IconButton>
               <IconButton label="End call" tone="end" size="lg" className="w-20" onPress={() => void m.hangup()}>
                 <PhoneOff size={24} color="#fff" />

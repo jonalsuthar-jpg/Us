@@ -27,11 +27,12 @@ export function logoutPush() {
  * Foreground pushes are suppressed — the app is already showing things live
  * and plays its own chime/ring. Taps deep-link via `data.url`.
  */
-export function onPush(handlers: { click: (d: PushData) => void }) {
+export function onPush(handlers: { click: (d: PushData, actionId?: string) => void }) {
   if (!env.oneSignalAppId) return () => {};
   const fg = (e: { preventDefault(): void }) => e.preventDefault();
-  const click = (e: { notification: { additionalData?: object } }) =>
-    handlers.click(e.notification.additionalData as PushData);
+  // actionId is the button tapped ('answer' / 'decline' on a call), if any.
+  const click = (e: { result?: { actionId?: string }; notification: { additionalData?: object } }) =>
+    handlers.click(e.notification.additionalData as PushData, e.result?.actionId);
   OneSignal.Notifications.addEventListener('foregroundWillDisplay', fg as never);
   OneSignal.Notifications.addEventListener('click', click as never);
   return () => {

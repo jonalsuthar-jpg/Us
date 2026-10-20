@@ -25,6 +25,7 @@ import { Alert, Image, Pressable, View } from 'react-native';
 import { EmptyNote, ErrorNote } from '../module-screen';
 import { Button, IconButton } from '../ui/button';
 import { Field } from '../ui/field';
+import { Photo } from '../ui/photo-viewer';
 import { DateStepper, FormSheet } from '../ui/form-sheet';
 import { usePalette } from '../ui/palette';
 import { PrivacyBadge } from '../ui/privacy';
@@ -227,7 +228,7 @@ function MemoryDetail({
   const [error, setError] = useState<string | null>(null);
   return (
     <>
-      {url ? <Image source={{ uri: url }} className="aspect-[4/3] w-full rounded-control" resizeMode="cover" /> : null}
+      {url ? <Photo uri={url} label={`Photo: ${memory.title}`} /> : null}
       <Text className="text-small text-ink-muted">
         {formatDay(memory.happened_on)} · {KIND_LABEL[memory.kind]} · kept by {authorName}
       </Text>
@@ -337,7 +338,7 @@ function MemoryForm({
               setRemovePhoto(true);
             }}
           >
-            <X size={16} color="#FAF6F1" />
+            <X size={16} color="#FCFAFB" />
           </IconButton>
         </View>
       ) : (

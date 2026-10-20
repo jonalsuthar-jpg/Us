@@ -60,10 +60,11 @@ export function Button({ variant = 'primary', size = 'md', loading, icon, childr
   );
 }
 
-type Tone = 'paper' | 'rose' | 'night' | 'nightOff' | 'end' | 'accept';
+type Tone = 'paper' | 'raised' | 'rose' | 'night' | 'nightOff' | 'end' | 'accept';
 
 const TONE: Record<Tone, string> = {
   paper: 'bg-transparent active:bg-paper-sunken',
+  raised: 'border border-paper-edge bg-paper-raised active:bg-paper-sunken',
   rose: 'bg-rose-50 active:bg-rose-100',
   night: 'bg-white/10 active:bg-white/20',
   // Inverted "off" state on call screens: stays light in both themes.

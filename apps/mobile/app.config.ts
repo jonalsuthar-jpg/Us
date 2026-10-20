@@ -1,7 +1,9 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
-const PAPER = '#FAF6F1';
-const PLUM = '#2A1F2D';
+const PAPER = '#FCFAFB';
+const PLUM = '#241933';
+
+const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID ?? '88a0178c-23db-40f1-b16c-0e953b4dfe47';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -14,6 +16,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: 'automatic',
   backgroundColor: PAPER,
   icon: './assets/images/icon.png',
+  // Over-the-air updates (EAS Update). The fingerprint changes whenever native
+  // code does, so an update only ever reaches builds that can run it.
+  runtimeVersion: { policy: 'fingerprint' },
+  updates: { url: `https://u.expo.dev/${EAS_PROJECT_ID}`, checkAutomatically: 'ON_LOAD', fallbackToCacheTimeout: 0 },
   ios: {
     bundleIdentifier: process.env.IOS_BUNDLE_ID ?? 'com.jonalsuthar.us',
     supportsTablet: true,
@@ -74,12 +80,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         // The app's own chime, bundled for iOS + Android res/raw (see scripts/generate-sounds.mjs).
         sounds: ['./assets/sounds/us_chime.wav', './assets/sounds/us_ring.wav'],
         smallIcons: ['./assets/images/ic_stat_onesignal_default.png'],
-        smallIconAccentColor: '#C8686B',
+        smallIconAccentColor: '#F5547C',
       },
     ],
   ],
   experiments: { typedRoutes: false },
   extra: {
-    eas: { projectId: process.env.EAS_PROJECT_ID ?? '88a0178c-23db-40f1-b16c-0e953b4dfe47' },
+    eas: { projectId: EAS_PROJECT_ID },
   },
 });

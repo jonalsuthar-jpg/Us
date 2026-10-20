@@ -25,6 +25,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { EmptyNote, ErrorNote } from '@/components/app/module-header';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
+import { Photo } from '@/components/ui/lightbox';
 import { Field, TextAreaField } from '@/components/ui/field';
 import { PrivacyBadge } from '@/components/ui/privacy';
 import { Chip, Segmented } from '@/components/ui/segmented';
@@ -238,7 +239,7 @@ function MemoryDetail({
 
   return (
     <div className="max-h-[75dvh] space-y-5 overflow-y-auto">
-      {url ? <img src={url} alt="" className="max-h-[50dvh] w-full rounded-control object-cover" /> : null}
+      {url ? <Photo src={url} label={`Photo: ${memory.title}`} /> : null}
       <p className="text-small text-ink-muted">
         {formatDay(memory.happened_on)} · {KIND_LABEL[memory.kind]} · kept by {authorName}
       </p>

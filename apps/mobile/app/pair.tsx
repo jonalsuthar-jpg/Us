@@ -40,7 +40,7 @@ export default function Pair() {
       if (!data.user) return router.replace('/sign-in');
       setUserId(data.user.id);
       const ctx = await getCoupleContext(supabase, data.user.id).catch(() => null);
-      if (ctx) router.replace('/talk');
+      if (ctx) router.replace('/home');
       else setStep('choose');
     });
   }, []);
@@ -53,7 +53,7 @@ export default function Pair() {
   function onPaired(ctx: CoupleContext) {
     setPaired(ctx);
     setStep('paired');
-    setTimeout(() => router.replace('/talk'), 2200);
+    setTimeout(() => router.replace('/home'), 2200);
   }
 
   async function startInvite() {

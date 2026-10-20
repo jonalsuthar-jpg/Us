@@ -22,7 +22,7 @@ export function Dialog({ open, onOpenChange, title, description, children, class
         <D.Overlay className="fixed inset-0 z-40 bg-plum-900/40 backdrop-blur-[2px]" />
         <D.Content
           className={cn(
-            'fixed z-50 bg-paper-raised p-6 shadow-[0_24px_64px_-24px_rgba(28,20,30,0.5)] focus:outline-none',
+            'fixed z-50 bg-paper-raised p-6 shadow-[0_24px_64px_-24px_rgba(23,15,33,0.5)] focus:outline-none',
             'inset-x-0 bottom-0 rounded-t-[28px] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[min(92vw,440px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-sheet',
             className,
           )}

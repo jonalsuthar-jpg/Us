@@ -61,8 +61,8 @@ export function Seal({ size = 40 }: { size?: number }) {
   const o = size * 0.18;
   return (
     <Svg width={size} height={size} accessibilityElementsHidden>
-      <Circle cx={size / 2 - o} cy={size / 2} r={r} fill="#C8686B" />
-      <Circle cx={size / 2 + o} cy={size / 2} r={r} fill="#4A6670" opacity={0.88} />
+      <Circle cx={size / 2 - o} cy={size / 2} r={r} fill="#F5547C" />
+      <Circle cx={size / 2 + o} cy={size / 2} r={r} fill="#0C8F82" opacity={0.88} />
     </Svg>
   );
 }
