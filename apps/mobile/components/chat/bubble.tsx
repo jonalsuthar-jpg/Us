@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import { cn } from '../ui/cn';
 import { Text } from '../ui/text';
 import { Ticks } from '../ui/ticks';
+import { usePalette } from '../ui/palette';
 
 const MINE = { a: 'bg-rose-600', b: 'bg-teal-600' };
 const THEIRS = { a: 'bg-rose-50 border border-rose-200', b: 'bg-teal-50 border border-teal-200' };
@@ -60,7 +61,8 @@ export function CallEntry({ message, myId, onCallBack }: { message: Message; myI
   const call = message.call;
   if (!call) return null;
   const { label, missed, detail } = describeCall(call, myId);
-  const color = missed ? '#5E282C' : '#5C4660';
+  const c = usePalette();
+  const color = missed ? c.onRoseDeep : c.inkSoft;
   const Icon = missed ? PhoneMissed : call.media === 'video' ? Video : Phone;
   const text = `${label}${detail ? ` · ${detail}` : ''} · ${formatClock(call.created_at)}`;
   const inner = (

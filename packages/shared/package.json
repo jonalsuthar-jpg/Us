@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./react": "./src/react/index.ts",
     "./tokens": "./src/tokens.js",
+    "./theme": "./src/theme.js",
     "./tailwind-preset": "./tailwind-preset.js",
     "./assets/*": "./assets/*"
   },

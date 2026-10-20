@@ -11,6 +11,7 @@ import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
 import { IconButton } from '@/components/ui/button';
 import { Display, Text } from '@/components/ui/text';
+import { usePalette } from '@/components/ui/palette';
 
 type Row =
   | { kind: 'day'; key: string; label: string }
@@ -40,6 +41,7 @@ export default function Talk() {
   const { messages, loading, hasOlder, loadOlder, send, retry } = useMessages({ viewing });
   const { partnerTyping, onComposerChange, onComposerSent } = useTyping();
   const calls = useCallManager();
+  const c = usePalette();
 
   // Inverted list → newest first.
   const rows = useMemo<Row[]>(() => {
@@ -66,19 +68,19 @@ export default function Talk() {
           </Text>
         </View>
         <IconButton label={`Voice call ${partner.display_name}`} tone="rose" size="sm" onPress={() => void calls.startCall('audio')}>
-          <Phone size={19} color="#7F3439" />
+          <Phone size={19} color={c.onRose} />
         </IconButton>
         <IconButton label={`Video call ${partner.display_name}`} tone="rose" size="sm" onPress={() => void calls.startCall('video')}>
-          <Video size={19} color="#7F3439" />
+          <Video size={19} color={c.onRose} />
         </IconButton>
         <IconButton label="Settings" size="sm" onPress={() => router.push('/settings')}>
-          <Settings size={19} color="#5C4660" />
+          <Settings size={19} color={c.inkSoft} />
         </IconButton>
       </View>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#C8686B" />
+          <ActivityIndicator color={c.rose} />
         </View>
       ) : (
         <FlatList

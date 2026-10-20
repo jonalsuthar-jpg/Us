@@ -15,7 +15,7 @@ const styles = cva(
         rose: 'bg-rose-50 text-rose-700 hover:bg-rose-100 focus-visible:ring-offset-paper',
         night: 'bg-white/10 text-paper hover:bg-white/20 focus-visible:ring-offset-plum-800',
         /** Toggled-off state on call screens: inverted so "off" is unmistakable. */
-        nightOff: 'bg-paper text-plum-800 hover:bg-paper-sunken focus-visible:ring-offset-plum-800',
+        nightOff: 'bg-white text-plum-800 hover:bg-white/85 focus-visible:ring-offset-plum-800',
         end: 'bg-rose-600 text-white hover:bg-rose-700 focus-visible:ring-offset-plum-800',
         accept: 'bg-sage-500 text-white hover:bg-sage-600 focus-visible:ring-offset-plum-800',
       },

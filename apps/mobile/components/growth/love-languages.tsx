@@ -24,6 +24,7 @@ import { Display, Text } from '../ui/text';
 
 export function GrowthLoveLanguages() {
   const { sb, me, partner } = useCouple();
+  const c = usePalette();
   const results = useCoupleData('growth:love-languages', () => loveLanguageResults(sb, me.id), [sb, me.id]);
   const [taking, setTaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +75,7 @@ export function GrowthLoveLanguages() {
           <>
             <Result result={theirs} />
             <Sheet tone="note" accent="sage" pad="sm" className="flex-row gap-3">
-              <Lightbulb size={20} color="#3F4838" />
+              <Lightbulb size={20} color={c.onSage} />
               <View className="flex-1">
                 <Text className="font-sans-medium text-micro text-sage-700">A gentle idea for today</Text>
                 <Text className="mt-1">{ideaOfTheDay(theirs.primary_language)}</Text>

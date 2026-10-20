@@ -13,11 +13,13 @@ import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { Sheet } from '@/components/ui/sheet';
 import { Display, Text } from '@/components/ui/text';
+import { usePalette } from '@/components/ui/palette';
 
 type Tab = 'goals' | 'mood' | 'worries' | 'love';
 
 export default function Growth() {
   const { sb, partner } = useCouple();
+  const c = usePalette();
   const [tab, setTab] = useState<Tab>('goals');
   // Refreshes when my partner asks for a nudge — timestamps only.
   const nudges = useCoupleData('growth:nudges', () => partnerNudges(sb), [sb]);
@@ -28,7 +30,7 @@ export default function Growth() {
       {latest ? (
         <Sheet tone="note" accent="sage" className="gap-3">
           <View className="flex-row items-center gap-3">
-            <HeartHandshake size={22} color="#3F4838" />
+            <HeartHandshake size={22} color={c.onSage} />
             <Display className="flex-1 text-lead">{partner.display_name} could use a little extra care today.</Display>
           </View>
           <Text className="text-small text-ink-soft">That’s all you’ll see — the rest is theirs.</Text>

@@ -5,6 +5,8 @@ export * from './format';
 export * from './uuid';
 export * as tokens from './tokens.js';
 export type { PartnerSlot } from './tokens.js';
+export { themes, themeVars } from './theme.js';
+export type { ColorScheme } from './theme.js';
 
 export * from './api/pairing';
 export * from './api/messages';

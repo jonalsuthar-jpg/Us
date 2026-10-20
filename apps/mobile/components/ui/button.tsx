@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, type PressableProps } from 'react-native';
 import { cn } from './cn';
 import { Text } from './text';
+import { usePalette } from './palette';
 
 type Variant = 'primary' | 'secondary' | 'quiet' | 'night' | 'end' | 'accept';
 
@@ -34,6 +35,7 @@ interface ButtonProps extends Omit<PressableProps, 'children'> {
 }
 
 export function Button({ variant = 'primary', size = 'md', loading, icon, children, className, disabled, onPress, ...props }: ButtonProps) {
+  const c = usePalette();
   return (
     <Pressable
       accessibilityRole="button"
@@ -52,7 +54,7 @@ export function Button({ variant = 'primary', size = 'md', loading, icon, childr
       )}
       {...props}
     >
-      {loading ? <ActivityIndicator color={variant === 'secondary' || variant === 'quiet' ? '#2A1F2D' : '#fff'} /> : icon}
+      {loading ? <ActivityIndicator color={variant === 'secondary' || variant === 'quiet' ? c.ink : '#fff'} /> : icon}
       <Text className={cn('font-sans-medium', size === 'lg' ? 'text-lead' : 'text-body', LABEL[variant])}>{children}</Text>
     </Pressable>
   );
@@ -64,7 +66,8 @@ const TONE: Record<Tone, string> = {
   paper: 'bg-transparent active:bg-paper-sunken',
   rose: 'bg-rose-50 active:bg-rose-100',
   night: 'bg-white/10 active:bg-white/20',
-  nightOff: 'bg-paper active:bg-paper-sunken',
+  // Inverted "off" state on call screens: stays light in both themes.
+  nightOff: 'bg-white active:bg-white/85',
   end: 'bg-rose-600 active:bg-rose-700',
   accept: 'bg-sage-500 active:bg-sage-600',
 };

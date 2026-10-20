@@ -1,4 +1,4 @@
-import { getCoupleContext, MODULES, type CoupleContext, type ModuleId } from '@us/shared';
+import { getCoupleContext, MODULES, tokens, type CoupleContext, type ModuleId } from '@us/shared';
 import { CallProvider, CoupleProvider, useCallState, useCouple } from '@us/shared/react';
 import { router, Tabs, usePathname } from 'expo-router';
 import { HeartHandshake, MessageCircleHeart, NotebookPen, Sparkles, Sprout } from 'lucide-react-native';
@@ -10,6 +10,7 @@ import { initPush, onPush } from '@/lib/push';
 import { nativeRtc } from '@/lib/rtc';
 import { playChime, startRing, stopRing } from '@/lib/sounds';
 import { supabase } from '@/lib/supabase';
+import { usePalette } from '@/components/ui/palette';
 
 const ICONS: Record<ModuleId, typeof MessageCircleHeart> = {
   talk: MessageCircleHeart,
@@ -44,7 +45,7 @@ export default function AppLayout() {
   if (!ctx) {
     return (
       <View className="flex-1 items-center justify-center bg-paper">
-        <ActivityIndicator color="#C8686B" />
+        <ActivityIndicator color={tokens.colors.rose[400]} />
       </View>
     );
   }
@@ -62,15 +63,16 @@ export default function AppLayout() {
 
 function AppTabs() {
   const { unread } = useCouple();
+  const c = usePalette();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#2A1F2D',
-        tabBarInactiveTintColor: '#7F6683',
-        tabBarStyle: { backgroundColor: '#FAF6F1', borderTopColor: '#E4D9CC' },
+        tabBarActiveTintColor: c.ink,
+        tabBarInactiveTintColor: c.inkMuted,
+        tabBarStyle: { backgroundColor: c.paper, borderTopColor: c.edge },
         tabBarLabelStyle: { fontFamily: 'WorkSans_500Medium', fontSize: 11 },
-        sceneStyle: { backgroundColor: '#FAF6F1' },
+        sceneStyle: { backgroundColor: c.paper },
       }}
     >
       {MODULES.map((m) => {
@@ -83,7 +85,7 @@ function AppTabs() {
               title: m.title,
               tabBarIcon: ({ color, focused }) => <Icon size={22} color={color} strokeWidth={focused ? 2.25 : 1.75} />,
               tabBarBadge: m.id === 'talk' && unread > 0 ? unread : undefined,
-              tabBarBadgeStyle: { backgroundColor: '#9E4247', fontSize: 11 },
+              tabBarBadgeStyle: { backgroundColor: c.roseStrong, fontSize: 11 },
             }}
           />
         );

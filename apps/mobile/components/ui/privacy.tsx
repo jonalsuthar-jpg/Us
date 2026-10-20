@@ -4,18 +4,20 @@ import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { cn } from './cn';
 import { Text } from './text';
+import { usePalette } from './palette';
 
 /** Mirrors the web PrivacyBadge: the shared/private boundary, always visible. */
 export function PrivacyBadge({ privacy, partnerName, className }: { privacy: Feature['privacy']; partnerName: string; className?: string }) {
+  const c = usePalette();
   const copy = {
     shared: `Shared with ${partnerName}`,
     private: 'Only you',
     'private-until-reveal': 'Hidden until you’ve both answered',
   }[privacy];
   const tone = {
-    shared: { bg: 'bg-teal-50', fg: 'text-teal-700', hex: '#31454C' },
-    private: { bg: 'bg-plum-50', fg: 'text-plum-700', hex: '#382A3B' },
-    'private-until-reveal': { bg: 'bg-gold-50', fg: 'text-gold-700', hex: '#6B4E1F' },
+    shared: { bg: 'bg-teal-50', fg: 'text-teal-700', hex: c.onTeal },
+    private: { bg: 'bg-plum-50', fg: 'text-plum-700', hex: c.onPlum },
+    'private-until-reveal': { bg: 'bg-gold-50', fg: 'text-gold-700', hex: c.onGold },
   }[privacy];
 
   return (

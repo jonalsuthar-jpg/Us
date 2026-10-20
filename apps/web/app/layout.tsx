@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { Fraunces, Work_Sans } from 'next/font/google';
 import { MotionConfig } from '@/components/app/motion-config';
+import { ThemeWatcher } from '@/components/app/theme-watcher';
+import { THEME_SCRIPT } from '@/lib/theme';
 import './globals.css';
 
 const display = Fraunces({
@@ -21,7 +23,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#FAF6F1',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#FAF6F1' },
+    { media: '(prefers-color-scheme: dark)', color: '#18111A' },
+  ],
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -29,8 +34,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable}`}>
+    // data-theme is set by THEME_SCRIPT before React hydrates, hence the warning suppression.
+    <html lang="en" className={`${display.variable} ${sans.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
+        <ThemeWatcher />
         <MotionConfig>{children}</MotionConfig>
       </body>
     </html>

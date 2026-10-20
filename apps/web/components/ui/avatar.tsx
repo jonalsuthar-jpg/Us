@@ -61,7 +61,7 @@ export function Seal({ size = 40, joined = true, className }: { size?: number; j
         cx={size / 2 + offset}
         cy={size / 2}
         r={r}
-        className="fill-teal-500 mix-blend-multiply transition-all duration-slow ease-out"
+        className="fill-teal-500 mix-blend-multiply transition-all duration-slow ease-out dark:opacity-90 dark:mix-blend-normal"
       />
     </svg>
   );

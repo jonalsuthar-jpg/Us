@@ -14,9 +14,13 @@ import { Display, Text } from '@/components/ui/text';
 import { env } from '@/lib/env';
 import { logoutPush, requestPushPermission } from '@/lib/push';
 import { playChime } from '@/lib/sounds';
+import { usePalette, useThemePref } from '@/components/ui/palette';
+import { Segmented } from '@/components/ui/segmented';
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
+  const c = usePalette();
+  const theme = useThemePref();
   const { sb, me, partner, mySlot, partnerSlot, couple } = useCouple();
   const [name, setName] = useState(me.display_name);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +31,7 @@ export default function Settings() {
     <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 40 }} contentContainerClassName="gap-10 px-5">
       <View className="flex-row items-center gap-2">
         <IconButton label="Back" size="sm" onPress={() => router.back()}>
-          <ChevronLeft size={22} color="#2A1F2D" />
+          <ChevronLeft size={22} color={c.ink} />
         </IconButton>
         <Display className="text-title">Settings</Display>
       </View>
@@ -68,6 +72,21 @@ export default function Settings() {
           <PrivacyBadge privacy="private" partnerName={partner.display_name} />
           <PrivacyBadge privacy="private-until-reveal" partnerName={partner.display_name} />
         </View>
+      </View>
+
+      <View className="gap-3">
+        <Display className="text-heading">Appearance</Display>
+        <Segmented
+          label="Theme"
+          options={[
+            { value: 'system', label: 'Match device' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+          value={theme.pref}
+          onChange={theme.setPref}
+        />
+        <Text className="text-small text-ink-muted">Saved on this device. Calls always use the night palette.</Text>
       </View>
 
       <View className="gap-3">

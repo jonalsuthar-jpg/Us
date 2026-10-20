@@ -10,10 +10,12 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { PrivacyBadge } from '@/components/ui/privacy';
+import { Segmented } from '@/components/ui/segmented';
 import { Sheet } from '@/components/ui/sheet';
 import { env } from '@/lib/env';
 import { logoutPush, pushPermission, requestPushPermission } from '@/lib/push';
 import { playChime } from '@/lib/sounds';
+import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme';
 
 export default function SettingsPage() {
   const { sb, me, partner, mySlot, partnerSlot, couple } = useCouple();
@@ -22,8 +24,12 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [push, setPush] = useState(false);
+  const [theme, setTheme] = useState<ThemePref>('system');
 
-  useEffect(() => setPush(pushPermission()), []);
+  useEffect(() => {
+    setPush(pushPermission());
+    setTheme(getThemePref());
+  }, []);
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -81,6 +87,26 @@ export default function SettingsPage() {
             <PrivacyBadge privacy="private-until-reveal" partnerName={partner.display_name} />
           </div>
         </div>
+      </section>
+
+      <section aria-labelledby="appearance" className="space-y-4">
+        <h2 id="appearance" className="font-display text-heading text-ink">
+          Appearance
+        </h2>
+        <Segmented
+          label="Theme"
+          options={[
+            { value: 'system', label: 'Match device' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+          value={theme}
+          onChange={(t) => {
+            setTheme(t);
+            setThemePref(t);
+          }}
+        />
+        <p className="text-small text-ink-muted">Saved on this device. Calls always use the night palette.</p>
       </section>
 
       <section aria-labelledby="notify" className="space-y-4">

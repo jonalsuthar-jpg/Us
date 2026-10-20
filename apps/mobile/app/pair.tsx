@@ -20,6 +20,7 @@ import { cn } from '@/components/ui/cn';
 import { Sheet } from '@/components/ui/sheet';
 import { Display, Text } from '@/components/ui/text';
 import { supabase } from '@/lib/supabase';
+import { usePalette } from '@/components/ui/palette';
 
 type Step = 'loading' | 'choose' | 'invite' | 'join' | 'paired';
 
@@ -29,6 +30,7 @@ export default function Pair() {
   const [userId, setUserId] = useState<string | null>(null);
   const [invite, setInvite] = useState<Invite | null>(null);
   const [code, setCode] = useState('');
+  const c = usePalette();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [paired, setPaired] = useState<CoupleContext | null>(null);
@@ -108,7 +110,7 @@ export default function Pair() {
       </View>
 
       <View className="flex-1 justify-center py-10">
-        {step === 'loading' && <ActivityIndicator color="#C8686B" />}
+        {step === 'loading' && <ActivityIndicator color={c.rose} />}
 
         {step === 'choose' && (
           <Animated.View entering={FadeIn}>
@@ -143,7 +145,7 @@ export default function Pair() {
               </Text>
             </Sheet>
             <View className="mt-8 flex-row items-center justify-center gap-3">
-              <ActivityIndicator size="small" color="#4A6670" />
+              <ActivityIndicator size="small" color={c.teal} />
               <Text className="text-ink-soft" accessibilityLiveRegion="polite">
                 Waiting for them to join…
               </Text>
@@ -161,7 +163,7 @@ export default function Pair() {
               autoCapitalize="characters"
               autoCorrect={false}
               placeholder="ABCD-EFGH"
-              placeholderTextColor="#CDBCCF"
+              placeholderTextColor={c.faint}
               value={code}
               onChangeText={(t) => setCode(formatInviteCode(t))}
               className={cn(
@@ -198,6 +200,7 @@ export default function Pair() {
 }
 
 function Choice({ accent, title, body, onPress, busy }: { accent: 'rose' | 'teal'; title: string; body: string; onPress: () => void; busy?: boolean }) {
+  const c = usePalette();
   return (
     <Pressable
       accessibilityRole="button"
@@ -208,7 +211,7 @@ function Choice({ accent, title, body, onPress, busy }: { accent: 'rose' | 'teal
       <View className={cn('absolute -right-8 -top-8 h-24 w-24 rounded-full', accent === 'rose' ? 'bg-rose-200' : 'bg-teal-200')} />
       <Display className="text-heading">{title}</Display>
       <Text className="mt-2 text-small text-ink-soft">{body}</Text>
-      {busy && <ActivityIndicator className="mt-3 self-start" color="#C8686B" />}
+      {busy && <ActivityIndicator className="mt-3 self-start" color={c.rose} />}
     </Pressable>
   );
 }

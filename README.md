@@ -1,6 +1,6 @@
 # Us
 
-A private space for exactly two people: video and voice calls, screen sharing, a chat thread with read receipts and typing, and (coming) relationship tools for connecting, planning, remembering and growing together.
+A private space for exactly two people: video and voice calls, screen sharing, a chat thread with read receipts and typing, and relationship tools for planning, remembering and growing together (Connect is next).
 
 ```
 apps/
@@ -10,7 +10,7 @@ packages/
   shared/     design tokens + Tailwind preset · typed Supabase API · realtime channel ·
               WebRTC CallManager · React providers/hooks (used by both apps)
 supabase/
-  migrations/ schema + Row Level Security (phases 1–2 built, 3–6 stubbed)
+  migrations/ schema + Row Level Security (phases 1–2 and 4–6 built, 3 stubbed)
   functions/  push (OneSignal) · turn-credentials (Metered) · fight-translator (phase 3 stub)
 scripts/      test-db (RLS tests on PGlite) · generate-sounds · generate-icons
 ```
@@ -21,7 +21,11 @@ scripts/      test-db (RLS tests on PGlite) · generate-sounds · generate-icons
 |---|---|
 | 1 · Foundation | Monorepo (npm workspaces + Turborepo), Supabase schema, email/password + magic-link auth, invite-code pairing, design system on web and mobile |
 | 2 · Talk | 1:1 WebRTC video and voice calls, signaled over a private Supabase Realtime channel. Mute, camera, flip camera (mobile), web screen sharing (mobile gets a nudge to use the web app). TURN via Metered. Persistent chat with sent ✓ / delivered ✓✓ / read ✓✓ receipts, typing indicator, presence, missed-call entries with call-back, push notifications, custom chime and ringtone |
-| 3–6 | Tables and RLS exist; each module has a placeholder screen with its features and their privacy boundary; `TODO(phase-N)` markers throughout |
+| 3 · Connect | Tables and RLS exist; placeholder screen; `TODO(phase-3)` markers (Fight Translator, Future Letters, Inside Jokes, Daily Question) |
+| 4 · Plan | Shared calendar (month grid, all-day / timed plans), decision picker (weighted, recently-picked options deprioritised, server-side `pick_decision`), invisible-labour balance over 30 days, shared costs with per-currency settle-up |
+| 5 · Memory | Timeline with photos in a private Storage bucket (`memories/<couple_id>/…`, signed URLs), moments / dates / trips, *On this day*, a private "how it felt" rating and note on each memory |
+| 6 · Growth | Goal board (yours / theirs / ours), private mood check-ins with an optional soft nudge (partner sees only *that* you asked — `partner_nudges()` returns timestamps), worry space with opt-in sharing, love-language quiz with opt-in sharing and a daily idea |
+| Dark mode | Web and mobile. Follows the device by default; Settings → Appearance overrides it per device |
 
 ## Prerequisites
 
@@ -124,7 +128,8 @@ Tokens live in `packages/shared/src/tokens.js` and feed one Tailwind preset used
 - Colour: deep plum `#2A1F2D` · paper `#FAF6F1` · rose clay `#C8686B` (partner A, primary) · dusty teal `#4A6670` (partner B) · warm gold `#C99A44` (highlights, memories, read receipts) · sage `#7C8B6F` (growth). Text and button fills use deeper stops so they meet WCAG AA (e.g. rose-600 `#9E4247` gives 5.6:1 with white).
 - Type: Fraunces (soft, slightly wonky) for names, moments and memories. Work Sans for UI and body text.
 - Motion: one moment per screen. On auth, the two circles meet. On calls, the partner's initial breathes in their colour. On pairing, the seal closes. `prefers-reduced-motion` is respected (CSS, Framer `reducedMotion="user"`, Reanimated `useReducedMotion`).
-- Components exist on both platforms with matching APIs: Button, IconButton, Field, Sheet (paper / inset / note / night), Avatar, Seal, PrivacyBadge, Ticks, chat Bubble, TypingBubble, CallEntry, Composer, call screen.
+- Components exist on both platforms with matching APIs: Button, IconButton, Field, Segmented, Chip, Sheet (paper / inset / note / night), Avatar, Seal, PrivacyBadge, Ticks, chat Bubble, TypingBubble, CallEntry, Composer, call screen.
+- Dark mode: role colours (paper, ink, the pale washes and the deep text stops on them) are `--us-*` CSS variables defined in `packages/shared/src/theme.js`. Web sets them per `data-theme`; mobile provides them with NativeWind `vars()` from `ThemeProvider`. Brand fills and night (call) surfaces don't change.
 
 ## Scripts
 
@@ -143,4 +148,7 @@ Tokens live in `packages/shared/src/tokens.js` and feed one Tailwind preset used
 - **Inline notification reply:** the Reply action deep-links into the composer. A true text-input reply needs native notification categories.
 - **Audio routing:** add `react-native-incall-manager` to route video calls to the speaker and voice calls to the earpiece and Bluetooth.
 - **Edge Functions** were written against Supabase's Deno runtime but not executed here (no Deno or Docker in the build environment). Deploy them and run a first call to confirm.
-- Dark mode isn't implemented yet. The tokens are ready for it.
+- **On this day** shows in-app; a scheduled `memory_resurfaced` push (pg_cron + Edge Function) isn't wired yet.
+- Mobile date entry uses a day stepper and typed times rather than a native picker (no extra native module). Swap in `@react-native-community/datetimepicker` if you prefer.
+- Plan / Memory / Growth refresh live via a data-free "changed" ping on the private couple channel, not Postgres Changes, so nothing extra is published.
+- Dark mode was checked on web; on mobile the bundle compiles with the theme variables, but give it a look on a device.

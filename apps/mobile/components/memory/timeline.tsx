@@ -50,6 +50,7 @@ async function pickPhoto(): Promise<Picked | null> {
 export function MemoryTimeline() {
   const ctx = useCouple();
   const { sb, couple, partner, me } = ctx;
+  const c = usePalette();
   const memories = useCoupleData('memory:timeline', () => listMemories(sb, couple.id), [sb, couple.id]);
   const ratings = useCoupleData('memory:my-ratings', () => myRatings(sb), [sb]);
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -75,7 +76,7 @@ export function MemoryTimeline() {
       {resurfaced.length > 0 ? (
         <Sheet tone="note" accent="gold" className="gap-3">
           <View className="flex-row items-center gap-2">
-            <Sparkles size={16} color="#6B4E1F" />
+            <Sparkles size={16} color={c.onGold} />
             <Text className="font-sans-medium text-small text-gold-700">On this day</Text>
           </View>
           {resurfaced.map((m) => (
@@ -129,7 +130,7 @@ export function MemoryTimeline() {
                     <View className="flex-row items-center justify-between">
                       <Text className="text-micro text-ink-muted">{formatDay(m.happened_on)}</Text>
                       <View className="flex-row items-center gap-1.5">
-                        {ratings.data?.[m.id] ? <Heart size={12} color="#C8686B" fill="#C8686B" /> : null}
+                        {ratings.data?.[m.id] ? <Heart size={12} color={c.rose} fill={c.rose} /> : null}
                         {m.kind !== 'moment' ? (
                           <Text className="rounded-full bg-gold-50 px-2 py-0.5 font-sans-medium text-micro text-gold-700">{KIND_LABEL[m.kind]}</Text>
                         ) : null}
@@ -253,7 +254,7 @@ function MemoryDetail({
                 onPress={() => setStars(stars === n ? null : n)}
                 className="p-1"
               >
-                <Heart size={26} color={on ? c.rose : '#CDBCCF'} fill={on ? c.rose : 'transparent'} />
+                <Heart size={26} color={on ? c.rose : c.faint} fill={on ? c.rose : 'transparent'} />
               </Pressable>
             );
           })}

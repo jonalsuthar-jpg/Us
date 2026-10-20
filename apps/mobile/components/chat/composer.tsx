@@ -2,6 +2,7 @@ import { ArrowUp } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { cn } from '../ui/cn';
+import { usePalette } from '../ui/palette';
 
 export function Composer({
   partnerName,
@@ -13,13 +14,14 @@ export function Composer({
   onChange: (text: string) => void;
 }) {
   const [text, setText] = useState('');
+  const c = usePalette();
   const canSend = text.trim().length > 0;
   return (
     <View className="flex-row items-end gap-2 rounded-[26px] border border-paper-edge bg-paper-raised p-1.5 pl-4">
       <TextInput
         accessibilityLabel={`Message ${partnerName}`}
         placeholder={`Message ${partnerName}…`}
-        placeholderTextColor="#A994AC"
+        placeholderTextColor={c.placeholder}
         multiline
         maxLength={4000}
         value={text}

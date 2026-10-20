@@ -1,9 +1,13 @@
 import type { Config } from 'tailwindcss';
+import plugin from 'tailwindcss/plugin';
 const preset = require('@us/shared/tailwind-preset');
+const { themeVars } = require('@us/shared/theme');
 
 const config: Config = {
   presets: [preset],
   content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}', './lib/**/*.{ts,tsx}'],
+  // lib/theme.ts sets data-theme on <html> (from the saved choice or the OS).
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       fontFamily: {
@@ -27,7 +31,15 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // The --us-* colour variables behind paper, ink and the washes.
+    plugin(({ addBase }) =>
+      addBase({
+        ':root': { ...themeVars('light'), colorScheme: 'light' },
+        ':root[data-theme="dark"]': { ...themeVars('dark'), colorScheme: 'dark' },
+      }),
+    ),
+  ],
 };
 
 export default config;
