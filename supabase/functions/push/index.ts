@@ -2,6 +2,7 @@
  * push — notify my partner via OneSignal.
  *
  * Body: { category: 'new_message', messageId } | { category: 'incoming_call' | 'call_ended', callId }
+ *     | { category: 'wellbeing_nudge', checkinId }
  *
  * The record is re-read with the service role and the caller must be its
  * sender/caller, so a client can't push arbitrary content. Each category maps
@@ -49,8 +50,8 @@ const CATEGORIES: Record<Category, Style> = {
     iosInterruption: 'active',
     threadId: 'chat',
   },
-  // TODO(phase-3..6): triggered by scheduled functions / DB events, not clients.
   wellbeing_nudge: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'wellbeing' },
+  // TODO(phase-3/5): triggered by scheduled functions, not clients.
   memory_resurfaced: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'memories' },
   letter_unlocked: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'letters' },
   daily_question: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'daily' },
@@ -105,6 +106,21 @@ Deno.serve(async (req) => {
       content = `Missed ${kind}`;
     }
     data = { category, url: '/talk', callId: call.id };
+  } else if (body.category === 'wellbeing_nudge') {
+    // The check-in itself stays private: only its owner, flag and age are read,
+    // and the notification never carries the score or note.
+    const { data: c } = await admin
+      .from('mood_checkins')
+      .select('id, owner_id, nudge_partner, created_at')
+      .eq('id', body.checkinId)
+      .maybeSingle();
+    if (!c || c.owner_id !== userId || !c.nudge_partner) return json({ error: 'forbidden' }, 403);
+    if (Date.now() - Date.parse(c.created_at) > 10 * 60_000) return json({ skipped: 'stale' });
+    category = 'wellbeing_nudge';
+    heading = 'A gentle nudge';
+    content = `${name} could use a little extra care today.`;
+    collapseId = `nudge-${userId}`;
+    data = { category, url: '/growth' };
   } else {
     return json({ error: 'unknown_category' }, 400);
   }

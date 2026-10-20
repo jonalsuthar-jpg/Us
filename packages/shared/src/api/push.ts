@@ -9,14 +9,15 @@ export type PushCategory =
   | 'incoming_call'
   | 'call_ended' // replaces a ringing call notification with "missed call"
   | 'new_message'
-  | 'wellbeing_nudge' // TODO(phase-6)
+  | 'wellbeing_nudge' // partner asked for a little care (never carries details)
   | 'memory_resurfaced' // TODO(phase-3/5)
   | 'letter_unlocked' // TODO(phase-3)
   | 'daily_question'; // TODO(phase-3)
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }
-  | { category: 'incoming_call' | 'call_ended'; callId: string };
+  | { category: 'incoming_call' | 'call_ended'; callId: string }
+  | { category: 'wellbeing_nudge'; checkinId: string };
 
 /** Payload attached to every notification (`data`) for deep-link routing. */
 export interface PushData {
@@ -24,6 +25,7 @@ export interface PushData {
   url: string;
   messageId?: string;
   callId?: string;
+  checkinId?: string;
 }
 
 /**

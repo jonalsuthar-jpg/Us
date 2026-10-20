@@ -13,6 +13,7 @@ export type CallStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'declined';
 export type MessageKind = 'text' | 'call';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
 export type MemoryKind = 'moment' | 'trip' | 'date';
+export type LoveLanguage = 'words' | 'acts' | 'gifts' | 'time' | 'touch';
 
 export type Database = {
   public: {
@@ -238,6 +239,40 @@ export type Database = {
         Update: { rating?: number | null; note?: string | null };
         Relationships: [];
       };
+      // ------------------------------------------------------------ Phase 6
+      goals: {
+        Row: {
+          id: string;
+          couple_id: string;
+          /** null = a shared goal ("ours"). */
+          owner_id: string | null;
+          title: string;
+          progress: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: { id?: string; couple_id: string; owner_id: string | null; title: string; progress?: number };
+        Update: { title?: string; progress?: number };
+        Relationships: [];
+      };
+      mood_checkins: {
+        Row: { id: string; owner_id: string; score: number; note: string | null; nudge_partner: boolean; created_at: string };
+        Insert: { id?: string; owner_id: string; score: number; note?: string | null; nudge_partner?: boolean };
+        Update: { note?: string | null };
+        Relationships: [];
+      };
+      insecurity_checkins: {
+        Row: { id: string; owner_id: string; body: string; shared_at: string | null; created_at: string };
+        Insert: { id?: string; owner_id: string; body: string };
+        Update: { body?: string; shared_at?: string | null };
+        Relationships: [];
+      };
+      love_language_results: {
+        Row: { owner_id: string; scores: Json; primary_language: LoveLanguage; shared: boolean; taken_at: string };
+        Insert: { owner_id: string; scores: Json; primary_language: LoveLanguage; shared?: boolean; taken_at?: string };
+        Update: { scores?: Json; primary_language?: LoveLanguage; shared?: boolean; taken_at?: string };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -251,6 +286,7 @@ export type Database = {
       expire_stale_calls: { Args: Record<PropertyKey, never>; Returns: number };
       current_couple_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       current_partner_id: { Args: Record<PropertyKey, never>; Returns: string | null };
+      partner_nudges: { Args: { p_hours?: number }; Returns: { nudged_at: string }[] };
       pick_decision: {
         Args: { p_category: string };
         Returns: Database['public']['Tables']['decision_options']['Row'];
@@ -278,6 +314,10 @@ export type LaborEntry = Tables['labor_entries']['Row'];
 export type Expense = Tables['expenses']['Row'];
 export type Memory = Tables['memories']['Row'];
 export type MemoryRating = Tables['memory_ratings']['Row'];
+export type Goal = Tables['goals']['Row'];
+export type MoodCheckin = Tables['mood_checkins']['Row'];
+export type Worry = Tables['insecurity_checkins']['Row'];
+export type LoveLanguageResult = Tables['love_language_results']['Row'];
 
 /** A message as rendered in the thread: call log entries carry their call. */
 export type Message = MessageRow & {

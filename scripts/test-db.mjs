@@ -371,5 +371,37 @@ await test('memory ratings: private to each of us, only on our own memories', as
   );
 });
 
+console.log('\nPhase 6 · Growth');
+
+await test('goals: shared board; my goals are mine to edit, ours are for both', async () => {
+  const mine = (await as(alice, () => one(`insert into public.goals (couple_id, owner_id, title) values ($1, $2, 'Run 10k') returning id`, [couple.id, alice]))).id;
+  await as(bob, () => q(`insert into public.goals (couple_id, owner_id, title) values ($1, null, 'Save for Japan')`, [couple.id]));
+  assert.equal((await as(bob, () => q(`select * from public.goals`))).length, 2, 'board is shared');
+  assert.equal((await as(bob, () => q(`update public.goals set progress = 90 where id = $1 returning 1`, [mine]))).length, 0, 'partner cannot edit mine');
+  assert.equal((await as(alice, () => q(`update public.goals set progress = 40 where owner_id is null returning 1`))).length, 1, 'either edits ours');
+  await rejects(as(bob, () => q(`insert into public.goals (couple_id, owner_id, title) values ($1, $2, 'x')`, [couple.id, alice])), /row-level security/, 'goal for partner');
+  assert.equal((await as(carol, () => q(`select * from public.goals`))).length, 0);
+});
+
+await test('mood: partner gets nudge timestamps only — never score or note', async () => {
+  await as(bob, () => q(`insert into public.mood_checkins (owner_id, score, note, nudge_partner) values ($1, 1, 'awful meeting', true), ($1, 4, 'fine', false)`, [bob]));
+  const nudges = await as(alice, () => q(`select * from public.partner_nudges()`));
+  assert.equal(nudges.length, 1);
+  assert.deepEqual(Object.keys(nudges[0]), ['nudged_at']);
+  assert.equal((await as(bob, () => q(`select * from public.partner_nudges()`))).length, 0, 'alice never asked');
+  assert.equal((await as(carol, () => q(`select * from public.partner_nudges()`))).length, 0, 'outsider');
+  assert.equal((await as(alice, () => q(`select * from public.mood_checkins where owner_id = $1`, [bob]))).length, 0, 'rows stay private');
+});
+
+await test('love languages: private until the owner shares', async () => {
+  await as(alice, () => q(`insert into public.love_language_results (owner_id, scores, primary_language) values ($1, '{"time":5}', 'time')`, [alice]));
+  assert.equal((await as(bob, () => q(`select * from public.love_language_results`))).length, 0);
+  await as(alice, () => q(`update public.love_language_results set shared = true`));
+  assert.equal((await as(bob, () => q(`select primary_language from public.love_language_results`)))[0].primary_language, 'time');
+  assert.equal((await as(carol, () => q(`select * from public.love_language_results`))).length, 0);
+  assert.equal((await as(bob, () => q(`update public.love_language_results set primary_language = 'gifts' returning 1`))).length, 0, 'read-only for partner');
+  await rejects(as(bob, () => q(`insert into public.love_language_results (owner_id, scores, primary_language) values ($1, '{}', 'hugs')`, [bob])), /primary_valid/, 'unknown language');
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 await db.close();

@@ -92,7 +92,7 @@ export const MODULES: AppModule[] = [
     title: 'Growth',
     tagline: 'Growing up, together and apart.',
     phase: 6,
-    status: 'planned',
+    status: 'live',
     features: [
       { title: 'Goals', blurb: 'Yours, theirs, and ours.', privacy: 'shared' },
       {
