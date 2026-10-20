@@ -7,6 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Us',
   slug: 'us',
+  owner: 'jonalsuthar',
   scheme: 'us',
   version: '0.1.0',
   orientation: 'portrait',
@@ -14,14 +15,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   backgroundColor: PAPER,
   icon: './assets/images/icon.png',
   ios: {
-    bundleIdentifier: process.env.IOS_BUNDLE_ID ?? 'com.example.us',
+    bundleIdentifier: process.env.IOS_BUNDLE_ID ?? 'com.jonalsuthar.us',
     supportsTablet: true,
     infoPlist: {
       UIBackgroundModes: ['audio', 'voip', 'remote-notification'],
     },
   },
   android: {
-    package: process.env.ANDROID_PACKAGE ?? 'com.example.us',
+    package: process.env.ANDROID_PACKAGE ?? 'com.jonalsuthar.us',
     adaptiveIcon: { foregroundImage: './assets/images/icon.png', backgroundColor: PLUM },
     permissions: [
       'android.permission.CAMERA',
@@ -67,6 +68,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   experiments: { typedRoutes: false },
   extra: {
-    eas: { projectId: process.env.EAS_PROJECT_ID },
+    eas: { projectId: process.env.EAS_PROJECT_ID ?? '88a0178c-23db-40f1-b16c-0e953b4dfe47' },
   },
 });
