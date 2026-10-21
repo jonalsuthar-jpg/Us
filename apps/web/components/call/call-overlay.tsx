@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDuration, type CallState } from '@us/shared';
+import { formatDuration, type CallState, type ScreenStats, type ShareMode } from '@us/shared';
 import { useCallManager, useCallState, useCouple } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -126,6 +126,20 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
   useEffect(() => {
     if (!watchingShare && root.current && document.fullscreenElement === root.current) void document.exitFullscreen().catch(() => {});
   }, [watchingShare]);
+  // What my own share is going out at, refreshed while I share.
+  const [shareStats, setShareStats] = useState<ScreenStats | null>(null);
+  useEffect(() => {
+    if (!state.local.screen) return setShareStats(null);
+    let stop = false;
+    const tick = () => void m.screenStats().then((s) => !stop && setShareStats(s));
+    tick();
+    const t = setInterval(tick, 2000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [state.local.screen, m]);
+
   const toggleFull = () => {
     if (full) void document.exitFullscreen().catch(() => {});
     else void root.current?.requestFullscreen().catch(() => {});
@@ -282,6 +296,41 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
         >
           <SelfView state={state} />
           <span className="sr-only">Your camera</span>
+        </div>
+      )}
+
+      {/* While I share: how it trades quality, and what it's going out at */}
+      {live && state.local.screen && !full && (
+        <div className="relative z-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 pb-1 [@media(max-height:500px)]:pb-0">
+          <div role="radiogroup" aria-label="Screen share quality" className="flex rounded-full bg-plum-900/70 p-0.5 backdrop-blur">
+            {(
+              [
+                ['smooth', 'Smooth', 'Fluid motion, for videos'],
+                ['sharp', 'Sharp', 'Crisp text, for documents'],
+              ] as [ShareMode, string, string][]
+            ).map(([mode, label, hint]) => (
+              <button
+                key={mode}
+                type="button"
+                role="radio"
+                aria-checked={state.shareMode === mode}
+                title={hint}
+                onClick={() => void m.setShareMode(mode)}
+                className={cn(
+                  'rounded-full px-3 py-1 text-micro font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+                  state.shareMode === mode ? 'bg-paper text-plum-900' : 'text-paper/80 hover:text-paper',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {shareStats?.height ? (
+            <p className="text-micro tabular-nums text-paper/70" aria-live="polite">
+              {`${shareStats.height}p · ${Math.round(shareStats.fps ?? 0)} fps`}
+              {shareStats.limitedByNetwork ? <span className="text-gold-200"> · Limited by connection</span> : null}
+            </p>
+          ) : null}
         </div>
       )}
 

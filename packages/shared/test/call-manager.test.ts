@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Call, CallMedia, CallStatus } from '../src/database.types';
 import type { SignalEnvelope } from '../src/realtime/couple-channel';
-import { CallManager, type CallPhase, type RtcAdapter } from '../src/webrtc/call-manager';
+import { CallManager, opusForMedia, type CallPhase, type RtcAdapter } from '../src/webrtc/call-manager';
 
 // ---------------------------------------------------------------------------
 // Fakes: just enough WebRTC surface for the state machine to run end-to-end.
@@ -21,6 +21,11 @@ class FakeTrack {
   }
   stop() {
     this.stopped = true;
+  }
+  contentHint = '';
+  constraints: unknown = null;
+  async applyConstraints(c: unknown) {
+    this.constraints = c;
   }
   addEventListener() {}
 }
@@ -49,7 +54,13 @@ class FakeStream {
 
 class FakeTransceiver {
   direction = 'recvonly';
-  sender = { track: null as FakeTrack | null, replaceTrack: async (t: FakeTrack | null) => void (this.sender.track = t) };
+  params: { encodings: Record<string, unknown>[]; degradationPreference?: string } = { encodings: [{}] };
+  sender = {
+    track: null as FakeTrack | null,
+    replaceTrack: async (t: FakeTrack | null) => void (this.sender.track = t),
+    getParameters: () => structuredClone(this.params),
+    setParameters: async (p: typeof this.params) => void (this.params = structuredClone(p)),
+  };
   receiver: { track: FakeTrack };
   constructor(kind: 'audio' | 'video') {
     this.receiver = { track: new FakeTrack(kind) };
@@ -294,6 +305,42 @@ describe('CallManager', () => {
     expect(screen.tracks[1]!.stopped).toBe(true);
   });
 
+  it('a share goes out smooth by default, switches to sharp, and gives the camera its settings back', async () => {
+    const w = makeWorld();
+    const screen = new FakeStream([new FakeTrack('video'), new FakeTrack('audio')]);
+    const mixAudio = () => ({ track: new FakeTrack('audio'), close: () => {} });
+    const alice = w.manager('alice', 'bob', { rtc: { getDisplayMedia: async () => screen, mixAudio } as never });
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('video');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+
+    const txs = pcOf(alice).transceivers;
+    const video = txs.find((t) => t.receiver.track.kind === 'video')!;
+    const audio = txs.find((t) => t.receiver.track.kind === 'audio')!;
+    await vi.waitFor(() => expect(audio.params.encodings[0]!.maxBitrate).toBe(40_000));
+    video.params = { encodings: [{ maxBitrate: 1_500_000 }] };
+
+    await alice.startScreenShare();
+    const shared = screen.tracks[0]!;
+    expect(alice.getState().shareMode).toBe('smooth');
+    expect(shared.contentHint).toBe('motion');
+    expect(video.params.encodings[0]).toMatchObject({ maxBitrate: 6_000_000, maxFramerate: 30 });
+    expect(video.params.degradationPreference).toBe('maintain-framerate');
+    expect(audio.params.encodings[0]!.maxBitrate).toBe(128_000);
+
+    await alice.setShareMode('sharp');
+    expect(shared.contentHint).toBe('detail');
+    expect(shared.constraints).toMatchObject({ width: { max: 2560 }, height: { max: 1440 } });
+    expect(video.params.encodings[0]).toMatchObject({ maxBitrate: 8_000_000 });
+    expect(video.params.degradationPreference).toBe('maintain-resolution');
+
+    await alice.stopScreenShare();
+    expect(video.params.encodings[0]).toEqual({ maxBitrate: 1_500_000 });
+    expect(audio.params.encodings[0]!.maxBitrate).toBe(40_000);
+  });
+
   it('declining ends both sides and records it', async () => {
     const w = makeWorld();
     const alice = w.manager('alice', 'bob');
@@ -399,5 +446,27 @@ describe('CallManager', () => {
     await alice.toggleCamera();
     await alice.toggleCamera();
     expect(opened.at(-1)).toBe('back');
+  });
+});
+
+describe('opusForMedia', () => {
+  const sdp = [
+    'm=audio 9 UDP/TLS/RTP/SAVPF 111 63',
+    'a=rtpmap:111 opus/48000/2',
+    'a=fmtp:111 minptime=10;useinbandfec=1',
+    'a=rtpmap:63 red/48000/2',
+    'a=fmtp:63 111/111',
+    '',
+  ].join('\r\n');
+
+  it('lets Opus carry stereo music, once, and leaves other codecs alone', () => {
+    const out = opusForMedia(opusForMedia(sdp));
+    expect(out).toContain('a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=128000\r\n');
+    expect(out.match(/stereo=1/g)).toHaveLength(2); // stereo + sprop-stereo, not doubled
+    expect(out).toContain('a=fmtp:63 111/111');
+  });
+
+  it('leaves an SDP without Opus untouched', () => {
+    expect(opusForMedia('v=0\r\n')).toBe('v=0\r\n');
   });
 });

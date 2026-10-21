@@ -28,6 +28,41 @@ export interface RtcAdapter {
 
 export type CameraFacing = 'user' | 'environment';
 
+/** Smooth keeps motion fluid (videos); Sharp keeps text crisp (documents). */
+export type ShareMode = 'smooth' | 'sharp';
+
+/** What my shared screen is actually going out at, for the sharer to see. */
+export interface ScreenStats {
+  height: number | null;
+  fps: number | null;
+  /** The connection, not the app, is what's holding quality back. */
+  limitedByNetwork: boolean;
+}
+
+const SHARE_QUALITY: Record<
+  ShareMode,
+  { hint: string; width: number; height: number; maxBitrate: number; degradation: RTCDegradationPreference }
+> = {
+  smooth: { hint: 'motion', width: 1920, height: 1080, maxBitrate: 6_000_000, degradation: 'maintain-framerate' },
+  sharp: { hint: 'detail', width: 2560, height: 1440, maxBitrate: 8_000_000, degradation: 'maintain-resolution' },
+};
+// Voice needs little; a shared film or song gets room for stereo music.
+const VOICE_BITRATE = 40_000;
+const SHARE_AUDIO_BITRATE = 128_000;
+
+/**
+ * Let Opus carry stereo up to 128 kbps. This only advertises what I can
+ * receive; each sender still picks its bitrate (VOICE_BITRATE by default).
+ */
+export function opusForMedia(sdp: string): string {
+  const pt = /a=rtpmap:(\d+) opus\/48000/i.exec(sdp)?.[1];
+  if (!pt) return sdp;
+  return sdp.replace(new RegExp(`(a=fmtp:${pt} )([^\r\n]*)`), (_, head: string, params: string) => {
+    const kept = params.split(';').filter((p) => p && !/^(stereo|sprop-stereo|maxaveragebitrate)=/.test(p.trim()));
+    return `${head}${[...kept, 'stereo=1', 'sprop-stereo=1', 'maxaveragebitrate=128000'].join(';')}`;
+  });
+}
+
 export interface CallBackend {
   createCall(media: CallMedia): Promise<Call>;
   setStatus(callId: string, status: CallStatus): Promise<unknown>;
@@ -95,6 +130,8 @@ export interface CallState {
   facing: CameraFacing;
   /** True when this device has another camera to flip to. */
   canSwitchCamera: boolean;
+  /** How my screen share trades quality when the connection is tight. */
+  shareMode: ShareMode;
   /** Bumped whenever tracks on either stream change, so views can re-bind. */
   revision: number;
 }
@@ -114,6 +151,7 @@ const INITIAL: CallState = {
   error: null,
   facing: 'user',
   canSwitchCamera: false,
+  shareMode: 'smooth',
   revision: 0,
 };
 
@@ -150,6 +188,8 @@ export class CallManager {
   /** The shared screen's sound, and the mic + sound mix going out while sharing. */
   private screenAudio: MediaStreamTrack | null = null;
   private audioMix: { track: MediaStreamTrack; close: () => void } | null = null;
+  /** The camera's send settings, put back when a share ends. */
+  private cameraEncoding: RTCRtpEncodingParameters | null = null;
   private pendingIce: RTCIceCandidateInit[] = [];
   private iceServers: Promise<RTCIceServer[]> | null = null;
   private iceRestarts = 0;
@@ -411,10 +451,11 @@ export class CallManager {
     }
     const track = display.getVideoTracks()[0];
     if (!track) return;
-    if ('contentHint' in track) track.contentHint = 'detail';
     track.addEventListener('ended', () => void this.stopScreenShare());
     this.screenTrack = track;
+    this.cameraEncoding = { ...(this.videoTx?.sender.getParameters?.().encodings?.[0] ?? {}) };
     await this.videoTx?.sender.replaceTrack(track);
+    await this.applyShareQuality();
     const sound = display.getAudioTracks()[0];
     const mic = this.state.localStream?.getAudioTracks()[0];
     if (sound && mic && this.opts.rtc.mixAudio) {
@@ -422,6 +463,7 @@ export class CallManager {
       this.screenAudio = sound;
       this.audioMix = this.opts.rtc.mixAudio([mic, sound]);
       await this.audioTx?.sender.replaceTrack(this.audioMix.track);
+      await this.setAudioBitrate(SHARE_AUDIO_BITRATE);
     } else sound?.stop();
     this.setLocal({ screen: true });
   }
@@ -431,9 +473,75 @@ export class CallManager {
     this.screenTrack.stop();
     this.screenTrack = null;
     await this.videoTx?.sender.replaceTrack(this.cameraTrack ?? null);
-    if (this.audioMix) await this.audioTx?.sender.replaceTrack(this.state.localStream?.getAudioTracks()[0] ?? null);
+    const camera = this.cameraEncoding;
+    this.cameraEncoding = null;
+    if (camera) await this.updateEncoding(this.videoTx, () => camera, {});
+    if (this.audioMix) {
+      await this.audioTx?.sender.replaceTrack(this.state.localStream?.getAudioTracks()[0] ?? null);
+      await this.setAudioBitrate(VOICE_BITRATE);
+    }
     this.stopScreenAudio();
     this.setLocal({ screen: false });
+  }
+
+  /** Switch my running share between Smooth and Sharp. */
+  async setShareMode(mode: ShareMode) {
+    if (mode === this.state.shareMode) return;
+    this.set({ shareMode: mode });
+    await this.applyShareQuality();
+  }
+
+  /** Resolution and frame rate my shared screen is going out at right now. */
+  async screenStats(): Promise<ScreenStats | null> {
+    if (!this.screenTrack || !this.pc) return null;
+    try {
+      const stats = await this.pc.getStats();
+      let out: ScreenStats | null = null;
+      stats.forEach(
+        (r: { type: string; kind?: string; frameHeight?: number; framesPerSecond?: number; qualityLimitationReason?: string }) => {
+          if (r.type === 'outbound-rtp' && r.kind === 'video')
+            out = { height: r.frameHeight ?? null, fps: r.framesPerSecond ?? null, limitedByNetwork: r.qualityLimitationReason === 'bandwidth' };
+        },
+      );
+      return out;
+    } catch {
+      return null;
+    }
+  }
+
+  private async applyShareQuality() {
+    const track = this.screenTrack;
+    if (!track) return;
+    const q = SHARE_QUALITY[this.state.shareMode];
+    if ('contentHint' in track) track.contentHint = q.hint;
+    await track.applyConstraints?.({ width: { max: q.width }, height: { max: q.height }, frameRate: { ideal: 30, max: 30 } }).catch(() => {});
+    await this.updateEncoding(
+      this.videoTx,
+      (e) => ({ ...e, maxBitrate: q.maxBitrate, maxFramerate: 30, priority: 'high', networkPriority: 'high' }),
+      { degradationPreference: q.degradation },
+    );
+  }
+
+  private async setAudioBitrate(maxBitrate: number) {
+    await this.updateEncoding(this.audioTx, (e) => ({ ...e, maxBitrate }), {});
+  }
+
+  /** setParameters is optional on some platforms; quality settings must never break a call. */
+  private async updateEncoding(
+    tx: RTCRtpTransceiver | null,
+    encoding: (e: RTCRtpEncodingParameters) => RTCRtpEncodingParameters,
+    extra: Partial<RTCRtpSendParameters>,
+  ) {
+    const sender = tx?.sender;
+    if (!sender?.getParameters || !sender.setParameters) return;
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings?.length) params.encodings = [{}];
+      params.encodings[0] = encoding(params.encodings[0]!);
+      await sender.setParameters({ ...params, ...extra });
+    } catch (e) {
+      this.log('encoding not applied', e);
+    }
   }
 
   private stopScreenAudio() {
@@ -578,7 +686,8 @@ export class CallManager {
     const pc = this.pc;
     const callId = this.state.call?.id;
     if (!pc || !callId) return;
-    const offer = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
+    const created = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
+    const offer = { type: created.type, sdp: opusForMedia(created.sdp ?? '') };
     await pc.setLocalDescription(offer);
     await this.send({ type: 'sdp', callId, description: { type: offer.type, sdp: offer.sdp } });
   }
@@ -590,7 +699,8 @@ export class CallManager {
 
     if (description.type === 'offer') {
       if (!this.audioTx || !this.videoTx) this.bindCalleeTransceivers(pc);
-      const answer = await pc.createAnswer();
+      const created = await pc.createAnswer();
+      const answer = { type: created.type, sdp: opusForMedia(created.sdp ?? '') };
       await pc.setLocalDescription(answer);
       const callId = this.state.call!.id;
       await this.send({ type: 'sdp', callId, description: { type: answer.type, sdp: answer.sdp } });
@@ -638,6 +748,7 @@ export class CallManager {
       this.set({ phase: 'connected', connectedAt: this.state.connectedAt ?? Date.now() });
       this.broadcastMediaState();
       void this.detectRoute();
+      if (!this.audioMix) void this.setAudioBitrate(VOICE_BITRATE);
     } else if (s === 'disconnected') {
       this.set({ phase: 'reconnecting' });
       this.reconnectTimer = setTimeout(() => this.restartIce(), RECONNECT_GRACE_MS);
@@ -748,6 +859,7 @@ export class CallManager {
     this.cameraTrack?.stop();
     this.screenTrack?.stop();
     this.cameraTrack = this.screenTrack = null;
+    this.cameraEncoding = null;
     this.stopScreenAudio();
     this.pc?.close();
     this.pc = null;
