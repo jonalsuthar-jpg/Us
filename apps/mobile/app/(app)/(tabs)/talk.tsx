@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bubble, CallEntry, type ReplyQuote } from '@/components/chat/bubble';
 import { Composer } from '@/components/chat/composer';
 import { GifPicker } from '@/components/chat/gif-picker';
+import { clearMessageNotifications } from '@/modules/us-call';
 import { env } from '@/lib/env';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
@@ -48,6 +49,10 @@ export default function Talk() {
   const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf } = useCouple();
   const partnerPhoto = photoOf(partnerSlot);
   const viewing = useViewing();
+  // Reading the chat: the gathered "new messages" notification is done with.
+  useEffect(() => {
+    if (viewing) clearMessageNotifications();
+  }, [viewing]);
   const { messages, loading, hasOlder, loadOlder, send, retry, react, pin } = useMessages({ viewing });
   const media = useChatMedia(messages);
   const [acting, setActing] = useState<Message | null>(null);

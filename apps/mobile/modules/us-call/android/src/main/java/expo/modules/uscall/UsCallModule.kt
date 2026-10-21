@@ -41,6 +41,11 @@ class UsCallModule : Module() {
       appContext.currentActivity?.let { activity -> activity.runOnUiThread { showWhenLocked(activity, on) } }
     }
 
+    /** The chat is open: clear the gathered message notification. */
+    Function("clearMessageNotifications") {
+      ChatNotifications.clear(context)
+    }
+
     /** Android 14+ lets people turn off full-screen ringing for an app. */
     Function("canRingFullScreen") {
       if (Build.VERSION.SDK_INT >= 34) context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent() else true

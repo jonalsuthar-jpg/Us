@@ -7,6 +7,7 @@ interface UsCallNative {
   setShowWhenLocked(on: boolean): void;
   canRingFullScreen(): boolean;
   openFullScreenSettings(): void;
+  clearMessageNotifications(): void;
 }
 
 /** Android-only call plumbing (see android/). Absent elsewhere, where every call is a no-op. */
@@ -32,3 +33,5 @@ export const setShowWhenLocked = (on: boolean) => safely((n) => n.setShowWhenLoc
 /** False when Android 14+ has full-screen ringing switched off for Us. */
 export const canRingFullScreen = () => safely((n) => n.canRingFullScreen(), true);
 export const openFullScreenSettings = () => safely((n) => n.openFullScreenSettings(), undefined);
+/** The chat is on screen: clear the gathered "new messages" notification. */
+export const clearMessageNotifications = () => safely((n) => n.clearMessageNotifications(), undefined);

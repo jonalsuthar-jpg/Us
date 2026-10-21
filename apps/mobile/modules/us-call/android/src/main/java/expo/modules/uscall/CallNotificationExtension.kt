@@ -6,11 +6,19 @@ import com.onesignal.notifications.INotificationServiceExtension
 /**
  * OneSignal passes every push here first, even when Us is closed. A call push
  * becomes a ringing call (full screen when locked) instead of a plain
- * notification; the "missed" push that follows stops the ringing.
+ * notification; the "missed" push that follows stops the ringing. Messages
+ * gather into one conversation notification instead of one each.
  */
 class CallNotificationExtension : INotificationServiceExtension {
   override fun onNotificationReceived(event: INotificationReceivedEvent) {
     val data = event.notification.additionalData ?: return
+    if (data.optString("category") == "new_message") {
+      // With Us open, the app shows messages live and suppresses the push.
+      if (CallRing.appInForeground(event.context)) return
+      event.preventDefault()
+      ChatNotifications.add(event.context, event.notification.title ?: "Us", event.notification.body ?: "New message")
+      return
+    }
     val callId = data.optString("callId").takeIf { it.isNotEmpty() } ?: return
     when (data.optString("category")) {
       "incoming_call" -> {
