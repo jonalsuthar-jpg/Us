@@ -21,6 +21,7 @@ import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, Messag
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bootHome, saveHome } from '@/lib/boot-cache';
 import { ErrorNote } from '../module-screen';
 import { Avatar } from '../ui/avatar';
 import { Button, IconButton } from '../ui/button';
@@ -47,7 +48,14 @@ export function HomeScreen() {
   const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, unread, channel } = useCouple();
   const { partnerTyping } = useTyping();
   const calls = useCallManager();
-  const home = useCoupleData('home', () => getHome(sb, { coupleId: couple.id, meId: me.id }), [sb, couple.id, me.id]);
+  const [saved] = useState(() => {
+    const h = bootHome();
+    return h?.couple.id === couple.id ? h : undefined;
+  });
+  const home = useCoupleData('home', () => getHome(sb, { coupleId: couple.id, meId: me.id }), [sb, couple.id, me.id], saved);
+  useEffect(() => {
+    if (home.data) saveHome(me.id, home.data);
+  }, [home.data, me.id]);
   const [editingStatus, setEditingStatus] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);

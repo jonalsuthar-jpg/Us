@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { CallScreen } from '@/components/call/call-screen';
 import { TapHeart } from '@/components/tap-heart';
+import { readBoot, saveContext } from '@/lib/boot-cache';
 import { env } from '@/lib/env';
 import { initPush, onPush } from '@/lib/push';
 import { nativeRtc } from '@/lib/rtc';
@@ -19,13 +20,36 @@ export default function AppLayout() {
 
   useEffect(() => {
     let cancelled = false;
-    void supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return router.replace('/sign-in');
-      const c = await getCoupleContext(supabase, data.user.id).catch(() => null);
+    void (async () => {
+      // The session and last-known couple are on the device, so a cold start
+      // shows the app at once and checks with the server behind it.
+      const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user.id;
+      if (!userId) return router.replace('/sign-in');
+      const cached = await readBoot(userId);
       if (cancelled) return;
-      if (!c) router.replace('/pair');
-      else setCtx(c);
-    });
+      if (cached) setCtx(cached);
+
+      const { data: fresh, error } = await supabase.auth.getUser();
+      if (cancelled) return;
+      // No status means the request never got an answer (offline): keep going on the saved session.
+      const offline = !!error && !error.status;
+      if (!fresh.user && !(offline && cached)) return router.replace('/sign-in');
+      if (offline) return;
+      let next: CoupleContext | null;
+      try {
+        next = await getCoupleContext(supabase, userId);
+      } catch {
+        // Offline: keep the saved couple if we have one.
+        if (!cached) router.replace('/pair');
+        return;
+      }
+      if (cancelled) return;
+      saveContext(userId, next);
+      if (!next) return router.replace('/pair');
+      // Swap in the fresh copy only if something changed, so realtime isn't torn down for nothing.
+      if (!cached || JSON.stringify(cached) !== JSON.stringify(next)) setCtx(next);
+    })();
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') router.replace('/sign-in');
     });

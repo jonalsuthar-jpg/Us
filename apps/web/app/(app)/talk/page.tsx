@@ -2,7 +2,7 @@
 
 import { clusters, formatDay, groupByDay, listPinned, messagePreview, searchMessages, type Message } from '@us/shared';
 import { useCallManager, useChatMedia, useCouple, useCoupleData, useMessages, useTyping } from '@us/shared/react';
-import { Phone, Pin, Search, Video } from 'lucide-react';
+import { ChevronsDown, Phone, Pin, Search, Video } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
 import { Bubble, type ReplyQuote } from '@/components/chat/bubble';
@@ -90,6 +90,24 @@ export default function TalkPage() {
 
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  // Scrolled well up: a button back to the latest, counting what arrived meanwhile.
+  const [away, setAway] = useState(false);
+  const [newBelow, setNewBelow] = useState(0);
+  const newest = messages[messages.length - 1];
+  const seenNewest = useRef(newest?.id);
+  useEffect(() => {
+    if (!newest || newest.id === seenNewest.current) return;
+    seenNewest.current = newest.id;
+    if (!away) return;
+    if (newest.sender_id === me.id) toLatest();
+    else setNewBelow((n) => n + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newest, away, me.id]);
+  function toLatest() {
+    const el = scroller.current;
+    el?.scrollTo({ top: el.scrollHeight, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    setNewBelow(0);
+  }
 
   // Stay pinned to the bottom unless the reader has scrolled up.
   useLayoutEffect(() => {
@@ -148,84 +166,107 @@ export default function TalkPage() {
         </button>
       ) : null}
 
-      <div
-        ref={scroller}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-        }}
-        className="scrollbar-quiet flex-1 overflow-y-auto px-4 sm:px-8"
-      >
-        <div className="mx-auto max-w-3xl pb-2 pt-6">
-          {loading ? (
-            <div className="flex justify-center py-20">
-              <Spinner className="h-5 w-5 text-rose-400" />
-            </div>
-          ) : messages.length === 0 ? (
-            <EmptyThread name={partner.display_name} />
-          ) : (
-            <>
-              {hasOlder && (
-                <div className="mb-4 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      stick.current = false;
-                      void loadOlder();
-                    }}
-                    className="rounded-full px-3 py-1 text-small text-ink-muted hover:bg-paper-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-                  >
-                    Earlier messages
-                  </button>
-                </div>
-              )}
-              {groupByDay(messages).map((group) => (
-                <section key={group.key} aria-label={group.day}>
-                  <DayDivider label={group.day} />
-                  <ol>
-                    {group.items.map((m, i) =>
-                      m.kind === 'call' ? (
-                        <CallEntry key={m.id} message={m} myId={me.id} onCallBack={(media) => void calls.startCall(media)} />
-                      ) : (
-                        <Bubble
-                          key={m.id}
-                          message={m}
-                          mine={m.sender_id === me.id}
-                          slot={m.sender_id === me.id ? mySlot : partnerSlot}
-                          authorName={partner.display_name}
-                          myId={me.id}
-                          first={!clusters(group.items[i - 1], m)}
-                          last={!clusters(m, group.items[i + 1])}
-                          mediaUrl={m.media_path ? media[m.media_path] : undefined}
-                          quote={quoteFor(m)}
-                          active={activeId === m.id}
-                          highlighted={highlight === m.id}
-                          onToggleActive={() => setActiveId((id) => (id === m.id ? null : m.id))}
-                          onRetry={() => retry(m.id)}
-                          onReact={(emoji) => {
-                            setActiveId(null);
-                            void react(m.id, emoji).catch(fail);
-                          }}
-                          onReply={() => {
-                            setActiveId(null);
-                            setReplyTo(m);
-                          }}
-                          onPin={(p) => {
-                            setActiveId(null);
-                            void pin(m.id, p).catch(fail);
-                          }}
-                          onOpenPhoto={setPhoto}
-                          onJumpTo={(id) => void jumpTo(id)}
-                        />
-                      ),
-                    )}
-                  </ol>
-                </section>
-              ))}
-            </>
-          )}
-          <TypingBubble visible={partnerTyping} name={partner.display_name} slot={partnerSlot} />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={scroller}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const below = el.scrollHeight - el.scrollTop - el.clientHeight;
+            stick.current = below < 80;
+            const up = below > 400;
+            if (up !== away) {
+              setAway(up);
+              if (!up) setNewBelow(0);
+            }
+          }}
+          className="scrollbar-quiet flex-1 overflow-y-auto px-4 sm:px-8"
+        >
+          <div className="mx-auto max-w-3xl pb-2 pt-6">
+            {loading ? (
+              <div className="flex justify-center py-20">
+                <Spinner className="h-5 w-5 text-rose-400" />
+              </div>
+            ) : messages.length === 0 ? (
+              <EmptyThread name={partner.display_name} />
+            ) : (
+              <>
+                {hasOlder && (
+                  <div className="mb-4 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stick.current = false;
+                        void loadOlder();
+                      }}
+                      className="rounded-full px-3 py-1 text-small text-ink-muted hover:bg-paper-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                    >
+                      Earlier messages
+                    </button>
+                  </div>
+                )}
+                {groupByDay(messages).map((group) => (
+                  <section key={group.key} aria-label={group.day}>
+                    <DayDivider label={group.day} />
+                    <ol>
+                      {group.items.map((m, i) =>
+                        m.kind === 'call' ? (
+                          <CallEntry key={m.id} message={m} myId={me.id} onCallBack={(media) => void calls.startCall(media)} />
+                        ) : (
+                          <Bubble
+                            key={m.id}
+                            message={m}
+                            mine={m.sender_id === me.id}
+                            slot={m.sender_id === me.id ? mySlot : partnerSlot}
+                            authorName={partner.display_name}
+                            myId={me.id}
+                            first={!clusters(group.items[i - 1], m)}
+                            last={!clusters(m, group.items[i + 1])}
+                            mediaUrl={m.media_path ? media[m.media_path] : undefined}
+                            quote={quoteFor(m)}
+                            active={activeId === m.id}
+                            highlighted={highlight === m.id}
+                            onToggleActive={() => setActiveId((id) => (id === m.id ? null : m.id))}
+                            onRetry={() => retry(m.id)}
+                            onReact={(emoji) => {
+                              setActiveId(null);
+                              void react(m.id, emoji).catch(fail);
+                            }}
+                            onReply={() => {
+                              setActiveId(null);
+                              setReplyTo(m);
+                            }}
+                            onPin={(p) => {
+                              setActiveId(null);
+                              void pin(m.id, p).catch(fail);
+                            }}
+                            onOpenPhoto={setPhoto}
+                            onJumpTo={(id) => void jumpTo(id)}
+                          />
+                        ),
+                      )}
+                    </ol>
+                  </section>
+                ))}
+              </>
+            )}
+            <TypingBubble visible={partnerTyping} name={partner.display_name} slot={partnerSlot} />
+          </div>
         </div>
+        {away ? (
+          <button
+            type="button"
+            onClick={toLatest}
+            aria-label={newBelow ? `Go to latest, ${newBelow} new` : 'Go to latest'}
+            className="absolute bottom-3 right-4 flex h-11 w-11 items-center justify-center rounded-full border border-paper-edge bg-paper-raised text-ink-soft shadow-[0_8px_24px_-12px_rgba(36,25,51,0.5)] transition-colors hover:bg-paper-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 sm:right-8"
+          >
+            <ChevronsDown className="h-5 w-5" />
+            {newBelow ? (
+              <span className="absolute -top-2 min-w-[20px] rounded-full bg-rose-600 px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">
+                {newBelow > 99 ? '99+' : newBelow}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
       </div>
 
       <Dialog open={panel === 'search'} onOpenChange={(o) => !o && setPanel(null)} title="Search messages">

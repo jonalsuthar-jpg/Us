@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { Copy, Phone, Pin, PinOff, Plus, Reply, Search, Settings, Video } from 'lucide-react-native';
+import { ChevronsDown, Copy, Phone, Pin, PinOff, Plus, Reply, Search, Settings, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, FlatList, Modal, Pressable, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -117,6 +117,23 @@ export default function Talk() {
     return out.reverse();
   }, [messages]);
 
+  // Scrolled up: a button to jump back to the latest, counting what arrived meanwhile.
+  const [away, setAway] = useState(false);
+  const [newBelow, setNewBelow] = useState(0);
+  const newest = messages[messages.length - 1];
+  const seenNewest = useRef(newest?.id);
+  useEffect(() => {
+    if (!newest || newest.id === seenNewest.current) return;
+    seenNewest.current = newest.id;
+    if (away && newest.sender_id !== me.id) setNewBelow((n) => n + 1);
+    // My own new message brings me back down, as in any messenger.
+    if (away && newest.sender_id === me.id) list.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [newest, away, me.id]);
+  function toLatest() {
+    list.current?.scrollToOffset({ offset: 0, animated: true });
+    setNewBelow(0);
+  }
+
   function jumpTo(id: string) {
     const index = rows.findIndex((r) => r.key === id);
     if (index < 0) return false;
@@ -176,69 +193,96 @@ export default function Talk() {
         </Pressable>
       ) : null}
 
-      {loading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color={c.rose} />
-        </View>
-      ) : (
-        <FlatList
-          ref={list}
-          onScrollToIndexFailed={(info) => setTimeout(() => list.current?.scrollToIndex({ index: info.index, viewPosition: 0.5 }), 250)}
-          inverted
-          className="flex-1 px-4"
-          data={rows}
-          keyExtractor={(r) => r.key}
-          keyboardDismissMode="interactive"
-          initialNumToRender={20}
-          maxToRenderPerBatch={10}
-          windowSize={9}
-          removeClippedSubviews
-          onEndReached={() => hasOlder && void loadOlder()}
-          onEndReachedThreshold={0.3}
-          ListHeaderComponent={<TypingBubble visible={partnerTyping} name={partner.display_name} slot={partnerSlot} />}
-          ListEmptyComponent={
-            <View className="items-center py-24" style={{ transform: [{ scaleY: -1 }] }}>
-              <Display light italic className="text-title">
-                Say the first thing.
-              </Display>
-              <Text className="mt-2 text-small text-ink-muted">Only you and {partner.display_name} can read this.</Text>
-            </View>
-          }
-          renderItem={({ item }) =>
-            item.kind === 'day' ? (
-              <View className="my-5 flex-row items-center gap-4" accessibilityRole="header">
-                <View className="h-px flex-1 bg-paper-edge" />
-                <Text className="font-display-italic text-small text-ink-muted">{item.label}</Text>
-                <View className="h-px flex-1 bg-paper-edge" />
+      <View className="flex-1">
+        {loading ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator color={c.rose} />
+          </View>
+        ) : (
+          <FlatList
+            ref={list}
+            onScrollToIndexFailed={(info) => setTimeout(() => list.current?.scrollToIndex({ index: info.index, viewPosition: 0.5 }), 250)}
+            inverted
+            className="flex-1 px-4"
+            data={rows}
+            keyExtractor={(r) => r.key}
+            keyboardDismissMode="interactive"
+            initialNumToRender={20}
+            maxToRenderPerBatch={10}
+            windowSize={9}
+            removeClippedSubviews
+            onScroll={(e) => {
+              const up = e.nativeEvent.contentOffset.y > 600;
+              if (up !== away) {
+                setAway(up);
+                if (!up) setNewBelow(0);
+              }
+            }}
+            scrollEventThrottle={100}
+            onEndReached={() => hasOlder && void loadOlder()}
+            onEndReachedThreshold={0.3}
+            ListHeaderComponent={<TypingBubble visible={partnerTyping} name={partner.display_name} slot={partnerSlot} />}
+            ListEmptyComponent={
+              <View className="items-center py-24" style={{ transform: [{ scaleY: -1 }] }}>
+                <Display light italic className="text-title">
+                  Say the first thing.
+                </Display>
+                <Text className="mt-2 text-small text-ink-muted">Only you and {partner.display_name} can read this.</Text>
               </View>
-            ) : item.message.kind === 'call' ? (
-              <CallEntry message={item.message} myId={me.id} onCallBack={(m) => void calls.startCall(m)} />
-            ) : (
-              <Bubble
-                message={item.message}
-                mine={item.message.sender_id === me.id}
-                slot={item.message.sender_id === me.id ? mySlot : partnerSlot}
-                authorName={partner.display_name}
-                myId={me.id}
-                first={item.first}
-                last={item.last}
-                mediaUrl={item.message.media_path ? media[item.message.media_path] : undefined}
-                quote={quoteFor(item.message)}
-                highlighted={highlight === item.message.id}
-                onRetry={() => retry(item.message.id)}
-                onLongPress={() => {
-                  if (item.message.pending || item.message.failed) return;
-                  void Haptics.selectionAsync().catch(() => {});
-                  setActing(item.message);
-                }}
-                onReact={(emoji) => void react(item.message.id, emoji).catch(fail)}
-                onOpenPhoto={setPhoto}
-                onJumpTo={(id) => !jumpTo(id) && say('That message is further up. Scroll up to load it.')}
-              />
-            )
-          }
-        />
-      )}
+            }
+            renderItem={({ item }) =>
+              item.kind === 'day' ? (
+                <View className="my-5 flex-row items-center gap-4" accessibilityRole="header">
+                  <View className="h-px flex-1 bg-paper-edge" />
+                  <Text className="font-display-italic text-small text-ink-muted">{item.label}</Text>
+                  <View className="h-px flex-1 bg-paper-edge" />
+                </View>
+              ) : item.message.kind === 'call' ? (
+                <CallEntry message={item.message} myId={me.id} onCallBack={(m) => void calls.startCall(m)} />
+              ) : (
+                <Bubble
+                  message={item.message}
+                  mine={item.message.sender_id === me.id}
+                  slot={item.message.sender_id === me.id ? mySlot : partnerSlot}
+                  authorName={partner.display_name}
+                  myId={me.id}
+                  first={item.first}
+                  last={item.last}
+                  mediaUrl={item.message.media_path ? media[item.message.media_path] : undefined}
+                  quote={quoteFor(item.message)}
+                  highlighted={highlight === item.message.id}
+                  onRetry={() => retry(item.message.id)}
+                  onLongPress={() => {
+                    if (item.message.pending || item.message.failed) return;
+                    void Haptics.selectionAsync().catch(() => {});
+                    setActing(item.message);
+                  }}
+                  onReact={(emoji) => void react(item.message.id, emoji).catch(fail)}
+                  onOpenPhoto={setPhoto}
+                  onJumpTo={(id) => !jumpTo(id) && say('That message is further up. Scroll up to load it.')}
+                />
+              )
+            }
+          />
+        )}
+        {away ? (
+          <View className="absolute bottom-3 right-4">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={newBelow ? `Go to latest, ${newBelow} new` : 'Go to latest'}
+              onPress={toLatest}
+              className="h-11 w-11 items-center justify-center rounded-full border border-paper-edge bg-paper-raised shadow-md shadow-plum-800/30 active:bg-paper-sunken"
+            >
+              <ChevronsDown size={22} color={c.inkSoft} />
+              {newBelow ? (
+                <View className="absolute -top-2 min-w-[20px] items-center rounded-full bg-rose-600 px-1.5">
+                  <Text className="font-sans-semibold text-[11px] leading-[18px] text-white">{newBelow > 99 ? '99+' : String(newBelow)}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
 
       <View style={{ paddingBottom: 8 }} className="px-3 pt-1">
         {notice ? <Text className="mb-2 px-2 text-small text-rose-700">{notice}</Text> : null}

@@ -21,10 +21,18 @@ export interface CoupleData<T> {
  * Private data uses this too (with a topic nobody else pings), so it still
  * reloads after my own writes.
  */
-export function useCoupleData<T>(topic: string, load: () => Promise<T>, deps: unknown[] = []): CoupleData<T> {
+export function useCoupleData<T>(
+  topic: string,
+  load: () => Promise<T>,
+  deps: unknown[] = [],
+  /** Last-known data (e.g. saved on the device) to show while the first load runs. */
+  initial?: T,
+): CoupleData<T> {
   const { channel, me } = useCouple();
-  const [data, setData] = useState<T | undefined>(undefined);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<T | undefined>(initial);
+  const [loading, setLoading] = useState(initial === undefined);
+  const hasData = useRef(false);
+  hasData.current = data !== undefined;
   const [error, setError] = useState<string | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -45,7 +53,8 @@ export function useCoupleData<T>(topic: string, load: () => Promise<T>, deps: un
   }, deps);
 
   useEffect(() => {
-    setLoading(true);
+    // With data already on screen, refresh quietly rather than as a visible load.
+    if (!hasData.current) setLoading(true);
     void reload();
     const offChanges = channel.changes.on((e) => {
       if (e.topic === topic && e.from !== me.id) void reload();
