@@ -11,6 +11,8 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bubble, CallEntry, type ReplyQuote } from '@/components/chat/bubble';
 import { Composer } from '@/components/chat/composer';
+import { GifPicker } from '@/components/chat/gif-picker';
+import { env } from '@/lib/env';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
 import { IconButton } from '@/components/ui/button';
@@ -54,6 +56,7 @@ export default function Talk() {
   const [highlight, setHighlight] = useState<string | null>(null);
   const [panel, setPanel] = useState<'search' | 'pins' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [gifs, setGifs] = useState(false);
   const list = useRef<FlatList<Row>>(null);
 
   const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id), [sb, couple.id]);
@@ -304,6 +307,7 @@ export default function Talk() {
           }}
           onPhoto={(caption) => void sendPhoto(caption).catch(fail)}
           onVoice={(uri, ms) => void sendVoice(uri, ms).catch(fail)}
+          onGif={env.giphyKey ? () => setGifs(true) : undefined}
         />
       </View>
 
@@ -320,6 +324,14 @@ export default function Talk() {
         {panel === 'pins' ? <MessageList items={pins.data ?? []} empty="Nothing pinned." onPick={pick} authorOf={authorOf} /> : null}
       </FormSheet>
       <PhotoViewer uri={photo} label="Photo" onClose={() => setPhoto(null)} />
+      <GifPicker
+        open={gifs}
+        onClose={() => setGifs(false)}
+        onPick={(kind, gif) => {
+          setGifs(false);
+          sendWithReply('', { media: { kind, meta: { url: gif.url, width: gif.width, height: gif.height } } });
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }

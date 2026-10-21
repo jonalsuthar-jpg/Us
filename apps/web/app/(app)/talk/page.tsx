@@ -8,6 +8,8 @@ import { MobileSettingsLink } from '@/components/app/app-shell';
 import { Bubble, type ReplyQuote } from '@/components/chat/bubble';
 import { CallEntry } from '@/components/chat/call-entry';
 import { Composer } from '@/components/chat/composer';
+import { env } from '@/lib/env';
+import { GifPicker } from '@/components/chat/gif-picker';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
 import { Dialog } from '@/components/ui/dialog';
@@ -56,6 +58,8 @@ export default function TalkPage() {
     setTimeout(() => setHighlight(null), 1600);
     return true;
   }
+
+  const [gifs, setGifs] = useState(false);
 
   function sendWithReply(text: string, extras: Parameters<typeof send>[1] = {}) {
     stick.current = true;
@@ -323,6 +327,15 @@ export default function TalkPage() {
             }}
             onPhoto={(f, caption) => void sendPhoto(f, caption).catch(fail)}
             onVoice={sendVoice}
+            onGif={env.giphyKey ? () => setGifs(true) : undefined}
+          />
+          <GifPicker
+            open={gifs}
+            onOpenChange={setGifs}
+            onPick={(kind, gif) => {
+              setGifs(false);
+              sendWithReply('', { media: { kind, meta: { url: gif.url, width: gif.width, height: gif.height } } });
+            }}
           />
         </div>
       </div>

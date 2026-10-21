@@ -1,4 +1,4 @@
-import { formatClock, formatVoiceLength, groupReactions, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
+import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
 import { Copy, Pin, PinOff, Plus, Reply } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Ticks } from '@/components/ui/ticks';
@@ -70,6 +70,9 @@ export function Bubble({
   const url = mediaUrl ?? message.localUri;
   const hasText = !!message.body?.trim();
   const settled = !message.pending && !message.failed;
+  // GIFs and stickers: GIPHY links. Stickers float without a bubble.
+  const linked = isLinkedMedia(message.media_kind) && isGiphyUrl(message.media_meta?.url) ? message.media_meta!.url! : null;
+  const sticker = !!linked && message.media_kind === 'sticker';
   const [more, setMore] = useState(false);
   useEffect(() => {
     if (!active) setMore(false);
@@ -140,8 +143,8 @@ export function Bubble({
           }}
           className={cn(
             'relative cursor-default rounded-bubble text-body transition-shadow',
-            url && message.media_kind === 'image' ? 'overflow-hidden p-1' : 'px-3.5 pb-1.5 pt-2',
-            mine ? MINE[slot] : THEIRS[slot],
+            (url && message.media_kind === 'image') || linked ? 'overflow-hidden p-1' : 'px-3.5 pb-1.5 pt-2',
+            sticker ? 'bg-transparent shadow-none' : mine ? MINE[slot] : THEIRS[slot],
             last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
             message.pending && 'opacity-80',
             (active || highlighted) && 'ring-2 ring-gold-400 ring-offset-2 ring-offset-paper',
@@ -164,6 +167,15 @@ export function Bubble({
             </button>
           ) : null}
 
+          {linked ? (
+            <img
+              src={linked}
+              alt={sticker ? 'Sticker' : 'GIF'}
+              loading="lazy"
+              className={cn('block max-w-full object-contain', sticker ? 'w-36' : 'w-60 rounded-[14px]')}
+              style={{ aspectRatio: message.media_meta?.width && message.media_meta?.height ? `${message.media_meta.width} / ${message.media_meta.height}` : undefined }}
+            />
+          ) : null}
           {message.media_kind === 'image' ? (
             url ? (
               <button type="button" onClick={() => onOpenPhoto?.(url)} className="block cursor-zoom-in focus-visible:outline-none" aria-label="Open photo">

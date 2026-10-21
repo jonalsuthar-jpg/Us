@@ -17,6 +17,8 @@ interface ComposerProps {
   onCancelReply?: () => void;
   onPhoto?: (file: File, caption: string) => void;
   onVoice?: (blob: Blob, durationMs: number) => void;
+  /** Open the GIF and sticker picker. */
+  onGif?: () => void;
 }
 
 function pickAudioType(): string | undefined {
@@ -25,7 +27,7 @@ function pickAudioType(): string | undefined {
 }
 
 /** Auto-growing textarea. Enter sends; Shift+Enter is a new line. Photos and voice notes too. */
-export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply, onPhoto, onVoice }: ComposerProps) {
+export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply, onPhoto, onVoice, onGif }: ComposerProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -184,6 +186,16 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
                 }}
               />
             </>
+          ) : null}
+          {onGif ? (
+            <button
+              type="button"
+              aria-label="Send a GIF or sticker"
+              onClick={onGif}
+              className="flex h-10 shrink-0 items-center justify-center rounded-full px-1.5 text-ink-soft hover:bg-paper-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+            >
+              <span className="rounded-md border-[1.5px] border-current px-1 text-[11px] font-bold leading-[14px]">GIF</span>
+            </button>
           ) : null}
           <label htmlFor="composer" className="sr-only">
             Message {partnerName}

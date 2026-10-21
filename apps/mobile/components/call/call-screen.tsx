@@ -17,6 +17,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediaStream, RTCView } from 'react-native-webrtc';
 import { chooseRoute, onAudioRoutes, startCallAudio, stopCallAudio, type AudioRoute } from '@/lib/audio-route';
+import { cancelIncomingRing, setShowWhenLocked, startCallService, stopCallService } from '@/modules/us-call';
 import { Avatar } from '../ui/avatar';
 import { cn } from '../ui/cn';
 import { Button, IconButton } from '../ui/button';
@@ -158,8 +159,10 @@ function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }
 
 /** Hand the audio session to the call while it's live; release it after. */
 function useCallAudio(state: CallState) {
+  const { partner } = useCouple();
   const started = useRef(false);
   const active = state.phase === 'connecting' || state.phase === 'connected' || state.phase === 'reconnecting';
+  const video = state.local.camera || state.media === 'video';
   useEffect(() => {
     if (active && !started.current) {
       started.current = true;
@@ -167,11 +170,29 @@ function useCallAudio(state: CallState) {
     } else if (!active && started.current) {
       started.current = false;
       stopCallAudio();
+      stopCallService();
     }
   }, [active, state.media]);
+  // Android cuts the mic (and camera) of a backgrounded app unless a call
+  // service holds them; restarting it when the camera turns on adds the camera.
+  useEffect(() => {
+    if (active) startCallService(`Call with ${partner.display_name}`, video);
+  }, [active, video, partner.display_name]);
+  // The app is showing this call now: stop any lock-screen ringing for it.
+  const callId = state.call?.id ?? null;
+  useEffect(() => {
+    if (callId && state.phase !== 'idle') cancelIncomingRing(callId);
+  }, [callId, state.phase]);
+  // Ringing or on a call: show over the lock screen, like a phone call.
+  const onScreen = active || state.phase === 'incoming';
+  useEffect(() => setShowWhenLocked(onScreen), [onScreen]);
   useEffect(
     () => () => {
-      if (started.current) stopCallAudio();
+      if (started.current) {
+        stopCallAudio();
+        stopCallService();
+      }
+      setShowWhenLocked(false);
     },
     [],
   );

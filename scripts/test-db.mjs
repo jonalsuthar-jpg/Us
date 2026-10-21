@@ -674,6 +674,17 @@ await test('chat: replies stay in our thread; media lives in our folder', async 
     'media without kind',
   );
   await rejects(as(alice, () => q(`insert into public.messages (couple_id, sender_id) values ($1, $2)`, [couple.id, alice])), /messages_shape/, 'empty');
+  // GIFs and stickers are GIPHY links: accepted from GIPHY's media hosts only.
+  await as(alice, () =>
+    q(`insert into public.messages (couple_id, sender_id, media_kind, media_meta) values ($1, $2, 'gif', '{"url":"https://media2.giphy.com/media/abc/giphy.gif"}')`, [couple.id, alice]),
+  );
+  await rejects(
+    as(alice, () =>
+      q(`insert into public.messages (couple_id, sender_id, media_kind, media_meta) values ($1, $2, 'sticker', '{"url":"https://tracker.example/x.gif"}')`, [couple.id, alice]),
+    ),
+    /messages_media_shape/,
+    'sticker from elsewhere',
+  );
   await rejects(
     as(alice, () => q(`insert into public.messages (couple_id, sender_id, body, reactions) values ($1, $2, 'x', '{"a":"❤️"}')`, [couple.id, alice])),
     /row-level security/,

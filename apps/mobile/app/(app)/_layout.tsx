@@ -1,5 +1,6 @@
 import { getCoupleContext, tokens, type CoupleContext } from '@us/shared';
 import { CallProvider, CoupleProvider, useCallManager, useCallState, useCouple } from '@us/shared/react';
+import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
@@ -102,6 +103,20 @@ function Bridge() {
       },
     });
   }, [me.id]);
+
+  // Answer / Decline on the lock-screen ringing screen open us://talk?callId=…&callAction=…
+  useEffect(() => {
+    const take = (url: string | null) => {
+      if (!url) return;
+      const { queryParams } = Linking.parse(url);
+      const callId = queryParams?.callId;
+      const action = queryParams?.callAction;
+      if (typeof callId === 'string' && (action === 'answer' || action === 'decline')) setCallAction({ callId, action });
+    };
+    void Linking.getInitialURL().then(take);
+    const sub = Linking.addEventListener('url', (e) => take(e.url));
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (!callAction || call.phase !== 'incoming' || call.call?.id !== callAction.callId) return;

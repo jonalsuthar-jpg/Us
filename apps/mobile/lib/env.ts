@@ -6,6 +6,8 @@ export const env = {
   forceRelay: process.env.EXPO_PUBLIC_FORCE_TURN_RELAY === 'true',
   /** The web app's origin; password-reset links open there. */
   webUrl: (process.env.EXPO_PUBLIC_WEB_URL ?? '').replace(/\/$/, ''),
+  /** GIPHY API key for GIFs and stickers in chat; the GIF button hides without it. */
+  giphyKey: process.env.EXPO_PUBLIC_GIPHY_API_KEY ?? '',
 };
 
 export const isConfigured = Boolean(env.supabaseUrl && env.supabaseAnonKey);

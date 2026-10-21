@@ -32,6 +32,9 @@ export interface PushData {
   url: string;
   messageId?: string;
   callId?: string;
+  /** Incoming calls: who and what, for Android's lock-screen ringing. */
+  callerName?: string;
+  media?: 'audio' | 'video';
   checkinId?: string;
   checkId?: string;
 }

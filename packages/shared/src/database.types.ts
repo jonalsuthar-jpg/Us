@@ -9,13 +9,16 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type CallMedia = 'audio' | 'video';
-export type MediaKind = 'image' | 'audio';
+/** image / audio live in our chat folder; gif / sticker are GIPHY links (media_meta.url). */
+export type MediaKind = 'image' | 'audio' | 'gif' | 'sticker';
 /** Small, optional hints for rendering before the file loads. */
 export interface MediaMeta {
   width?: number;
   height?: number;
   duration_ms?: number;
-  [key: string]: number | undefined;
+  /** GIFs and stickers: the GIPHY media URL. */
+  url?: string;
+  [key: string]: number | string | undefined;
 }
 export type ListName = 'groceries' | 'bucket' | 'watch' | 'read';
 export type CallStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'declined';

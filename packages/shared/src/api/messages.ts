@@ -33,7 +33,8 @@ export interface DraftExtras {
     meta?: MediaMeta | null;
     /** Shown immediately while the file uploads. */
     localUri?: string;
-    upload: { body: Blob | ArrayBuffer | Uint8Array; contentType: string };
+    /** Photos and voice notes; GIFs and stickers are links and upload nothing. */
+    upload?: { body: Blob | ArrayBuffer | Uint8Array; contentType: string };
   };
 }
 
@@ -74,6 +75,7 @@ export async function sendMessage(sb: UsClient, draft: Message): Promise<Message
   if (!mediaPath && draft.upload && draft.media_kind) {
     mediaPath = await uploadChatMedia(sb, draft.couple_id, draft.id, draft.upload.body, draft.upload.contentType);
   }
+  const linked = isLinkedMedia(draft.media_kind);
   const { data, error } = await sb
     .from('messages')
     .insert({
@@ -83,8 +85,8 @@ export async function sendMessage(sb: UsClient, draft: Message): Promise<Message
       body: draft.body?.trim() ? draft.body : null,
       reply_to: draft.reply_to,
       media_path: mediaPath,
-      media_kind: mediaPath ? draft.media_kind : null,
-      media_meta: mediaPath ? draft.media_meta : null,
+      media_kind: mediaPath || linked ? draft.media_kind : null,
+      media_meta: mediaPath || linked ? draft.media_meta : null,
     })
     .select('*')
     .single();
@@ -108,6 +110,11 @@ export async function ackMessages(sb: UsClient, status: Exclude<MessageStatus, '
 // ------------------------------------------------------------------ media ---
 
 export const CHAT_BUCKET = 'chat';
+
+/** GIFs and stickers are GIPHY links rather than files in our folder. */
+export function isLinkedMedia(kind: MediaKind | null | undefined): kind is 'gif' | 'sticker' {
+  return kind === 'gif' || kind === 'sticker';
+}
 
 const MEDIA_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -164,6 +171,8 @@ export function messagePreview(m: Pick<MessageRow, 'body' | 'media_kind' | 'kind
   if (m.body?.trim()) return m.body.trim();
   if (m.media_kind === 'image') return '📷 Photo';
   if (m.media_kind === 'audio') return '🎤 Voice note';
+  if (m.media_kind === 'gif') return 'GIF';
+  if (m.media_kind === 'sticker') return 'Sticker';
   return m.kind === 'call' ? 'Call' : '';
 }
 

@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.uscall'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.uscall"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  // Provided at runtime by react-native-onesignal; only needed to compile the
+  // notification service extension that turns a call push into a ringing screen.
+  compileOnly 'com.onesignal:notifications:5.10.2'
+  compileOnly 'com.onesignal:core:5.10.2'
+}

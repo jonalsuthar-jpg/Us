@@ -1,0 +1,7 @@
+{
+  "name": "us-call",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native call plumbing for Us on Android: in-call foreground service, lock-screen incoming calls.",
+  "main": "index.ts"
+}

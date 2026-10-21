@@ -1,4 +1,5 @@
-import { describeCall, formatClock, formatVoiceLength, groupReactions, messagePreview, type Message, type PartnerSlot } from '@us/shared';
+import { describeCall, formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, messagePreview, type Message, type PartnerSlot } from '@us/shared';
+import { Image as AnimatedImage } from 'expo-image';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Pause, Phone, PhoneMissed, Pin, Play, Video } from 'lucide-react-native';
 import { useEffect, useRef } from 'react';
@@ -57,6 +58,9 @@ export function Bubble({
   const url = mediaUrl ?? message.localUri;
   const hasText = !!message.body?.trim();
   const photo = message.media_kind === 'image';
+  // GIFs and stickers: GIPHY links, animated. Stickers float without a bubble.
+  const linked = isLinkedMedia(message.media_kind) && isGiphyUrl(message.media_meta?.url) ? message.media_meta!.url! : null;
+  const sticker = !!linked && message.media_kind === 'sticker';
   const meta = message.media_meta;
   const describe = hasText ? message.body : messagePreview(message);
   const settled = !message.pending && !message.failed;
@@ -87,8 +91,8 @@ export function Bubble({
           }${message.pinned_at ? ', pinned' : ''}`}
           className={cn(
             'rounded-bubble',
-            photo && url ? 'overflow-hidden p-1' : 'px-3 pb-1.5 pt-2',
-            mine ? MINE[slot] : THEIRS[slot],
+            photo && url ? 'overflow-hidden p-1' : linked ? 'overflow-hidden p-1' : 'px-3 pb-1.5 pt-2',
+            sticker ? 'bg-transparent' : mine ? MINE[slot] : THEIRS[slot],
             last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
             message.pending && 'opacity-80',
             highlighted && 'border-2 border-gold-400',
@@ -121,6 +125,20 @@ export function Bubble({
             ) : (
               <View style={{ width: 240, height: 180 }} className="rounded-[14px] bg-black/10" />
             )
+          ) : null}
+
+          {linked ? (
+            <AnimatedImage
+              source={linked}
+              accessibilityLabel={message.media_kind === 'sticker' ? 'Sticker' : 'GIF'}
+              style={{
+                width: sticker ? 150 : 220,
+                aspectRatio: meta?.width && meta?.height ? Math.max(meta.width / meta.height, 0.6) : 1,
+                borderRadius: sticker ? 0 : 14,
+              }}
+              contentFit="contain"
+              autoplay
+            />
           ) : null}
 
           {message.media_kind === 'audio' ? <VoiceNote url={url} durationMs={meta?.duration_ms} mine={mine} /> : null}

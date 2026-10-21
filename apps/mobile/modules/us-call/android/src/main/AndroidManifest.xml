@@ -1,0 +1,31 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Keep the microphone (and camera, on video calls) while Us is in the background. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+  <!-- Ring over the lock screen like a phone call. -->
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <application>
+    <service
+      android:name="expo.modules.uscall.CallService"
+      android:exported="false"
+      android:foregroundServiceType="microphone|camera" />
+
+    <activity
+      android:name="expo.modules.uscall.IncomingCallActivity"
+      android:exported="false"
+      android:excludeFromRecents="true"
+      android:launchMode="singleTop"
+      android:showWhenLocked="true"
+      android:turnScreenOn="true"
+      android:taskAffinity="expo.modules.uscall.incoming"
+      android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+    <!-- OneSignal hands every push to this class first (works with the app closed). -->
+    <meta-data
+      android:name="com.onesignal.NotificationServiceExtension"
+      android:value="expo.modules.uscall.CallNotificationExtension" />
+  </application>
+</manifest>

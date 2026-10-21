@@ -92,7 +92,9 @@ Deno.serve(async (req) => {
     if (!msg || msg.sender_id !== userId || msg.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
     category = 'new_message';
     content = truncate(
-      msg.body?.trim() || (msg.media_kind === 'image' ? '📷 Photo' : msg.media_kind === 'audio' ? '🎤 Voice note' : ''),
+      msg.body?.trim() ||
+        ({ image: '📷 Photo', audio: '🎤 Voice note', gif: 'GIF', sticker: 'Sticker' } as Record<string, string>)[msg.media_kind ?? ''] ||
+        '',
       160,
     );
     data = { category, url: '/talk', messageId: msg.id };
@@ -116,7 +118,8 @@ Deno.serve(async (req) => {
     } else {
       content = `Missed ${kind}`;
     }
-    data = { category, url: '/talk', callId: call.id };
+    // callerName / media let Android ring with a full-screen call even when Us is closed.
+    data = { category, url: '/talk', callId: call.id, callerName: name, media: call.media };
   } else if (body.category === 'wellbeing_nudge') {
     // The check-in itself stays private: only its owner, flag and age are read,
     // and the notification never carries the score or note.

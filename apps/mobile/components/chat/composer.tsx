@@ -19,6 +19,7 @@ export function Composer({
   onCancelReply,
   onPhoto,
   onVoice,
+  onGif,
 }: {
   partnerName: string;
   onSend: (text: string) => void;
@@ -28,6 +29,8 @@ export function Composer({
   /** Pick a photo; the current text goes along as its caption. */
   onPhoto?: (caption: string) => void;
   onVoice?: (uri: string, durationMs: number) => void;
+  /** Open the GIF and sticker picker. */
+  onGif?: () => void;
 }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +118,16 @@ export function Composer({
               className="h-10 w-10 items-center justify-center rounded-full active:bg-paper-sunken"
             >
               <ImagePlus size={21} color={c.inkSoft} />
+            </Pressable>
+          ) : null}
+          {onGif ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send a GIF or sticker"
+              onPress={onGif}
+              className="h-10 items-center justify-center rounded-full px-1.5 active:bg-paper-sunken"
+            >
+              <Text className="rounded-md border-[1.5px] border-ink-soft px-1 font-sans-bold text-[11px] leading-[14px] text-ink-soft">GIF</Text>
             </Pressable>
           ) : null}
           <TextInput
