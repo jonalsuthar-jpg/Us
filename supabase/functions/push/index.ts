@@ -77,6 +77,11 @@ Deno.serve(async (req) => {
   if (!appId || !apiKey) return json({ skipped: 'onesignal_not_configured' });
 
   const body = await req.json().catch(() => ({}));
+  // Temporary diagnostics for call pushes (see the push_log migration).
+  const isCall = body.category === 'incoming_call' || body.category === 'call_ended';
+  const trace = (outcome: string, detail?: unknown) =>
+    isCall ? admin.from('push_log').insert({ category: String(body.category), outcome, detail: detail ?? null }).then(() => {}, () => {}) : Promise.resolve();
+  await trace('received', { callId: body.callId ?? null });
   const { data: me } = await admin.from('profiles').select('display_name, avatar_url').eq('id', userId).single();
   const name = me?.display_name ?? 'Your partner';
 
@@ -90,6 +95,11 @@ Deno.serve(async (req) => {
   if (body.category === 'new_message') {
     const { data: msg } = await admin.from('messages').select('*').eq('id', body.messageId).maybeSingle();
     if (!msg || msg.sender_id !== userId || msg.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
+    // Give an open chat a moment to read it: if it's read already, there's
+    // nothing to notify (and no late notification after closing the app).
+    await new Promise((r) => setTimeout(r, 2500));
+    const { data: now } = await admin.from('messages').select('status').eq('id', msg.id).maybeSingle();
+    if (now?.status === 'read') return json({ skipped: 'already_read' });
     category = 'new_message';
     content = truncate(
       msg.body?.trim() ||
@@ -103,13 +113,19 @@ Deno.serve(async (req) => {
     buttons = [{ id: 'reply', text: 'Reply' }];
   } else if (body.category === 'incoming_call' || body.category === 'call_ended') {
     const { data: call } = await admin.from('calls').select('*').eq('id', body.callId).maybeSingle();
-    if (!call || call.caller_id !== userId || call.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
+    if (!call || call.caller_id !== userId || call.couple_id !== coupleId) {
+      await trace('forbidden', { found: !!call, callerMatches: call?.caller_id === userId, coupleMatches: call?.couple_id === coupleId });
+      return json({ error: 'forbidden' }, 403);
+    }
     category = body.category;
     const kind = call.media === 'video' ? 'video call' : 'voice call';
     // Same collapse id: the "missed" push replaces the ringing one.
     collapseId = `call-${call.id}`;
     if (category === 'incoming_call') {
-      if (call.status !== 'ringing') return json({ skipped: 'not_ringing' });
+      if (call.status !== 'ringing') {
+        await trace('skipped_not_ringing', { status: call.status });
+        return json({ skipped: 'not_ringing' });
+      }
       content = `Incoming ${kind}`;
       buttons = [
         { id: 'decline', text: 'Decline' },
@@ -231,8 +247,10 @@ Deno.serve(async (req) => {
   const result = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error('onesignal error', res.status, result);
+    await trace('onesignal_error', { status: res.status, result });
     return json({ error: 'push_failed' }, 502);
   }
+  await trace('sent', { id: result.id ?? null, errors: result.errors ?? null });
   return json({ ok: true, id: result.id });
 });
 
