@@ -11,9 +11,9 @@ export const webRtc: RtcAdapter = {
     typeof navigator !== 'undefined' && navigator.mediaDevices?.getDisplayMedia
       ? () =>
           navigator.mediaDevices.getDisplayMedia({
-            // Full-motion 30 fps, at most 1080p: bigger screens are scaled at capture, which
-            // keeps encoding quick. The call engine tunes it further per Smooth / Sharp.
-            video: { frameRate: { ideal: 30, max: 30 }, width: { max: 1920 }, height: { max: 1080 } },
+            // Up to 60 fps and 1440p: the most either mode asks for. The call engine then
+            // narrows it per Smooth (1080p, 60 fps) or Sharp (1440p, 15 fps).
+            video: { frameRate: { ideal: 60, max: 60 }, width: { max: 2560 }, height: { max: 1440 } },
             // The sound of what's shared (a video, music): offered for tabs, and for the
             // whole screen on Windows. Left raw — call-style processing mangles music.
             audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },

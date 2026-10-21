@@ -16,8 +16,9 @@ class FakeTrack {
     readonly kind: 'audio' | 'video',
     readonly deviceId = 'default',
   ) {}
+  displaySurface?: string;
   getSettings() {
-    return { deviceId: this.deviceId };
+    return { deviceId: this.deviceId, displaySurface: this.displaySurface };
   }
   stop() {
     this.stopped = true;
@@ -54,7 +55,11 @@ class FakeStream {
 
 class FakeTransceiver {
   direction = 'recvonly';
-  params: { encodings: Record<string, unknown>[]; degradationPreference?: string } = { encodings: [{}] };
+  params: {
+    encodings: Record<string, unknown>[];
+    degradationPreference?: string;
+    codecs?: { mimeType: string; clockRate: number; sdpFmtpLine?: string }[];
+  } = { encodings: [{}] };
   sender = {
     track: null as FakeTrack | null,
     replaceTrack: async (t: FakeTrack | null) => void (this.sender.track = t),
@@ -326,19 +331,71 @@ describe('CallManager', () => {
     const shared = screen.tracks[0]!;
     expect(alice.getState().shareMode).toBe('smooth');
     expect(shared.contentHint).toBe('motion');
-    expect(video.params.encodings[0]).toMatchObject({ maxBitrate: 6_000_000, maxFramerate: 30 });
+    expect(shared.constraints).toMatchObject({ frameRate: { max: 60 } });
+    expect(video.params.encodings[0]).toMatchObject({ maxBitrate: 8_000_000, maxFramerate: 60, scalabilityMode: 'L1T3' });
+    expect(video.params.encodings[0]!.codec).toBeUndefined(); // VP9 wasn't negotiated
     expect(video.params.degradationPreference).toBe('maintain-framerate');
     expect(audio.params.encodings[0]!.maxBitrate).toBe(128_000);
 
     await alice.setShareMode('sharp');
     expect(shared.contentHint).toBe('detail');
-    expect(shared.constraints).toMatchObject({ width: { max: 2560 }, height: { max: 1440 } });
-    expect(video.params.encodings[0]).toMatchObject({ maxBitrate: 8_000_000 });
+    expect(shared.constraints).toMatchObject({ width: { max: 2560 }, height: { max: 1440 }, frameRate: { max: 15 } });
+    expect(video.params.encodings[0]).toMatchObject({ maxBitrate: 8_000_000, maxFramerate: 15 });
     expect(video.params.degradationPreference).toBe('maintain-resolution');
 
     await alice.stopScreenShare();
     expect(video.params.encodings[0]).toEqual({ maxBitrate: 1_500_000 });
     expect(audio.params.encodings[0]!.maxBitrate).toBe(40_000);
+  });
+
+  it('a silent window share goes out sharp in VP9 when both sides have it, and the camera gets its codec back', async () => {
+    const w = makeWorld();
+    const window = new FakeTrack('video');
+    window.displaySurface = 'window';
+    const screen = new FakeStream([window]);
+    const alice = w.manager('alice', 'bob', { rtc: { getDisplayMedia: async () => screen } as never });
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('video');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+
+    const video = pcOf(alice).transceivers.find((t) => t.receiver.track.kind === 'video')!;
+    const vp9 = { mimeType: 'video/VP9', clockRate: 90_000, sdpFmtpLine: 'profile-id=0' };
+    video.params = {
+      encodings: [{ maxBitrate: 1_500_000 }],
+      codecs: [
+        { mimeType: 'video/VP8', clockRate: 90_000 },
+        { mimeType: 'video/VP9', clockRate: 90_000, sdpFmtpLine: 'profile-id=2' },
+        vp9,
+      ],
+    };
+
+    await alice.startScreenShare();
+    expect(alice.getState().shareMode).toBe('sharp');
+    expect(video.params.encodings[0]).toMatchObject({ codec: vp9, maxFramerate: 15 });
+
+    await alice.stopScreenShare();
+    expect(video.params.encodings[0]).toEqual({ maxBitrate: 1_500_000 });
+  });
+
+  it('a mode I picked myself sticks for the next share in the call', async () => {
+    const w = makeWorld();
+    const window = new FakeTrack('video');
+    window.displaySurface = 'window';
+    const alice = w.manager('alice', 'bob', { rtc: { getDisplayMedia: async () => new FakeStream([window]) } as never });
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('video');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+
+    await alice.startScreenShare();
+    expect(alice.getState().shareMode).toBe('sharp');
+    await alice.setShareMode('smooth');
+    await alice.stopScreenShare();
+    await alice.startScreenShare();
+    expect(alice.getState().shareMode).toBe('smooth');
   });
 
   it('declining ends both sides and records it', async () => {

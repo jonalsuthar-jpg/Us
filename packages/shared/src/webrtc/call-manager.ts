@@ -39,12 +39,14 @@ export interface ScreenStats {
   limitedByNetwork: boolean;
 }
 
+// Smooth runs at the display's 60 fps for video and scrolling; Sharp spends the
+// same bits on fewer, crisper frames for text, code and photos.
 const SHARE_QUALITY: Record<
   ShareMode,
-  { hint: string; width: number; height: number; maxBitrate: number; degradation: RTCDegradationPreference }
+  { hint: string; width: number; height: number; fps: number; maxBitrate: number; degradation: RTCDegradationPreference }
 > = {
-  smooth: { hint: 'motion', width: 1920, height: 1080, maxBitrate: 6_000_000, degradation: 'maintain-framerate' },
-  sharp: { hint: 'detail', width: 2560, height: 1440, maxBitrate: 8_000_000, degradation: 'maintain-resolution' },
+  smooth: { hint: 'motion', width: 1920, height: 1080, fps: 60, maxBitrate: 8_000_000, degradation: 'maintain-framerate' },
+  sharp: { hint: 'detail', width: 2560, height: 1440, fps: 15, maxBitrate: 8_000_000, degradation: 'maintain-resolution' },
 };
 // Voice needs little; a shared film or song gets room for stereo music.
 const VOICE_BITRATE = 40_000;
@@ -190,6 +192,8 @@ export class CallManager {
   private audioMix: { track: MediaStreamTrack; close: () => void } | null = null;
   /** The camera's send settings, put back when a share ends. */
   private cameraEncoding: RTCRtpEncodingParameters | null = null;
+  /** I picked Smooth or Sharp myself this call, so a new share keeps my choice. */
+  private shareModePicked = false;
   private pendingIce: RTCIceCandidateInit[] = [];
   private iceServers: Promise<RTCIceServer[]> | null = null;
   private iceRestarts = 0;
@@ -454,9 +458,14 @@ export class CallManager {
     track.addEventListener('ended', () => void this.stopScreenShare());
     this.screenTrack = track;
     this.cameraEncoding = { ...(this.videoTx?.sender.getParameters?.().encodings?.[0] ?? {}) };
+    const sound = display.getAudioTracks()[0];
+    if (!this.shareModePicked) {
+      // A tab or anything with sound is usually a video playing; a window or screen is usually text.
+      const surface = (track.getSettings?.() as { displaySurface?: string } | undefined)?.displaySurface;
+      this.set({ shareMode: sound || surface === 'browser' ? 'smooth' : 'sharp' });
+    }
     await this.videoTx?.sender.replaceTrack(track);
     await this.applyShareQuality();
-    const sound = display.getAudioTracks()[0];
     const mic = this.state.localStream?.getAudioTracks()[0];
     if (sound && mic && this.opts.rtc.mixAudio) {
       // Muting still works: a disabled mic track feeds the mix silence.
@@ -486,6 +495,7 @@ export class CallManager {
 
   /** Switch my running share between Smooth and Sharp. */
   async setShareMode(mode: ShareMode) {
+    this.shareModePicked = true;
     if (mode === this.state.shareMode) return;
     this.set({ shareMode: mode });
     await this.applyShareQuality();
@@ -514,12 +524,25 @@ export class CallManager {
     if (!track) return;
     const q = SHARE_QUALITY[this.state.shareMode];
     if ('contentHint' in track) track.contentHint = q.hint;
-    await track.applyConstraints?.({ width: { max: q.width }, height: { max: q.height }, frameRate: { ideal: 30, max: 30 } }).catch(() => {});
+    await track
+      .applyConstraints?.({ width: { max: q.width }, height: { max: q.height }, frameRate: { ideal: q.fps, max: q.fps } })
+      .catch(() => {});
     await this.updateEncoding(
       this.videoTx,
-      (e) => ({ ...e, maxBitrate: q.maxBitrate, maxFramerate: 30, priority: 'high', networkPriority: 'high' }),
+      (e) => ({ ...e, maxBitrate: q.maxBitrate, maxFramerate: q.fps, priority: 'high', networkPriority: 'high' }),
       { degradationPreference: q.degradation },
     );
+    // Separately, so a browser that refuses these still keeps the settings above.
+    // VP9 keeps text far sharper than the default VP8; L1T3 drops frames, not detail, on a lossy link.
+    // The camera's own settings, put back when the share ends, carry no codec, so it returns to the default.
+    const vp9 = this.shareCodec();
+    await this.updateEncoding(this.videoTx, (e) => ({ ...e, ...(vp9 ? { codec: vp9 } : {}), scalabilityMode: 'L1T3' }), {});
+  }
+
+  /** VP9 (8-bit profile 0), when both sides negotiated it. */
+  private shareCodec(): RTCRtpCodec | undefined {
+    const codecs = this.videoTx?.sender.getParameters?.().codecs ?? [];
+    return codecs.find((c) => c.mimeType.toLowerCase() === 'video/vp9' && !/profile-id=[1-3]/.test(c.sdpFmtpLine ?? ''));
   }
 
   private async setAudioBitrate(maxBitrate: number) {
@@ -860,6 +883,7 @@ export class CallManager {
     this.screenTrack?.stop();
     this.cameraTrack = this.screenTrack = null;
     this.cameraEncoding = null;
+    this.shareModePicked = false;
     this.stopScreenAudio();
     this.pc?.close();
     this.pc = null;
