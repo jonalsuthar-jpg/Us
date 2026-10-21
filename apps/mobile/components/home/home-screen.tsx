@@ -256,7 +256,7 @@ export function HomeScreen() {
         onPress={() => router.push('/connect')}
       />
 
-      <FormSheet open={editingStatus} title="Your status" onClose={() => setEditingStatus(false)}>
+      <FormSheet centered open={editingStatus} title="Your status" onClose={() => setEditingStatus(false)}>
         {editingStatus ? (
           <StatusForm
             initial={myStatus}

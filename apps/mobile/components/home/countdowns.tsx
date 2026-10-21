@@ -71,7 +71,7 @@ export function ComingUp({ countdowns, mutate }: { countdowns: Countdown[]; muta
           <View key={u.key}>{inner}</View>
         );
       })}
-      <FormSheet open={editing !== null} title={editing === 'new' ? 'New countdown' : 'Countdown'} onClose={() => setEditing(null)}>
+      <FormSheet centered open={editing !== null} title={editing === 'new' ? 'New countdown' : 'Countdown'} onClose={() => setEditing(null)}>
         {editing ? <CountdownForm initial={editing === 'new' ? null : editing} mutate={mutate} onDone={() => setEditing(null)} /> : null}
       </FormSheet>
     </Sheet>

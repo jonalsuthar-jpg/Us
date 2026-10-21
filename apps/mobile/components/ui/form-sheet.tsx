@@ -1,39 +1,51 @@
 import { addDays, fromDateKey, toDateKey } from '@us/shared';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, View } from 'react-native';
+import { Modal, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconButton } from './button';
 import { usePalette } from './palette';
 import { Display, Text } from './text';
 
-/** A page sheet for forms — rises from the bottom, swipe or ✕ to close. */
+/**
+ * A page sheet for forms — rises from the bottom, swipe or ✕ to close. The
+ * field being typed in always scrolls clear of the keyboard.
+ */
 export function FormSheet({
   open,
   title,
   onClose,
+  centered,
   children,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
+  /** Short forms sit in the middle of the screen, in easy reach, rather than at the top. */
+  centered?: boolean;
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   const c = usePalette();
   return (
     <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 bg-paper">
+      <View className="flex-1 bg-paper">
         <View className="flex-row items-center justify-between px-5 pb-2 pt-5">
           <Display className="text-heading">{title}</Display>
           <IconButton label="Close" size="sm" onPress={onClose}>
             <X size={20} color={c.inkSoft} />
           </IconButton>
         </View>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 px-5" contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
+        <KeyboardAwareScrollView
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={24}
+          contentContainerClassName="gap-4 px-5"
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24, ...(centered ? { flexGrow: 1, justifyContent: 'center' } : null) }}
+        >
           {children}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
+      </View>
     </Modal>
   );
 }

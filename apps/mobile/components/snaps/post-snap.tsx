@@ -3,7 +3,7 @@ import { useCouple } from '@us/shared/react';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, ImageIcon } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Image, View } from 'react-native';
+import { Image, useWindowDimensions, View } from 'react-native';
 import { ErrorNote } from '../module-screen';
 import { Button } from '../ui/button';
 import { Field } from '../ui/field';
@@ -17,6 +17,7 @@ type Picked = { uri: string; mimeType: string };
 export function PostSnap({ open, onClose, mutate }: { open: boolean; onClose: () => void; mutate: <R>(write: () => Promise<R>) => Promise<R> }) {
   const { sb, couple, me, partner } = useCouple();
   const c = usePalette();
+  const { height } = useWindowDimensions();
   const [photo, setPhoto] = useState<Picked | null>(null);
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
@@ -60,13 +61,14 @@ export function PostSnap({ open, onClose, mutate }: { open: boolean; onClose: ()
   }
 
   return (
-    <FormSheet open={open} title="Share a snap" onClose={() => !busy && onClose()}>
+    <FormSheet centered open={open} title="Share a snap" onClose={() => !busy && onClose()}>
       <Text className="text-small text-ink-soft">
         {partner.display_name} can see it for the next 24 hours. Then it’s gone, unless one of you keeps it.
       </Text>
       {photo ? (
         <>
-          <Image source={{ uri: photo.uri }} className="aspect-[3/4] w-full rounded-control bg-paper-sunken" resizeMode="contain" />
+          {/* Small enough that the caption and Share stay on screen with the keyboard up. */}
+          <Image source={{ uri: photo.uri }} style={{ height: Math.round(height * 0.4) }} className="w-full rounded-control bg-paper-sunken" resizeMode="contain" />
           <Field label="Caption (optional)" value={caption} maxLength={200} onChangeText={setCaption} placeholder="What’s happening?" />
           {error ? <ErrorNote>{error}</ErrorNote> : null}
           <Button onPress={() => void share()} loading={busy}>
