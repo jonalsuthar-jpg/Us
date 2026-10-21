@@ -1,7 +1,8 @@
-import { deleteAccount, friendlyError, unpair, updateMyProfile } from '@us/shared';
+import { clearMyPhoto, deleteAccount, friendlyError, setMyPhoto, unpair, updateMyProfile } from '@us/shared';
 import { COUPLE_ENDED_TOPIC, useCouple } from '@us/shared/react';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { ChevronLeft } from 'lucide-react-native';
+import { Camera, ChevronLeft } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,7 +22,7 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
   const c = usePalette();
   const theme = useThemePref();
-  const { sb, me, partner, mySlot, partnerSlot, couple, channel } = useCouple();
+  const { sb, me, partner, mySlot, partnerSlot, couple, channel, myPhotoPath, photosChanged } = useCouple();
   const [name, setName] = useState(me.display_name);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -30,6 +31,38 @@ export default function Settings() {
   const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [leaving, setLeaving] = useState<'unpair' | 'delete' | null>(null);
   const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  async function changePhoto() {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+    const asset = res.canceled ? null : res.assets[0];
+    if (!asset) return;
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const bytes = await (await fetch(asset.uri)).arrayBuffer();
+      await setMyPhoto(sb, { id: me.id, avatar_url: myPhotoPath }, couple.id, bytes, asset.mimeType ?? 'image/jpeg');
+      photosChanged();
+    } catch (e) {
+      setPhotoError(friendlyError(e));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function removePhoto() {
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      await clearMyPhoto(sb, { id: me.id, avatar_url: myPhotoPath });
+      photosChanged();
+    } catch (e) {
+      setPhotoError(friendlyError(e));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   return (
     <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 40 }} contentContainerClassName="gap-10 px-5">
@@ -42,6 +75,22 @@ export default function Settings() {
 
       <View className="gap-3">
         <Display className="text-heading">You</Display>
+        <View className="flex-row items-center gap-4">
+          <Avatar name={me.display_name} slot={mySlot} size="lg" />
+          <View className="flex-1 gap-2">
+            <Button variant="secondary" size="sm" className="self-start" loading={photoBusy} icon={<Camera size={16} color={c.ink} />} onPress={() => void changePhoto()}>
+              {myPhotoPath ? 'Change photo' : 'Add a profile photo'}
+            </Button>
+            {myPhotoPath ? (
+              <Button variant="quiet" size="sm" className="self-start" disabled={photoBusy} onPress={() => void removePhoto()}>
+                Remove photo
+              </Button>
+            ) : (
+              <Text className="text-small text-ink-muted">Only {partner.display_name} can see it.</Text>
+            )}
+          </View>
+        </View>
+        {photoError ? <Text className="text-small text-rose-700">{photoError}</Text> : null}
         <Field label="Your name" value={name} maxLength={60} onChangeText={setName} error={error} />
         <Button
           variant="secondary"

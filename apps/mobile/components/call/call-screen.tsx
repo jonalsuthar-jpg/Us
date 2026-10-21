@@ -1,7 +1,7 @@
 import { formatDuration, type CallState } from '@us/shared';
 import { useCallManager, useCallState, useCouple } from '@us/shared/react';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { ChevronDown, Ear, Maximize, Mic, MicOff, Minimize, MonitorUp, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
+import { Bluetooth, Check, ChevronDown, Ear, Headphones, Maximize, Mic, MicOff, Minimize, MonitorUp, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StatusBar, View } from 'react-native';
 import Animated, {
@@ -16,7 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediaStream, RTCView } from 'react-native-webrtc';
-import { setSpeaker, startCallAudio, stopCallAudio } from '@/lib/audio-route';
+import { chooseRoute, onAudioRoutes, startCallAudio, stopCallAudio, type AudioRoute } from '@/lib/audio-route';
 import { Avatar } from '../ui/avatar';
 import { cn } from '../ui/cn';
 import { Button, IconButton } from '../ui/button';
@@ -105,6 +105,13 @@ function FullScreenShare({ state, onExit }: { state: CallState; onExit: () => vo
   );
 }
 
+const ROUTES: Record<AudioRoute, { label: string; icon: typeof Ear }> = {
+  EARPIECE: { label: 'Phone', icon: Ear },
+  SPEAKER_PHONE: { label: 'Speaker', icon: Volume2 },
+  WIRED_HEADSET: { label: 'Headphones', icon: Headphones },
+  BLUETOOTH: { label: 'Bluetooth', icon: Bluetooth },
+};
+
 /** The minimised call: who, how long, mute and hang up. Tap to go back to the call. */
 function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }) {
   const m = useCallManager();
@@ -156,7 +163,7 @@ function useCallAudio(state: CallState) {
   useEffect(() => {
     if (active && !started.current) {
       started.current = true;
-      startCallAudio(state.media);
+      void startCallAudio(state.media);
     } else if (!active && started.current) {
       started.current = false;
       stopCallAudio();
@@ -186,8 +193,21 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
   const insets = useSafeAreaInsets();
   const elapsed = useElapsed(state.connectedAt);
   const [nudge, setNudge] = useState(false);
-  // Matches InCallManager's automatic default until the person chooses.
+  // Where the sound goes. Android reports the devices (earpiece, speaker, wired,
+  // Bluetooth); elsewhere it's a plain speaker toggle that starts at the default.
+  const [routes, setRoutes] = useState<{ available: AudioRoute[]; selected: AudioRoute | null }>({ available: [], selected: null });
+  useEffect(() => onAudioRoutes((available, selected) => setRoutes({ available, selected })), []);
   const [speaker, setSpeakerOn] = useState(state.media === 'video');
+  const [routePicker, setRoutePicker] = useState(false);
+  const route: AudioRoute = routes.selected ?? (speaker ? 'SPEAKER_PHONE' : 'EARPIECE');
+  const routeOptions: AudioRoute[] = routes.available.length ? routes.available : ['EARPIECE', 'SPEAKER_PHONE'];
+  const pickRoute = (r: AudioRoute) => {
+    chooseRoute(r);
+    setSpeakerOn(r === 'SPEAKER_PHONE');
+    setRoutes((prev) => ({ ...prev, selected: r }));
+    setRoutePicker(false);
+  };
+  const RouteIcon = ROUTES[route].icon;
   // The self view sits just above the controls, however tall they turn out.
   const [controlsHeight, setControlsHeight] = useState(208);
 
@@ -314,15 +334,17 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
             {/* Secondary row: where the sound goes, which camera, screen. */}
             <View className="flex-row items-center justify-center gap-4">
               <IconButton
-                label={speaker ? 'Switch to earpiece' : 'Switch to speaker'}
-                selected={speaker}
-                tone={speaker ? 'nightOff' : 'night'}
-                onPress={() => {
-                  setSpeaker(!speaker);
-                  setSpeakerOn(!speaker);
-                }}
+                label={routeOptions.length > 2 ? `Sound: ${ROUTES[route].label}. Choose where it plays` : route === 'SPEAKER_PHONE' ? 'Switch to earpiece' : 'Switch to speaker'}
+                selected={route !== 'EARPIECE'}
+                tone={route !== 'EARPIECE' ? 'nightOff' : 'night'}
+                onPress={() =>
+                  // Two choices toggle; a headset or Bluetooth in the mix opens the list.
+                  routeOptions.length > 2
+                    ? setRoutePicker((v) => !v)
+                    : pickRoute(route === 'SPEAKER_PHONE' ? (routeOptions.find((r) => r !== 'SPEAKER_PHONE') ?? 'EARPIECE') : 'SPEAKER_PHONE')
+                }
               >
-                {speaker ? <Volume2 size={20} color="#241933" /> : <Ear size={20} color="#FCFAFB" />}
+                <RouteIcon size={20} color={route !== 'EARPIECE' ? '#241933' : '#FCFAFB'} />
               </IconButton>
               {state.local.camera && state.canSwitchCamera && (
                 <IconButton
@@ -365,6 +387,28 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
           </View>
         )}
       </View>
+
+      {routePicker && (
+        <View className="absolute inset-x-4 bottom-56 rounded-sheet bg-paper-raised p-2" accessibilityRole="menu">
+          <Text className="px-3 pb-1 pt-2 font-sans-semibold text-small text-ink-soft">Play the call through</Text>
+          {routeOptions.map((r) => {
+            const Icon = ROUTES[r].icon;
+            return (
+              <Pressable
+                key={r}
+                accessibilityRole="menuitem"
+                accessibilityState={{ selected: r === route }}
+                onPress={() => pickRoute(r)}
+                className="flex-row items-center gap-3 rounded-control px-3 py-3 active:bg-paper-sunken"
+              >
+                <Icon size={20} color="#241933" />
+                <Text className="flex-1">{ROUTES[r].label}</Text>
+                {r === route ? <Check size={18} color="#C41D55" /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {nudge && (
         <View className="absolute inset-x-4 bottom-56 rounded-sheet bg-paper-raised p-5" accessibilityRole="alert">

@@ -1,5 +1,6 @@
 import type { Couple, Invite, Profile } from '../database.types';
 import type { UsClient } from '../supabase';
+import { removeMemoryPhoto, signedPhotoUrls, uploadMemoryPhoto } from './memory';
 import type { PartnerSlot } from '../tokens';
 
 export interface CoupleContext {
@@ -17,9 +18,45 @@ export async function getMyProfile(sb: UsClient, userId: string): Promise<Profil
   return data;
 }
 
-export async function updateMyProfile(sb: UsClient, userId: string, patch: { display_name?: string }) {
+export async function updateMyProfile(sb: UsClient, userId: string, patch: { display_name?: string; avatar_url?: string | null }) {
   const { error } = await sb.from('profiles').update(patch).eq('id', userId);
   if (error) throw error;
+}
+
+/** Topic pinged when either of us changes our profile photo, so the other's app refreshes it. */
+export const PROFILE_TOPIC = 'profile';
+
+/**
+ * My profile photo lives in the couple's private photo folder (only the two of
+ * us can read it); `avatar_url` holds its storage path. Replaces any old one.
+ */
+export async function setMyPhoto(
+  sb: UsClient,
+  me: Pick<Profile, 'id' | 'avatar_url'>,
+  coupleId: string,
+  body: Blob | ArrayBuffer | Uint8Array,
+  contentType: string,
+): Promise<string> {
+  const path = await uploadMemoryPhoto(sb, coupleId, body, contentType);
+  await updateMyProfile(sb, me.id, { avatar_url: path });
+  if (me.avatar_url && !/^https?:/.test(me.avatar_url)) await removeMemoryPhoto(sb, me.avatar_url).catch(() => {});
+  return path;
+}
+
+export async function clearMyPhoto(sb: UsClient, me: Pick<Profile, 'id' | 'avatar_url'>): Promise<void> {
+  await updateMyProfile(sb, me.id, { avatar_url: null });
+  if (me.avatar_url && !/^https?:/.test(me.avatar_url)) await removeMemoryPhoto(sb, me.avatar_url).catch(() => {});
+}
+
+/** Current photo paths for both of us, plus short-lived URLs to show them. */
+export async function profilePhotos(sb: UsClient, ids: string[]): Promise<Record<string, { path: string | null; url: string | null }>> {
+  const { data, error } = await sb.from('profiles').select('id, avatar_url').in('id', ids);
+  if (error) throw error;
+  const paths = (data ?? []).map((p) => p.avatar_url).filter((p): p is string => !!p && !/^https?:/.test(p));
+  const urls = await signedPhotoUrls(sb, paths);
+  return Object.fromEntries(
+    (data ?? []).map((p) => [p.id, { path: p.avatar_url, url: p.avatar_url ? (urls[p.avatar_url] ?? (/^https?:/.test(p.avatar_url) ? p.avatar_url : null)) : null }]),
+  );
 }
 
 /** Resolve the couple + both profiles, or null if the user isn't paired yet. */

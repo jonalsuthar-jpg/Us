@@ -1,11 +1,11 @@
 'use client';
 
-import { deleteAccount, friendlyError, unpair, updateMyProfile } from '@us/shared';
+import { clearMyPhoto, deleteAccount, friendlyError, setMyPhoto, unpair, updateMyProfile } from '@us/shared';
 import { COUPLE_ENDED_TOPIC, useCouple } from '@us/shared/react';
-import { BellRing, Check } from 'lucide-react';
+import { BellRing, Camera, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -18,8 +18,24 @@ import { playChime } from '@/lib/sounds';
 import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme';
 
 export default function SettingsPage() {
-  const { sb, me, partner, mySlot, partnerSlot, couple, channel } = useCouple();
+  const { sb, me, partner, mySlot, partnerSlot, couple, channel, myPhotoPath, photosChanged } = useCouple();
   const router = useRouter();
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  async function photoAction(run: () => Promise<unknown>) {
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      await run();
+      photosChanged();
+    } catch (e) {
+      setPhotoError(friendlyError(e));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
   const [name, setName] = useState(me.display_name);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +91,42 @@ export default function SettingsPage() {
         <h2 id="you" className="font-display text-heading text-ink">
           You
         </h2>
+        <div className="flex items-center gap-5">
+          <Avatar name={me.display_name} slot={mySlot} size="lg" />
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" size="sm" loading={photoBusy} onClick={() => photoInput.current?.click()}>
+                {!photoBusy && <Camera className="h-4 w-4" />} {myPhotoPath ? 'Change photo' : 'Add a profile photo'}
+              </Button>
+              {myPhotoPath ? (
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="sm"
+                  disabled={photoBusy}
+                  onClick={() => void photoAction(() => clearMyPhoto(sb, { id: me.id, avatar_url: myPhotoPath }))}
+                >
+                  Remove photo
+                </Button>
+              ) : null}
+            </div>
+            <p className="text-small text-ink-muted">Only {partner.display_name} can see it.</p>
+            {photoError ? <p className="text-small text-rose-700">{photoError}</p> : null}
+          </div>
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) void photoAction(() => setMyPhoto(sb, { id: me.id, avatar_url: myPhotoPath }, couple.id, file, file.type || 'image/jpeg'));
+            }}
+          />
+        </div>
         <form onSubmit={save} className="flex items-end gap-3">
           <div className="flex-1">
             <Field label="Your name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} error={error} />

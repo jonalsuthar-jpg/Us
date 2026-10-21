@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ackMessages } from '../api/messages';
-import type { CoupleContext } from '../api/pairing';
+import { PROFILE_TOPIC, profilePhotos, type CoupleContext } from '../api/pairing';
 import { CoupleChannel, type ChannelStatus } from '../realtime/couple-channel';
 import type { UsClient } from '../supabase';
+import type { PartnerSlot } from '../tokens';
 
 export interface CoupleValue extends CoupleContext {
   sb: UsClient;
@@ -12,6 +13,12 @@ export interface CoupleValue extends CoupleContext {
   /** Messages from my partner that I haven't read yet. */
   unread: number;
   refreshUnread: () => void;
+  /** Profile photo URL for whoever owns that colour slot, or null. */
+  photoOf: (slot: PartnerSlot) => string | null;
+  /** My photo's storage path, needed to replace or remove it. */
+  myPhotoPath: string | null;
+  /** Reload both photos and tell my partner's apps to do the same. */
+  photosChanged: () => void;
 }
 
 const Ctx = createContext<CoupleValue | null>(null);
@@ -74,6 +81,32 @@ export function CoupleProvider({ sb, context, platform, onEnded, children }: Pro
     [sb, couple.id, me.id],
   );
 
+  // Both profile photos, refreshed when either of us changes theirs.
+  const [photos, setPhotos] = useState<Record<string, { path: string | null; url: string | null }>>({});
+  const loadPhotos = useCallback(() => {
+    void profilePhotos(sb, [me.id, partner.id])
+      .then(setPhotos)
+      .catch(() => {});
+  }, [sb, me.id, partner.id]);
+  useEffect(() => {
+    loadPhotos();
+    const offChanges = channel.changes.on((e) => e.topic === PROFILE_TOPIC && loadPhotos());
+    // Signed URLs last an hour; a reconnect is a good moment to renew them.
+    const offStatus = channel.status.on((s) => s === 'live' && loadPhotos());
+    return () => {
+      offChanges();
+      offStatus();
+    };
+  }, [channel, loadPhotos]);
+  const photoOf = useCallback(
+    (slot: PartnerSlot) => photos[slot === context.mySlot ? me.id : partner.id]?.url ?? null,
+    [photos, context.mySlot, me.id, partner.id],
+  );
+  const photosChanged = useCallback(() => {
+    channel.sendChanged(PROFILE_TOPIC);
+    loadPhotos();
+  }, [channel, loadPhotos]);
+
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
 
@@ -121,8 +154,19 @@ export function CoupleProvider({ sb, context, platform, onEnded, children }: Pro
   }, [channel, sb, couple.id, me.id, partner.id, refreshUnread]);
 
   const value = useMemo<CoupleValue>(
-    () => ({ ...context, sb, channel, partnerOnline, connection, unread, refreshUnread }),
-    [context, sb, channel, partnerOnline, connection, unread, refreshUnread],
+    () => ({
+      ...context,
+      sb,
+      channel,
+      partnerOnline,
+      connection,
+      unread,
+      refreshUnread,
+      photoOf,
+      myPhotoPath: photos[me.id]?.path ?? null,
+      photosChanged,
+    }),
+    [context, sb, channel, partnerOnline, connection, unread, refreshUnread, photoOf, photos, me.id, photosChanged],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

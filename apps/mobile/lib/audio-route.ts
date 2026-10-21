@@ -1,3 +1,4 @@
+import { DeviceEventEmitter, PermissionsAndroid, Platform } from 'react-native';
 import type InCallManagerType from 'react-native-incall-manager';
 
 /**
@@ -33,13 +34,47 @@ function safely(fn: (m: typeof InCallManagerType) => void) {
   }
 }
 
-export function startCallAudio(media: 'audio' | 'video') {
+/** Where call sound can go. Android reports which are available right now. */
+export type AudioRoute = 'EARPIECE' | 'SPEAKER_PHONE' | 'WIRED_HEADSET' | 'BLUETOOTH';
+
+/**
+ * Android 12+ only lets an app use a Bluetooth headset for calls once the
+ * person grants "Nearby devices". Without it the headset never shows up.
+ */
+async function allowBluetooth() {
+  if (Platform.OS !== 'android' || Number(Platform.Version) < 31) return;
+  try {
+    const p = PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT;
+    if (!(await PermissionsAndroid.check(p))) await PermissionsAndroid.request(p);
+  } catch (e) {
+    console.warn('[us] bluetooth permission', e);
+  }
+}
+
+export async function startCallAudio(media: 'audio' | 'video') {
+  // Asked before starting: the audio manager only looks for Bluetooth as it starts.
+  await allowBluetooth();
   safely((m) => m.start({ media, auto: true }));
 }
 
-/** Force the loudspeaker on, or back to the earpiece / headset. */
-export function setSpeaker(on: boolean) {
-  safely((m) => m.setForceSpeakerphoneOn(on));
+/** Send call sound to a device (Android), or toggle the loudspeaker (iOS). */
+export function chooseRoute(route: AudioRoute) {
+  if (Platform.OS === 'android') safely((m) => void m.chooseAudioRoute(route).catch(() => {}));
+  else safely((m) => m.setForceSpeakerphoneOn(route === 'SPEAKER_PHONE'));
+}
+
+/** Follow the available devices and the one in use. Android only; returns an unsubscribe. */
+export function onAudioRoutes(fn: (available: AudioRoute[], selected: AudioRoute | null) => void): () => void {
+  if (Platform.OS !== 'android') return () => {};
+  const sub = DeviceEventEmitter.addListener('onAudioDeviceChanged', (d: { availableAudioDeviceList?: string; selectedAudioDevice?: string }) => {
+    try {
+      const available = JSON.parse(d.availableAudioDeviceList ?? '[]') as AudioRoute[];
+      fn(available, (d.selectedAudioDevice || null) as AudioRoute | null);
+    } catch {
+      // malformed event: keep the last known routes
+    }
+  });
+  return () => sub.remove();
 }
 
 export function stopCallAudio() {

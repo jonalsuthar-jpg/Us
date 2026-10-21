@@ -1,4 +1,7 @@
+'use client';
+
 import type { PartnerSlot } from '@us/shared';
+import { useOptionalCouple } from '@us/shared/react';
 import { cn } from '@/lib/cn';
 
 const SIZES = { sm: 'h-8 w-8 text-micro', md: 'h-11 w-11 text-small', lg: 'h-20 w-20 text-title', xl: 'h-32 w-32 text-hero' };
@@ -18,20 +21,23 @@ interface AvatarProps {
   className?: string;
 }
 
-/** Initial in the display serif on the person's colour — never a grey placeholder. */
+/** Their profile photo, else their initial on their colour — never a grey placeholder. */
 export function Avatar({ name, slot, src, size = 'md', online, className }: AvatarProps) {
   const initial = name.trim().charAt(0).toUpperCase() || '·';
+  // Inside a paired session, the profile photo of whoever owns this colour.
+  const couple = useOptionalCouple();
+  const photo = src ?? couple?.photoOf(slot) ?? null;
   return (
     <span className={cn('relative inline-flex shrink-0', className)}>
       <span
         className={cn(
-          'inline-flex items-center justify-center overflow-hidden rounded-full font-serif italic ring-2 ring-offset-2 ring-offset-paper',
+          'inline-flex items-center justify-center overflow-hidden rounded-full font-semibold ring-2 ring-offset-2 ring-offset-paper',
           SIZES[size],
           SLOT[slot],
         )}
-        aria-hidden={!src}
+        aria-hidden={!photo}
       >
-        {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : initial}
+        {photo ? <img src={photo} alt="" className="h-full w-full object-cover" /> : initial}
       </span>
       {online !== undefined && (
         <span
