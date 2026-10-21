@@ -320,14 +320,20 @@ function StatusCard({
     <>
       <span className="flex items-center gap-2">
         <Avatar name={who} slot={slot} size="sm" online={online} />
-        <span className="truncate text-small font-medium text-ink">{who}</span>
+        <span className="min-w-0 flex-1 truncate text-small font-semibold text-ink">{who}</span>
+        {onEdit ? (
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-700" aria-hidden>
+            <Pencil className="h-3.5 w-3.5" />
+          </span>
+        ) : null}
       </span>
       {status ? (
         <>
-          <span className="mt-3 block text-[32px] leading-none" aria-hidden>
-            {status.emoji ?? '💬'}
+          {/* Emoji inline with the words keeps the card short. */}
+          <span className="mt-2 block line-clamp-2 font-medium text-ink">
+            {status.emoji ? `${status.emoji} ` : ''}
+            {status.text ?? ''}
           </span>
-          <span className="mt-2 block line-clamp-2 font-medium text-ink">{status.text ?? ''}</span>
           <span className="mt-1 block text-micro text-ink-muted" suppressHydrationWarning>
             {timeAgo(status.at)}
             {presence ? ` · ${presence}` : ''}
@@ -335,19 +341,10 @@ function StatusCard({
         </>
       ) : (
         <>
-          <span className="mt-3 block text-[32px] leading-none text-ink-muted/50" aria-hidden>
-            {onEdit ? '+' : '·'}
-          </span>
-          <span className="mt-2 block text-ink-soft">{empty}</span>
+          <span className={cn('mt-2 block', onEdit ? 'font-medium text-rose-700' : 'text-ink-soft')}>{onEdit ? 'Set your status' : empty}</span>
           {presence ? <span className="mt-1 block text-micro text-ink-muted">{presence}</span> : null}
         </>
       )}
-      {onEdit ? (
-        <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-micro font-semibold text-rose-700" aria-hidden>
-          <Pencil className="h-3 w-3" />
-          {status ? 'Update' : 'Set status'}
-        </span>
-      ) : null}
     </>
   );
   const surface = cn(
@@ -428,7 +425,7 @@ function StatusForm({ initial, onSave }: { initial: Status | null; onSave: (s: {
 
 function Action({ label, href, onClick, badge, children }: { label: string; href?: string; onClick?: () => void; badge?: number; children: ReactNode }) {
   const cls =
-    'relative flex flex-col items-center gap-2 rounded-sheet border border-paper-edge bg-paper-raised px-1 py-4 text-center text-micro font-medium leading-tight text-ink sm:text-small shadow-[0_6px_16px_-8px_rgba(36,25,51,0.35)] transition-[transform,background-color,box-shadow] hover:-translate-y-0.5 hover:bg-paper-sunken hover:shadow-[0_10px_22px_-10px_rgba(36,25,51,0.45)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';
+    'relative flex flex-col items-center gap-1.5 rounded-sheet border border-paper-edge bg-paper-raised px-1 py-3 text-center text-micro font-medium leading-tight text-ink sm:text-small shadow-[0_6px_16px_-8px_rgba(36,25,51,0.35)] transition-[transform,background-color,box-shadow] hover:-translate-y-0.5 hover:bg-paper-sunken hover:shadow-[0_10px_22px_-10px_rgba(36,25,51,0.45)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';
   const inner = (
     <>
       <span className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-600 text-white" aria-hidden>

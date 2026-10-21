@@ -289,18 +289,24 @@ function StatusCard({
 }) {
   const c = usePalette();
   const inner = (
-    <Sheet pad="sm" className={cn('grow gap-2', slot === 'a' ? 'border-rose-200' : 'border-teal-200')}>
+    <Sheet pad="sm" className={cn('grow gap-1.5', slot === 'a' ? 'border-rose-200' : 'border-teal-200')}>
       <View className="flex-row items-center gap-2">
         <Avatar name={who} slot={slot} size="sm" online={online} />
-        <Text className="flex-1 font-sans-medium text-small" numberOfLines={1}>
+        <Text className="flex-1 font-sans-semibold text-small" numberOfLines={1}>
           {who}
         </Text>
+        {onPress ? (
+          <View className="h-7 w-7 items-center justify-center rounded-full bg-rose-50">
+            <Pencil size={13} color={c.onRose} />
+          </View>
+        ) : null}
       </View>
       {status ? (
         <>
-          <Text className="text-[30px] leading-[36px]">{status.emoji ?? '💬'}</Text>
+          {/* Emoji inline with the words keeps the card short. */}
           <Text className="font-sans-medium text-ink" numberOfLines={2}>
-            {status.text ?? ' '}
+            {status.emoji ? `${status.emoji} ` : ''}
+            {status.text ?? ''}
           </Text>
           <Text className="text-micro text-ink-muted">
             {timeAgo(status.at)}
@@ -309,17 +315,10 @@ function StatusCard({
         </>
       ) : (
         <>
-          <Text className="text-[30px] leading-[36px] opacity-40">{onPress ? '＋' : '·'}</Text>
-          <Text className="text-ink-soft">{empty}</Text>
+          <Text className={onPress ? 'font-sans-medium text-rose-700' : 'text-ink-soft'}>{onPress ? 'Set your status' : empty}</Text>
           {presence ? <Text className="text-micro text-ink-muted">{presence}</Text> : null}
         </>
       )}
-      {onPress ? (
-        <View className="mt-auto flex-row items-center gap-1 self-start rounded-full bg-rose-50 px-2.5 py-1">
-          <Pencil size={12} color={c.onRose} />
-          <Text className="font-sans-semibold text-micro text-rose-700">{status ? 'Update' : 'Set status'}</Text>
-        </View>
-      ) : null}
     </Sheet>
   );
   return onPress ? (
@@ -394,7 +393,7 @@ function Action({ label, onPress, badge, children }: { label: string; onPress: (
       accessibilityRole="button"
       accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
       onPress={onPress}
-      className="flex-1 items-center gap-1.5 rounded-sheet border border-paper-edge bg-paper-raised px-1 pb-3 pt-3.5 shadow-md shadow-plum-800/25 active:scale-95 active:bg-paper-sunken"
+      className="flex-1 items-center gap-1 rounded-sheet border border-paper-edge bg-paper-raised px-1 py-2.5 shadow-md shadow-plum-800/25 active:scale-95 active:bg-paper-sunken"
     >
       <View className="h-11 w-11 items-center justify-center rounded-full bg-rose-600">{children}</View>
       {/* Two short lines rather than shrink-to-fit, which Android draws past the card at this width. */}
