@@ -1,19 +1,20 @@
 import type { Metadata, Viewport } from 'next';
-import { Fraunces, Work_Sans } from 'next/font/google';
+import { Fraunces, Inter } from 'next/font/google';
 import { MotionConfig } from '@/components/app/motion-config';
 import { ThemeWatcher } from '@/components/app/theme-watcher';
 import { THEME_SCRIPT } from '@/lib/theme';
 import './globals.css';
 
-const display = Fraunces({
+// The serif is kept for deliberate warm moments (memories, empty states).
+const serif = Fraunces({
   subsets: ['latin'],
-  variable: '--font-display',
+  variable: '--font-serif',
   axes: ['SOFT', 'WONK', 'opsz'],
   style: ['normal', 'italic'],
   display: 'swap',
 });
 
-const sans = Work_Sans({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
+const sans = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
 export const metadata: Metadata = {
   title: { default: 'Us', template: '%s · Us' },
@@ -35,7 +36,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // data-theme is set by THEME_SCRIPT before React hydrates, hence the warning suppression.
-    <html lang="en" className={`${display.variable} ${sans.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${serif.variable} ${sans.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

@@ -121,7 +121,7 @@ export function MemoryTimeline() {
         <div className="space-y-10">
           {groups.map((g) => (
             <section key={g.key} aria-label={g.label}>
-              <h2 className="mb-4 font-display text-lead italic text-ink-soft">{g.label}</h2>
+              <h2 className="mb-4 font-serif text-lead italic text-ink-soft">{g.label}</h2>
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {g.items.map((m) => (
                   <li key={m.id}>
@@ -243,7 +243,7 @@ function MemoryDetail({
       <p className="text-small text-ink-muted">
         {formatDay(memory.happened_on)} · {KIND_LABEL[memory.kind]} · kept by {authorName}
       </p>
-      {memory.body ? <p className="whitespace-pre-wrap font-display text-lead font-light text-ink">{memory.body}</p> : null}
+      {memory.body ? <p className="whitespace-pre-wrap font-serif text-lead font-light text-ink">{memory.body}</p> : null}
 
       <Sheet tone="inset" pad="sm" className="space-y-3">
         <div className="flex items-center justify-between gap-2">

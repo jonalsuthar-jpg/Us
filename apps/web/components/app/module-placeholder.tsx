@@ -26,7 +26,7 @@ export function ModulePlaceholder({ id }: { id: ModuleId }) {
         <MobileSettingsLink className="absolute right-0 top-0" />
         <p className={cn('relative text-small font-medium', accent.ink)}>Coming in phase {mod.phase}</p>
         <h1 className="relative mt-2 font-display text-[40px] leading-[1.05] text-ink sm:text-[52px]">{mod.title}</h1>
-        <p className="relative mt-4 max-w-xl text-balance font-display text-lead font-light italic text-ink-soft">
+        <p className="relative mt-4 max-w-xl text-balance font-serif text-lead font-light italic text-ink-soft">
           {mod.tagline}
         </p>
       </header>

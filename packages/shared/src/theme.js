@@ -10,7 +10,7 @@
  * Variables are space-separated RGB channels so Tailwind's
  * `rgb(var(--x) / <alpha-value>)` keeps opacity modifiers (bg-paper/95).
  */
-const { colors } = require('./tokens.js');
+const { colors, ink } = require('./tokens.js');
 
 /** Every themed colour, keyed by the CSS variable suffix. */
 const themes = {
@@ -19,9 +19,11 @@ const themes = {
     'paper-raised': colors.paper.raised,
     'paper-sunken': colors.paper.sunken,
     'paper-edge': colors.paper.edge,
-    ink: colors.plum[800],
-    'ink-soft': colors.plum[500],
-    'ink-muted': colors.plum[400],
+    ink: ink.DEFAULT,
+    'ink-soft': ink.soft,
+    'ink-muted': ink.muted,
+    // Behind the chat thread, so white bubbles stand out from it.
+    chat: '#F5F0ED',
 
     'wash-rose-50': colors.rose[50],
     'wash-rose-100': colors.rose[100],
@@ -56,6 +58,7 @@ const themes = {
     ink: '#F7F2F8',
     'ink-soft': colors.plum[200],
     'ink-muted': colors.plum[300],
+    chat: '#08060A',
 
     'wash-rose-50': '#3B1424',
     'wash-rose-100': '#4E1A30',
@@ -107,9 +110,12 @@ const themedTailwind = {
     paper: { DEFAULT: v('paper'), raised: v('paper-raised'), sunken: v('paper-sunken'), edge: v('paper-edge') },
     ink: { DEFAULT: v('ink'), soft: v('ink-soft'), muted: v('ink-muted') },
   },
-  backgroundColor: Object.fromEntries(
-    ['rose', 'teal', 'gold', 'sage', 'plum'].map((hue) => [hue, { 50: v(`wash-${hue}-50`), 100: v(`wash-${hue}-100`) }]),
-  ),
+  backgroundColor: {
+    ...Object.fromEntries(
+      ['rose', 'teal', 'gold', 'sage', 'plum'].map((hue) => [hue, { 50: v(`wash-${hue}-50`), 100: v(`wash-${hue}-100`) }]),
+    ),
+    chat: v('chat'),
+  },
   borderColor: { rose: { 200: v('line-rose-200') }, teal: { 200: v('line-teal-200') } },
   textColor: {
     // Night surfaces use text-paper: it stays light in both themes.

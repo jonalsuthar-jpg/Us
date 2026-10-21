@@ -19,6 +19,8 @@ export interface Palette {
   paper: string;
   paperRaised: string;
   paperSunken: string;
+  /** Behind the chat thread. */
+  chat: string;
   edge: string;
   placeholder: string;
   /** Inactive outlines (empty hearts, offline dots). */
@@ -48,6 +50,7 @@ function palette(scheme: ColorScheme): Palette {
     paper: t.paper!,
     paperRaised: t['paper-raised']!,
     paperSunken: t['paper-sunken']!,
+    chat: t.chat!,
     edge: t['paper-edge']!,
     placeholder: scheme === 'dark' ? colors.plum[400] : colors.plum[300],
     faint: scheme === 'dark' ? colors.plum[600] : colors.plum[200],

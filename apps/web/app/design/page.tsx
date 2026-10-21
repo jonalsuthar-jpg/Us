@@ -82,15 +82,15 @@ export default function DesignPage() {
 
       <Section title="Type">
         <div className="space-y-6">
-          <p className="font-display text-hero font-light text-ink">
+          <p className="font-serif text-hero font-light text-ink">
             The night we <em>missed</em> the last train.
           </p>
-          <p className="font-display text-title text-ink">Fraunces, for feeling.</p>
+          <p className="font-display text-title text-ink">Inter, for everything you read.</p>
           <p className="max-w-xl text-lead text-ink-soft">
-            Work Sans, for doing — every label, button and message. The serif is reserved for names, moments and
-            memories, so when it appears it means something.
+            Names, headings, labels, buttons and messages, in near-black and two easy-to-read greys. The Fraunces
+            serif is kept for a few warm moments — memories, empty states — so when it appears it means something.
           </p>
-          <p className="text-small text-ink-muted">Small · 14/20 — metadata, hints</p>
+          <p className="text-small text-ink-muted">Small · 15/21 — previews, details</p>
         </div>
       </Section>
 
@@ -230,7 +230,7 @@ export default function DesignPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section aria-labelledby={title}>
-      <h2 id={title} className="mb-6 border-b border-paper-edge pb-3 font-display text-heading italic text-ink-soft">
+      <h2 id={title} className="mb-6 border-b border-paper-edge pb-3 font-serif text-heading italic text-ink-soft">
         {title}
       </h2>
       {children}

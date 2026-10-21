@@ -93,7 +93,7 @@ function Column({
   const { sb } = useCouple();
   return (
     <section aria-label={title} className="space-y-3">
-      <h3 className="font-display text-lead italic text-ink">{title}</h3>
+      <h3 className="font-serif text-lead italic text-ink">{title}</h3>
       {goals.length === 0 ? (
         <EmptyNote title="No goals yet">{empty}</EmptyNote>
       ) : (

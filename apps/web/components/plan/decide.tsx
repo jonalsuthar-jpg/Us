@@ -178,10 +178,10 @@ export function PlanDecide() {
             ) : picked ? (
               <motion.div key={picked.id + picked.times_picked} initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0 }}>
                 <p className="text-small text-paper/70">It’s</p>
-                <p className="mt-1 font-display text-[36px] italic leading-tight text-paper">{picked.label}</p>
+                <p className="mt-1 font-serif text-[36px] italic leading-tight text-paper">{picked.label}</p>
               </motion.div>
             ) : (
-              <motion.p key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="font-display text-lead italic text-paper/80">
+              <motion.p key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="font-serif text-lead italic text-paper/80">
                 {current ? `Can’t decide on ${current.toLowerCase()}?` : 'Pick a list first.'}
               </motion.p>
             )}

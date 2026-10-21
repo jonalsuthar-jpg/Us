@@ -153,7 +153,7 @@ export function PlanCalendar() {
 
       <section aria-label="Selected day" className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-display text-lead italic text-ink">
+          <h3 className="font-serif text-lead italic text-ink">
             {fromDateKey(selected).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
           </h3>
           <Button size="sm" onClick={() => setDraft(draftFor(selected))}>

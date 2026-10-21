@@ -127,25 +127,25 @@ export default function TalkPage() {
 
   const latestPin = pins.data?.[0];
 
-  const status = partnerTyping ? 'typing…' : partnerOnline ? 'here now' : 'away';
+  const status = partnerTyping ? 'typing…' : partnerOnline ? 'online' : 'away';
 
   return (
-    <div className="flex h-[calc(100dvh-64px-env(safe-area-inset-bottom))] flex-col lg:h-dvh">
-      <header className="flex items-center gap-3 border-b border-paper-edge/80 px-4 py-3 sm:px-8">
+    <div className="flex h-[calc(100dvh-64px-env(safe-area-inset-bottom))] flex-col bg-chat lg:h-dvh">
+      <header className="flex items-center gap-3 border-b border-paper-edge bg-paper-raised px-4 py-2.5 sm:px-8">
         <Avatar name={partner.display_name} slot={partnerSlot} online={partnerOnline} />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-heading text-ink">{partner.display_name}</h1>
-          <p className={partnerTyping ? 'text-small italic text-rose-700' : 'text-small text-ink-muted'}>{status}</p>
+          <h1 className="truncate font-display text-lead text-ink">{partner.display_name}</h1>
+          <p className={partnerTyping || partnerOnline ? 'text-micro font-medium text-teal-700' : 'text-micro text-ink-muted'}>{status}</p>
         </div>
         <PrivacyBadge privacy="shared" partnerName={partner.display_name} compact className="hidden sm:inline-flex" />
         <IconButton label="Search messages" onClick={() => setPanel('search')}>
           <Search className="h-5 w-5" />
         </IconButton>
-        <IconButton label={`Voice call ${partner.display_name}`} tone="rose" onClick={() => void calls.startCall('audio')}>
+        <IconButton label={`Voice call ${partner.display_name}`} onClick={() => void calls.startCall('audio')}>
           <Phone className="h-5 w-5" />
         </IconButton>
-        <IconButton label={`Video call ${partner.display_name}`} tone="rose" onClick={() => void calls.startCall('video')}>
-          <Video className="h-5 w-5" />
+        <IconButton label={`Video call ${partner.display_name}`} onClick={() => void calls.startCall('video')}>
+          <Video className="h-[22px] w-[22px]" />
         </IconButton>
         <MobileSettingsLink />
       </header>
@@ -375,10 +375,8 @@ function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; autho
 
 function DayDivider({ label }: { label: string }) {
   return (
-    <div className="my-6 flex items-center gap-4" role="separator" aria-label={label}>
-      <span className="h-px flex-1 bg-paper-edge" />
-      <span className="font-display text-small italic text-ink-muted">{label}</span>
-      <span className="h-px flex-1 bg-paper-edge" />
+    <div className="my-4 flex justify-center" role="separator" aria-label={label}>
+      <span className="rounded-lg bg-paper-raised px-3 py-1 text-micro font-medium text-ink-soft shadow-[0_1px_0.5px_rgba(20,14,28,0.08)]">{label}</span>
     </div>
   );
 }
@@ -386,7 +384,7 @@ function DayDivider({ label }: { label: string }) {
 function EmptyThread({ name }: { name: string }) {
   return (
     <div className="flex flex-col items-center py-24 text-center">
-      <p className="font-display text-title font-light italic text-ink">Say the first thing.</p>
+      <p className="font-serif text-title font-light italic text-ink">Say the first thing.</p>
       <p className="mt-2 max-w-xs text-small text-ink-muted">
         Only you and {name} can ever read this thread.
       </p>

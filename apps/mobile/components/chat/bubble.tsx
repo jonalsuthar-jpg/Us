@@ -8,9 +8,9 @@ import { Text } from '../ui/text';
 import { Ticks } from '../ui/ticks';
 import { usePalette } from '../ui/palette';
 
-const MINE = { a: 'bg-rose-600', b: 'bg-teal-600' };
-// Their messages: a clean raised card, tinted only at the edge with their colour.
-const THEIRS = { a: 'bg-paper-raised border border-rose-200', b: 'bg-paper-raised border border-teal-200' };
+// Mine: a light wash of my colour with dark text, so every word reads clearly.
+const MINE = { a: 'bg-rose-100', b: 'bg-teal-100' };
+const THEIRS = { a: 'bg-paper-raised', b: 'bg-paper-raised' };
 
 export interface ReplyQuote {
   id: string;
@@ -52,6 +52,7 @@ export function Bubble({
   onOpenPhoto?: (url: string) => void;
   onJumpTo?: (id: string) => void;
 }) {
+  const c = usePalette();
   const reactions = groupReactions(message.reactions, myId);
   const url = mediaUrl ?? message.localUri;
   const hasText = !!message.body?.trim();
@@ -86,7 +87,7 @@ export function Bubble({
           }${message.pinned_at ? ', pinned' : ''}`}
           className={cn(
             'rounded-bubble',
-            photo && url ? 'overflow-hidden p-1' : 'px-3.5 pb-1.5 pt-2',
+            photo && url ? 'overflow-hidden p-1' : 'px-3 pb-1.5 pt-2',
             mine ? MINE[slot] : THEIRS[slot],
             last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
             message.pending && 'opacity-80',
@@ -98,10 +99,10 @@ export function Bubble({
               accessibilityRole="button"
               accessibilityLabel={`Reply to ${quote.author}: ${quote.text}. Show it`}
               onPress={() => onJumpTo?.(quote.id)}
-              className={cn('mb-1.5 rounded-[10px] border-l-[3px] px-2.5 py-1.5', mine ? 'border-white/70 bg-white/15' : 'border-plum-300 bg-paper-sunken', photo && url && 'm-1')}
+              className={cn('mb-1.5 rounded-[10px] border-l-[3px] px-2.5 py-1.5', mine ? 'border-rose-600 bg-paper-raised/60' : 'border-plum-300 bg-paper-sunken', photo && url && 'm-1')}
             >
-              <Text className={cn('font-sans-medium text-micro', mine ? 'text-white' : 'text-ink')}>{quote.author}</Text>
-              <Text numberOfLines={2} className={cn('text-small', mine ? 'text-white/85' : 'text-ink-soft')}>
+              <Text className="font-sans-semibold text-micro text-ink">{quote.author}</Text>
+              <Text numberOfLines={2} className="text-small text-ink-soft">
                 {quote.text}
               </Text>
             </Pressable>
@@ -124,10 +125,10 @@ export function Bubble({
 
           {message.media_kind === 'audio' ? <VoiceNote url={url} durationMs={meta?.duration_ms} mine={mine} /> : null}
 
-          {hasText ? <Text className={cn(mine ? 'text-white' : 'text-ink', photo && url && 'px-2.5 pt-1.5')}>{message.body}</Text> : null}
+          {hasText ? <Text className={cn('text-ink', photo && url && 'px-2.5 pt-1.5')}>{message.body}</Text> : null}
           <View className={cn('mt-0.5 flex-row items-center justify-end gap-1 self-end', photo && url && 'px-2 pb-1')}>
-            {message.pinned_at ? <Pin size={11} color={mine ? 'rgba(255,255,255,0.75)' : '#8a7f94'} /> : null}
-            <Text className={cn('text-[11px] leading-[14px]', mine ? 'text-white/75' : 'text-ink-muted')}>{formatClock(message.created_at)}</Text>
+            {message.pinned_at ? <Pin size={11} color={c.inkMuted} /> : null}
+            <Text className="text-[12px] leading-[15px] text-ink-muted">{formatClock(message.created_at)}</Text>
             {mine && <Ticks status={message.status} pending={message.pending} failed={message.failed} />}
           </View>
         </View>
@@ -163,7 +164,8 @@ function VoiceNote({ url, durationMs, mine }: { url?: string; durationMs?: numbe
   const status = useAudioPlayerStatus(player);
   const total = status.duration ? status.duration * 1000 : (durationMs ?? 0);
   const progress = total ? Math.min(1, (status.currentTime * 1000) / total) : 0;
-  const fg = mine ? '#fff' : '#3d2f4a';
+  const c = usePalette();
+  const fg = mine ? '#fff' : c.ink;
   useEffect(() => {
     if (status.didJustFinish) void player.seekTo(0);
   }, [status.didJustFinish, player]);
@@ -180,15 +182,15 @@ function VoiceNote({ url, durationMs, mine }: { url?: string; durationMs?: numbe
             player.play();
           }
         }}
-        className={cn('h-9 w-9 items-center justify-center rounded-full', mine ? 'bg-white/20' : 'bg-paper-sunken', !url && 'opacity-50')}
+        className={cn('h-9 w-9 items-center justify-center rounded-full', mine ? 'bg-rose-600' : 'bg-paper-sunken', !url && 'opacity-50')}
       >
         {status.playing ? <Pause size={16} color={fg} fill={fg} /> : <Play size={16} color={fg} fill={fg} />}
       </Pressable>
       <View className="flex-1 gap-1">
-        <View className={cn('h-1 overflow-hidden rounded-full', mine ? 'bg-white/30' : 'bg-plum-100')}>
-          <View style={{ width: `${progress * 100}%` }} className={cn('h-1 rounded-full', mine ? 'bg-white' : 'bg-rose-500')} />
+        <View className="h-1 overflow-hidden rounded-full bg-plum-100">
+          <View style={{ width: `${progress * 100}%` }} className="h-1 rounded-full bg-rose-500" />
         </View>
-        <Text className={cn('text-micro', mine ? 'text-white/80' : 'text-ink-muted')}>
+        <Text className="text-micro text-ink-muted">
           {formatVoiceLength(status.playing || status.currentTime ? status.currentTime * 1000 : durationMs)}
         </Text>
       </View>

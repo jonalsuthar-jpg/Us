@@ -10,7 +10,7 @@
 
   html {
     @apply bg-paper text-ink antialiased;
-    font-feature-settings: 'ss01', 'kern';
+    font-feature-settings: 'kern';
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -19,10 +19,21 @@
     background-image: var(--grain);
   }
 
-  /* Fraunces: soft, slightly wonky at display sizes — warmth, not formality. */
-  .font-display {
+  /* Fraunces: soft, slightly wonky — warmth for the few serif moments. */
+  .font-serif {
     font-variation-settings: 'SOFT' 100, 'WONK' 1;
   }
+}
+
+@layer components {
+  /* Headings and names: Inter, bold and a touch tight. A font-* weight utility still wins. */
+  .font-display {
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer base {
 
   ::selection {
     @apply bg-rose-300/50 text-ink;

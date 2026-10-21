@@ -87,7 +87,7 @@ export function PlanCosts() {
         <section aria-label="Balance" className="space-y-3">
           {balances.length === 0 ? (
             <Sheet pad="md">
-              <p className="font-display text-lead italic text-ink">Nothing shared yet.</p>
+              <p className="font-serif text-lead italic text-ink">Nothing shared yet.</p>
               <p className="mt-1 text-small text-ink-soft">Add what one of you paid for both, and Us keeps the running balance.</p>
             </Sheet>
           ) : (
@@ -104,7 +104,7 @@ export function PlanCosts() {
                         <span className={iOwe ? 'text-rose-700' : 'text-sage-700'}>{formatMoney(b.amount_cents, b.currency)}</span>
                       </p>
                     ) : (
-                      <p className="mt-1 font-display text-heading italic text-ink">You’re square.</p>
+                      <p className="mt-1 font-serif text-heading italic text-ink">You’re square.</p>
                     )}
                   </div>
                   {row && (

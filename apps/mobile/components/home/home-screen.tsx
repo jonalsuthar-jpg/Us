@@ -17,7 +17,7 @@ import { useCallManager, useCouple, useCoupleData, useTyping } from '@us/shared/
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Phone, Settings, Sparkles, Video } from 'lucide-react-native';
+import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Phone, Plus, Settings, Sparkles, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -155,16 +155,17 @@ export function HomeScreen() {
       {photoError ? <ErrorNote>{photoError}</ErrorNote> : null}
 
       {/* How you both are */}
-      <View className="flex-row gap-3">
-        <StatusCard
+      <View>
+        <StatusRow
           who={theirName}
           slot={partnerSlot}
           status={theirStatus}
-          presence={partnerTyping ? 'typing…' : partnerOnline ? 'here now' : 'away'}
+          presence={partnerTyping ? 'typing…' : partnerOnline ? 'online' : undefined}
           online={partnerOnline}
           empty="No status yet"
         />
-        <StatusCard who="You" slot={mySlot} status={myStatus} empty="How are you?" onPress={() => setEditingStatus(true)} />
+        <View className="ml-16 h-px bg-paper-edge" />
+        <StatusRow who="Your status" slot={mySlot} status={myStatus} empty={`Tap to tell ${theirName} how you are`} onPress={() => setEditingStatus(true)} />
       </View>
 
       {/* Reach each other */}
@@ -178,8 +179,8 @@ export function HomeScreen() {
         <Action label="Video" onPress={() => void calls.startCall('video')}>
           <Video size={22} color={c.roseStrong} />
         </Action>
-        <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onPress={() => void tap()}>
-          <HeartPulse size={22} color={c.roseStrong} />
+        <Action strong label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onPress={() => void tap()}>
+          <HeartPulse size={24} color="#fff" />
         </Action>
       </View>
 
@@ -270,7 +271,7 @@ export function HomeScreen() {
   );
 }
 
-function StatusCard({
+function StatusRow({
   who,
   slot,
   status,
@@ -287,40 +288,41 @@ function StatusCard({
   empty: string;
   onPress?: () => void;
 }) {
+  const c = usePalette();
+  const line = status ? `${status.emoji ? `${status.emoji} ` : ''}${status.text ?? ''} · ${timeAgo(status.at)}` : empty;
   const inner = (
-    <Sheet pad="sm" className={cn('grow gap-2', slot === 'a' ? 'border-rose-200' : 'border-teal-200')}>
-      <View className="flex-row items-center gap-2">
-        <Avatar name={who} slot={slot} size="sm" online={online} />
-        <Text className="flex-1 font-sans-medium text-small" numberOfLines={1}>
-          {who}
+    <>
+      {onPress && !status ? (
+        <View className="h-12 w-12 items-center justify-center rounded-full bg-rose-50">
+          <Plus size={22} color={c.roseStrong} />
+        </View>
+      ) : (
+        <Avatar name={who} slot={slot} online={online} />
+      )}
+      <View className="flex-1 gap-0.5">
+        <View className="flex-row items-baseline justify-between gap-2">
+          <Text className="flex-1 font-sans-semibold text-lead" numberOfLines={1}>
+            {who}
+          </Text>
+          {presence ? <Text className="font-sans-medium text-micro text-teal-700">{presence}</Text> : null}
+        </View>
+        <Text className="text-small text-ink-soft" numberOfLines={1}>
+          {line}
         </Text>
       </View>
-      {status ? (
-        <>
-          <Text className="text-[30px] leading-[36px]">{status.emoji ?? '💬'}</Text>
-          <Text className="font-sans-medium text-ink" numberOfLines={2}>
-            {status.text ?? ' '}
-          </Text>
-          <Text className="text-micro text-ink-muted">
-            {timeAgo(status.at)}
-            {presence ? ` · ${presence}` : ''}
-          </Text>
-        </>
-      ) : (
-        <>
-          <Text className="text-[30px] leading-[36px] opacity-40">{onPress ? '＋' : '·'}</Text>
-          <Text className="text-ink-soft">{empty}</Text>
-          {presence ? <Text className="text-micro text-ink-muted">{presence}</Text> : null}
-        </>
-      )}
-    </Sheet>
+    </>
   );
   return onPress ? (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Your status: ${status?.text ?? 'not set'}. Change`} onPress={onPress} className="flex-1">
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Your status: ${status?.text ?? 'not set'}. Change`}
+      onPress={onPress}
+      className="flex-row items-center gap-4 py-2.5 active:opacity-70"
+    >
       {inner}
     </Pressable>
   ) : (
-    <View className="flex-1">{inner}</View>
+    <View className="flex-row items-center gap-4 py-2.5">{inner}</View>
   );
 }
 
@@ -381,22 +383,34 @@ function StatusForm({
   );
 }
 
-function Action({ label, onPress, badge, children }: { label: string; onPress: () => void; badge?: number; children: ReactNode }) {
+function Action({
+  label,
+  onPress,
+  badge,
+  strong,
+  children,
+}: {
+  label: string;
+  onPress: () => void;
+  badge?: number;
+  strong?: boolean;
+  children: ReactNode;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
       onPress={onPress}
-      className="flex-1 items-center gap-1.5 rounded-sheet border border-paper-edge bg-paper-raised px-1 pb-3 pt-3.5 active:bg-paper-sunken"
+      className="flex-1 items-center gap-2 active:opacity-70"
     >
-      <View className="h-11 w-11 items-center justify-center rounded-full bg-rose-50">{children}</View>
-      {/* Two short lines rather than shrink-to-fit, which Android draws past the card at this width. */}
+      <View className={cn('h-14 w-14 items-center justify-center rounded-full', strong ? 'bg-rose-600' : 'bg-rose-50')}>{children}</View>
+      {/* Two short lines rather than shrink-to-fit, which Android draws past the button at this width. */}
       <Text className="px-1 text-center font-sans-medium text-micro" numberOfLines={2}>
         {label}
       </Text>
       {badge ? (
-        <View className="absolute right-3 top-2 min-w-[20px] items-center rounded-full bg-rose-600 px-1.5 py-0.5">
-          <Text className="text-[11px] font-sans-semibold leading-[13px] text-white">{badge > 99 ? '99+' : badge}</Text>
+        <View className="absolute right-2 top-0 min-w-[20px] items-center rounded-full bg-rose-600 px-1.5 py-0.5">
+          <Text className="font-sans-bold text-[12px] leading-[14px] text-white">{badge > 99 ? '99+' : badge}</Text>
         </View>
       ) : null}
     </Pressable>

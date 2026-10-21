@@ -12,7 +12,8 @@ export declare const colors: {
 export type PartnerSlot = 'a' | 'b';
 export declare const partner: Record<PartnerSlot, { name: 'rose' | 'teal'; base: string; strong: string; wash: string }>;
 export declare const modules: Record<'talk' | 'connect' | 'plan' | 'memory' | 'growth', string>;
-export declare const fonts: { display: string; sans: string };
+export declare const fonts: { serif: string; sans: string };
+export declare const ink: { DEFAULT: string; soft: string; muted: string };
 export declare const type: Record<'hero' | 'title' | 'heading' | 'lead' | 'body' | 'small' | 'micro', [number, number]>;
 export declare const radii: Record<'hair' | 'control' | 'sheet' | 'bubble' | 'pill', number>;
 export declare const motion: {

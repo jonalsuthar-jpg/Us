@@ -71,7 +71,7 @@ export function PlanLabour() {
             <span>You</span>
             <span>{partner.display_name}</span>
           </div>
-          <p className="font-display text-lead italic text-ink">{describeBalance(myShare, balance.total, partner.display_name)}</p>
+          <p className="font-serif text-lead italic text-ink">{describeBalance(myShare, balance.total, partner.display_name)}</p>
         </Sheet>
 
         <section aria-labelledby="recent-labour" className="space-y-3">

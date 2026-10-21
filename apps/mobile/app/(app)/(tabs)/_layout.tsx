@@ -6,6 +6,7 @@ import { HeartHandshake, House, MessageCircleHeart, NotebookPen, Sparkles, Sprou
 import { Animated, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePalette } from '@/components/ui/palette';
+import { cn } from '@/components/ui/cn';
 import { Text } from '@/components/ui/text';
 
 const ICONS: Record<'home' | ModuleId, typeof MessageCircleHeart> = {
@@ -78,20 +79,21 @@ function TabBar({ state, descriptors, emitter, jumpTo, position }: MaterialTopTa
                 jumpTo(route.key);
               }}
               onLongPress={() => emitter.emit({ type: 'tabLongPress', target: route.key })}
-              className="flex-1 items-center gap-0.5 pb-1.5 pt-2"
+              className="flex-1 items-center gap-1 pb-2 pt-2"
             >
-              <Animated.View
-                style={{ position: 'absolute', top: 0, height: 3, width: 32, borderBottomLeftRadius: 3, borderBottomRightRadius: 3, backgroundColor: active, opacity: reach }}
-              />
-              <View>
-                <Icon size={22} color={focused ? active : c.inkMuted} strokeWidth={focused ? 2.25 : 1.75} />
+              <View className="h-8 w-14 items-center justify-center">
+                {/* A soft pill behind the current tab's icon; it fades across as you swipe. */}
+                <Animated.View
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 16, backgroundColor: c.scheme === 'dark' ? '#4E1A30' : '#FFE8EE', opacity: reach }}
+                />
+                <Icon size={22} color={focused ? active : c.inkSoft} strokeWidth={focused ? 2.25 : 1.9} />
                 {badge ? (
-                  <View className="absolute -right-2.5 -top-1.5 min-w-[18px] items-center rounded-full px-1" style={{ backgroundColor: c.roseStrong }}>
+                  <View className="absolute -top-1 right-1 min-w-[18px] items-center rounded-full px-1" style={{ backgroundColor: c.roseStrong }}>
                     <Text className="font-sans-semibold text-[10px] leading-[16px] text-white">{badge}</Text>
                   </View>
                 ) : null}
               </View>
-              <Text numberOfLines={1} className="font-sans-medium text-[10px] leading-[14px]" style={{ color: focused ? active : c.inkMuted }}>
+              <Text numberOfLines={1} className={cn('text-[12px] leading-[16px]', focused ? 'font-sans-bold' : 'font-sans-medium')} style={{ color: focused ? c.ink : c.inkSoft }}>
                 {title}
               </Text>
             </Pressable>

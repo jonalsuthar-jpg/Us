@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <Link href="/home" className="flex items-center gap-2.5 rounded-control focus-visible:ring-2 focus-visible:ring-gold-400">
           <Seal size={30} />
-          <span className="font-display text-heading italic text-ink">Us</span>
+          <span className="font-serif text-heading italic text-ink">Us</span>
         </Link>
 
         <div className="mt-10 flex items-center gap-3">
@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             >
               <span className={cn('h-1.5 w-1.5 rounded-full bg-ink transition-transform', pathname.startsWith('/home') ? 'scale-150' : 'opacity-60')} />
-              <span className={cn('flex-1', pathname.startsWith('/home') ? 'font-display text-lead italic' : 'text-body')}>Home</span>
+              <span className={cn('flex-1', pathname.startsWith('/home') ? 'font-serif text-lead italic' : 'text-body')}>Home</span>
             </Link>
           </li>
           {MODULES.map((m) => {
@@ -95,7 +95,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   )}
                 >
                   <span className={cn('h-1.5 w-1.5 rounded-full transition-transform', DOT[m.id], active ? 'scale-150' : 'opacity-60')} />
-                  <span className={cn('flex-1', active ? 'font-display text-lead italic' : 'text-body')}>{m.title}</span>
+                  <span className={cn('flex-1', active ? 'font-serif text-lead italic' : 'text-body')}>{m.title}</span>
                   {m.id === 'talk' && unread > 0 && <UnreadBadge count={unread} />}
                   {m.status === 'planned' && <span className="text-micro text-ink-muted/80">soon</span>}
                 </Link>
@@ -125,27 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {MODULES.map((m) => {
           const Icon = ICONS[m.id];
           const active = pathname.startsWith(`/${m.id}`);
-          return (
-            <Link
-              key={m.id}
-              href={`/${m.id}`}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                'relative flex h-16 flex-1 flex-col items-center justify-center gap-1 text-micro',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-400',
-                active ? 'text-rose-700' : 'text-ink-muted',
-              )}
-            >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
-              <span className={active ? 'font-medium' : undefined}>{m.title}</span>
-              {active && <span className={cn('absolute top-0 h-0.5 w-8 rounded-full', DOT[m.id])} />}
-              {m.id === 'talk' && unread > 0 && (
-                <span className="absolute right-[calc(50%-20px)] top-2">
-                  <UnreadBadge count={unread} />
-                </span>
-              )}
-            </Link>
-          );
+          return <BottomTab key={m.id} href={`/${m.id}`} label={m.title} icon={Icon} active={active} badge={m.id === 'talk' ? unread : 0} />;
         })}
       </nav>
     </div>
@@ -170,20 +150,39 @@ export function MobileSettingsLink({ className }: { className?: string }) {
   );
 }
 
-function BottomTab({ href, label, icon: Icon, active }: { href: string; label: string; icon: typeof House; active: boolean }) {
+function BottomTab({
+  href,
+  label,
+  icon: Icon,
+  active,
+  badge = 0,
+}: {
+  href: string;
+  label: string;
+  icon: typeof House;
+  active: boolean;
+  badge?: number;
+}) {
   return (
     <Link
       href={href}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'relative flex h-16 flex-1 flex-col items-center justify-center gap-1 text-micro',
+        'relative flex h-16 flex-1 flex-col items-center justify-center gap-1 text-[12px] leading-4',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-400',
-        active ? 'text-rose-700' : 'text-ink-muted',
+        active ? 'font-bold text-ink' : 'font-medium text-ink-soft',
       )}
     >
-      <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
-      <span className={active ? 'font-medium' : undefined}>{label}</span>
-      {active && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-rose-400" />}
+      {/* A soft pill behind the current tab's icon. */}
+      <span className={cn('flex h-8 w-14 items-center justify-center rounded-full transition-colors', active && 'bg-rose-50 text-rose-700')} aria-hidden>
+        <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.25 : 1.9} />
+      </span>
+      <span>{label}</span>
+      {badge > 0 && (
+        <span className="absolute right-[calc(50%-24px)] top-1">
+          <UnreadBadge count={badge} />
+        </span>
+      )}
     </Link>
   );
 }

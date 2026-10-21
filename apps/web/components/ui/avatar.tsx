@@ -25,7 +25,7 @@ export function Avatar({ name, slot, src, size = 'md', online, className }: Avat
     <span className={cn('relative inline-flex shrink-0', className)}>
       <span
         className={cn(
-          'inline-flex items-center justify-center overflow-hidden rounded-full font-display italic ring-2 ring-offset-2 ring-offset-paper',
+          'inline-flex items-center justify-center overflow-hidden rounded-full font-serif italic ring-2 ring-offset-2 ring-offset-paper',
           SIZES[size],
           SLOT[slot],
         )}

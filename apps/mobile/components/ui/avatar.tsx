@@ -40,7 +40,7 @@ export function Avatar({
         {src ? (
           <Image source={{ uri: src }} className="h-full w-full" />
         ) : (
-          <Text className={cn('font-display-italic', s.text, INK[slot])}>{name.trim().charAt(0).toUpperCase() || '·'}</Text>
+          <Text className={cn('font-sans-semibold', s.text, INK[slot])}>{name.trim().charAt(0).toUpperCase() || '·'}</Text>
         )}
       </View>
       {online !== undefined && (

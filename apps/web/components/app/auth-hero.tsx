@@ -11,7 +11,7 @@ export function AuthHero() {
   const ease = tokens.motion.ease.out;
   return (
     <aside className="relative flex min-h-[38dvh] flex-col justify-between overflow-hidden bg-plum-800 px-8 py-10 text-paper sm:px-12 lg:min-h-dvh lg:py-14">
-      <span className="font-display text-heading italic tracking-tight text-paper/90">Us</span>
+      <span className="font-serif text-heading italic tracking-tight text-paper/90">Us</span>
 
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden>
         <motion.div
@@ -30,7 +30,7 @@ export function AuthHero() {
 
       <div className="relative max-w-md">
         <motion.h1
-          className="text-balance font-display text-[40px] font-light leading-[1.05] tracking-tight lg:text-[56px]"
+          className="text-balance font-serif text-[40px] font-light leading-[1.05] tracking-tight lg:text-[56px]"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease, delay: 0.9 }}

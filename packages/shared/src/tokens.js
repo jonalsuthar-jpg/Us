@@ -100,21 +100,28 @@ const modules = {
 };
 
 const fonts = {
-  // Warm serif for hero / emotional / memory moments — used deliberately.
-  display: 'Fraunces',
-  // Humanist sans for UI and body.
-  sans: 'Work Sans',
+  // Warm serif, only for deliberate moments (memories, empty states) in light / italic.
+  serif: 'Fraunces',
+  // UI, body, names and headings (bold).
+  sans: 'Inter',
+};
+
+/** Text on light surfaces: near-black, and two greys that stay easy to read. */
+const ink = {
+  DEFAULT: '#15121A', // 18.5:1 on white
+  soft: '#4A4552', // 9.3:1 — previews, details
+  muted: '#6B6573', // 5.6:1 — times, hints
 };
 
 /** Type scale in px (line-height in px). */
 const type = {
   hero: [44, 48],
-  title: [30, 36],
-  heading: [22, 28],
-  lead: [18, 27],
-  body: [16, 24],
-  small: [14, 20],
-  micro: [12, 16],
+  title: [28, 34],
+  heading: [21, 27],
+  lead: [17, 24], // names, row titles
+  body: [16, 22], // messages, body copy
+  small: [15, 21], // previews, details
+  micro: [13, 18], // labels, times
 };
 
 /**
@@ -124,7 +131,7 @@ const radii = {
   hair: 4,
   control: 12, // inputs, buttons
   sheet: 20, // paper sheets
-  bubble: 22, // chat bubbles (tail corner overrides to `hair`)
+  bubble: 16, // chat bubbles (tail corner overrides to `hair`)
   pill: 999,
 };
 
@@ -138,4 +145,4 @@ const motion = {
   },
 };
 
-module.exports = { colors, partner, modules, fonts, type, radii, motion };
+module.exports = { colors, ink, partner, modules, fonts, type, radii, motion };

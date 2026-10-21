@@ -87,7 +87,7 @@ export function GrowthLoveLanguages() {
           </>
         ) : (
           <Sheet tone="inset" pad="md">
-            <p className="font-display text-lead italic text-ink">Not shared yet.</p>
+            <p className="font-serif text-lead italic text-ink">Not shared yet.</p>
             <p className="mt-1 text-small text-ink-soft">
               If {partner.display_name} takes the quiz and chooses to share, you’ll see what helps them feel loved — and an idea now and then.
             </p>
@@ -106,7 +106,7 @@ function Result({ result }: { result: LoveLanguageResult }) {
   return (
     <Sheet pad="md" className="space-y-4">
       <div>
-        <p className="font-display text-[32px] italic leading-tight text-ink">{top.title}</p>
+        <p className="font-serif text-[32px] italic leading-tight text-ink">{top.title}</p>
         <p className="mt-1 text-small text-ink-soft">{top.blurb}</p>
       </div>
       <ul className="space-y-2">

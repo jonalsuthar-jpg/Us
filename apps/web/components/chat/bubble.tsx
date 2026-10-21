@@ -4,14 +4,14 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Ticks } from '@/components/ui/ticks';
 import { cn } from '@/lib/cn';
 
+// Mine: a light wash of my colour with dark text, so every word reads clearly.
 const MINE: Record<PartnerSlot, string> = {
-  a: 'bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-[0_6px_16px_-10px_rgba(196,29,85,0.7)]',
-  b: 'bg-gradient-to-br from-teal-500 to-teal-600 text-white shadow-[0_6px_16px_-10px_rgba(10,119,109,0.7)]',
+  a: 'bg-rose-100 text-ink shadow-[0_1px_0.5px_rgba(20,14,28,0.08)]',
+  b: 'bg-teal-100 text-ink shadow-[0_1px_0.5px_rgba(20,14,28,0.08)]',
 };
-// Their messages: a clean raised card, tinted only at the edge with their colour.
 const THEIRS: Record<PartnerSlot, string> = {
-  a: 'bg-paper-raised text-ink border border-rose-200/60 shadow-[0_4px_14px_-10px_rgba(36,25,51,0.35)]',
-  b: 'bg-paper-raised text-ink border border-teal-200/60 shadow-[0_4px_14px_-10px_rgba(36,25,51,0.35)]',
+  a: 'bg-paper-raised text-ink shadow-[0_1px_0.5px_rgba(20,14,28,0.08)]',
+  b: 'bg-paper-raised text-ink shadow-[0_1px_0.5px_rgba(20,14,28,0.08)]',
 };
 
 export interface ReplyQuote {
@@ -155,12 +155,12 @@ export function Bubble({
               onClick={() => onJumpTo?.(quote.id)}
               className={cn(
                 'mb-1.5 block w-full rounded-[10px] border-l-[3px] px-2.5 py-1.5 text-left text-small focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
-                mine ? 'border-white/70 bg-white/15' : 'border-ink/25 bg-paper-sunken',
+                mine ? 'border-rose-600 bg-paper-raised/60' : 'border-ink/25 bg-paper-sunken',
                 url && message.media_kind === 'image' && 'm-1 w-[calc(100%-0.5rem)]',
               )}
             >
-              <span className={cn('block font-medium', mine ? 'text-white' : 'text-ink')}>{quote.author}</span>
-              <span className={cn('line-clamp-2', mine ? 'text-white/85' : 'text-ink-soft')}>{quote.text}</span>
+              <span className="block font-semibold text-ink">{quote.author}</span>
+              <span className="line-clamp-2 text-ink-soft">{quote.text}</span>
             </button>
           ) : null}
 
@@ -186,7 +186,7 @@ export function Bubble({
               ) : (
                 <span className="h-9 animate-pulse rounded-full bg-black/10" />
               )}
-              <span className={cn('text-micro', mine ? 'text-white/80' : 'text-ink-muted')}>🎤 {formatVoiceLength(message.media_meta?.duration_ms)}</span>
+              <span className="text-micro text-ink-muted">🎤 {formatVoiceLength(message.media_meta?.duration_ms)}</span>
             </span>
           ) : null}
 
@@ -199,8 +199,7 @@ export function Bubble({
           <span aria-hidden className={cn('inline-block', message.pinned_at ? 'w-[5.25rem]' : 'w-[4.25rem]')} />
           <span
             className={cn(
-              'absolute bottom-1.5 right-3 flex items-center gap-1 text-[11px] leading-none',
-              mine ? 'text-white/75' : 'text-ink-muted',
+              'absolute bottom-1.5 right-3 flex items-center gap-1 text-[12px] leading-none text-ink-muted',
               url && message.media_kind === 'image' && !hasText && 'rounded-full bg-black/40 px-1.5 py-1 text-white',
             )}
           >

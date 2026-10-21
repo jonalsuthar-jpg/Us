@@ -12,7 +12,9 @@ const config: Config = {
     extend: {
       fontFamily: {
         // CSS variables come from next/font in app/layout.tsx
-        display: ['var(--font-display)', 'Georgia', 'serif'],
+        // Headings and names: Inter, bold (see globals.css). The serif is opt-in.
+        display: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-serif)', 'Georgia', 'serif'],
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
       },
       keyframes: {

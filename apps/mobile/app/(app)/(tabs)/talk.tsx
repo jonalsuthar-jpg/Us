@@ -151,28 +151,28 @@ export default function Talk() {
   return (
     // Android draws edge-to-edge, so the window no longer resizes for the keyboard:
     // lift the composer ourselves on both platforms.
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.paper }} behavior="padding">
-      <View style={{ paddingTop: insets.top + 8 }} className="flex-row items-center gap-3 border-b border-paper-edge px-4 pb-3">
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.chat }} behavior="padding">
+      <View style={{ paddingTop: insets.top + 8 }} className="flex-row items-center gap-2 border-b border-paper-edge bg-paper-raised pb-2.5 pl-4 pr-2">
         <Avatar name={partner.display_name} slot={partnerSlot} online={partnerOnline} />
         <View className="flex-1">
-          <Display className="text-heading" numberOfLines={1}>
+          <Display className="text-lead" numberOfLines={1}>
             {partner.display_name}
           </Display>
-          <Text className={partnerTyping ? 'font-display-italic text-small text-rose-700' : 'text-small text-ink-muted'}>
-            {partnerTyping ? 'typing…' : partnerOnline ? 'here now' : 'away'}
+          <Text className={cn('text-micro', partnerTyping || partnerOnline ? 'font-sans-medium text-teal-700' : 'text-ink-muted')}>
+            {partnerTyping ? 'typing…' : partnerOnline ? 'online' : 'away'}
           </Text>
         </View>
-        <IconButton label={`Voice call ${partner.display_name}`} tone="rose" size="sm" onPress={() => void calls.startCall('audio')}>
-          <Phone size={19} color={c.onRose} />
+        <IconButton label={`Video call ${partner.display_name}`} size="sm" onPress={() => void calls.startCall('video')}>
+          <Video size={22} color={c.ink} />
         </IconButton>
-        <IconButton label={`Video call ${partner.display_name}`} tone="rose" size="sm" onPress={() => void calls.startCall('video')}>
-          <Video size={19} color={c.onRose} />
+        <IconButton label={`Voice call ${partner.display_name}`} size="sm" onPress={() => void calls.startCall('audio')}>
+          <Phone size={20} color={c.ink} />
         </IconButton>
         <IconButton label="Search messages" size="sm" onPress={() => setPanel('search')}>
-          <Search size={19} color={c.inkSoft} />
+          <Search size={20} color={c.ink} />
         </IconButton>
         <IconButton label="Settings" size="sm" onPress={() => router.push('/settings')}>
-          <Settings size={19} color={c.inkSoft} />
+          <Settings size={20} color={c.ink} />
         </IconButton>
       </View>
 
@@ -232,10 +232,8 @@ export default function Talk() {
             }
             renderItem={({ item }) =>
               item.kind === 'day' ? (
-                <View className="my-5 flex-row items-center gap-4" accessibilityRole="header">
-                  <View className="h-px flex-1 bg-paper-edge" />
-                  <Text className="font-display-italic text-small text-ink-muted">{item.label}</Text>
-                  <View className="h-px flex-1 bg-paper-edge" />
+                <View className="my-3 items-center" accessibilityRole="header">
+                  <Text className="overflow-hidden rounded-lg bg-paper-raised px-3 py-1 font-sans-medium text-micro text-ink-soft">{item.label}</Text>
                 </View>
               ) : item.message.kind === 'call' ? (
                 <CallEntry message={item.message} myId={me.id} onCallBack={(m) => void calls.startCall(m)} />

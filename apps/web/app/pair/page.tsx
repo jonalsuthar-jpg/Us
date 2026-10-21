@@ -106,7 +106,7 @@ export default function PairPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col px-6 py-10 sm:py-16">
       <header className="flex items-center justify-between">
-        <span className="flex items-center gap-2 font-display text-heading italic text-ink">
+        <span className="flex items-center gap-2 font-serif text-heading italic text-ink">
           <Seal size={28} /> Us
         </span>
         <Button

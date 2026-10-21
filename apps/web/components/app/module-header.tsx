@@ -21,7 +21,7 @@ export function ModuleHeader({ id, children }: { id: ModuleId; children?: ReactN
       <MobileSettingsLink className="absolute right-0 top-0" />
       <div className="relative">
         <h1 className="font-display text-[40px] leading-[1.05] text-ink sm:text-[52px]">{mod.title}</h1>
-        <p className="mt-3 max-w-xl text-balance font-display text-lead font-light italic text-ink-soft">{mod.tagline}</p>
+        <p className="mt-3 max-w-xl text-balance font-serif text-lead font-light italic text-ink-soft">{mod.tagline}</p>
       </div>
       {children ? <div className="relative">{children}</div> : null}
     </header>
@@ -32,7 +32,7 @@ export function ModuleHeader({ id, children }: { id: ModuleId; children?: ReactN
 export function EmptyNote({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="rounded-sheet border border-dashed border-paper-edge px-6 py-10 text-center">
-      <p className="font-display text-lead italic text-ink">{title}</p>
+      <p className="font-serif text-lead italic text-ink">{title}</p>
       {children ? <div className="mx-auto mt-2 max-w-sm text-small text-ink-soft">{children}</div> : null}
     </div>
   );

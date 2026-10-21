@@ -276,7 +276,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
             )}
             <Avatar name={partner.display_name} slot={partnerSlot} size="xl" className="[&>span]:ring-offset-plum-800" />
           </div>
-          <h2 className="mt-10 font-display text-hero font-light [@media(max-height:500px)]:mt-2 [@media(max-height:500px)]:text-title">{partner.display_name}</h2>
+          <h2 className="mt-10 font-serif text-hero font-light [@media(max-height:500px)]:mt-2 [@media(max-height:500px)]:text-title">{partner.display_name}</h2>
           <p className="mt-2 text-lead tabular-nums text-paper/70" aria-live="polite">
             {statusLine}
           </p>

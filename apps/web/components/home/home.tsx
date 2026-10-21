@@ -16,7 +16,7 @@ import {
   type Status,
 } from '@us/shared';
 import { useCallManager, useCouple, useCoupleData, useTyping } from '@us/shared/react';
-import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Phone, Sparkles, Video } from 'lucide-react';
+import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Phone, Plus, Sparkles, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
@@ -169,16 +169,22 @@ export function Home() {
           {photoError ? <ErrorNote>{photoError}</ErrorNote> : null}
 
           {/* How you both are */}
-          <div className="grid grid-cols-2 gap-3">
-            <StatusCard
+          <div className="divide-y divide-paper-edge">
+            <StatusRow
               who={theirName}
               slot={partnerSlot}
               status={theirStatus}
-              presence={partnerTyping ? 'typing…' : partnerOnline ? 'here now' : 'away'}
+              presence={partnerTyping ? 'typing…' : partnerOnline ? 'online' : undefined}
               online={partnerOnline}
               empty="No status yet"
             />
-            <StatusCard who="You" slot={mySlot} status={myStatus} empty="How are you?" onEdit={() => setEditingStatus(true)} />
+            <StatusRow
+              who="Your status"
+              slot={mySlot}
+              status={myStatus}
+              empty={`Tap to tell ${theirName} how you are`}
+              onEdit={() => setEditingStatus(true)}
+            />
           </div>
 
           {/* Reach each other */}
@@ -186,14 +192,14 @@ export function Home() {
             <Action label="Message" href="/talk" badge={unread}>
               <MessageCircleHeart className="h-5 w-5" />
             </Action>
-            <Action label="Voice call" onClick={() => void calls.startCall('audio')}>
+            <Action label="Call" onClick={() => void calls.startCall('audio')}>
               <Phone className="h-5 w-5" />
             </Action>
-            <Action label="Video call" onClick={() => void calls.startCall('video')}>
+            <Action label="Video" onClick={() => void calls.startCall('video')}>
               <Video className="h-5 w-5" />
             </Action>
-            <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onClick={() => void tap()}>
-              <HeartPulse className={cn('h-5 w-5', tapState === 'sent' && 'animate-ping')} />
+            <Action strong label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onClick={() => void tap()}>
+              <HeartPulse className={cn('h-6 w-6', tapState === 'sent' && 'animate-ping')} />
             </Action>
           </div>
 
@@ -215,7 +221,7 @@ export function Home() {
 
           {d?.nudged ? (
             <Sheet tone="note" accent="rose" pad="sm">
-              <p className="font-display text-lead italic text-ink">{theirName} could use a little extra care today.</p>
+              <p className="font-serif text-lead italic text-ink">{theirName} could use a little extra care today.</p>
               <p className="mt-1 text-small text-ink-soft">A message, a call, or something small that says you noticed.</p>
             </Sheet>
           ) : null}
@@ -299,7 +305,7 @@ export function Home() {
   );
 }
 
-function StatusCard({
+function StatusRow({
   who,
   slot,
   status,
@@ -318,47 +324,36 @@ function StatusCard({
 }) {
   const body = (
     <>
-      <span className="flex items-center gap-2">
-        <Avatar name={who} slot={slot} size="sm" online={online} />
-        <span className="truncate text-small font-medium text-ink">{who}</span>
-      </span>
-      {status ? (
-        <>
-          <span className="mt-3 block text-[32px] leading-none" aria-hidden>
-            {status.emoji ?? '💬'}
-          </span>
-          <span className="mt-2 block line-clamp-2 font-medium text-ink">{status.text ?? ''}</span>
-          <span className="mt-1 block text-micro text-ink-muted" suppressHydrationWarning>
-            {timeAgo(status.at)}
-            {presence ? ` · ${presence}` : ''}
-          </span>
-        </>
+      {onEdit && !status ? (
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-700" aria-hidden>
+          <Plus className="h-5 w-5" />
+        </span>
       ) : (
-        <>
-          <span className="mt-3 block text-[32px] leading-none text-ink-muted/50" aria-hidden>
-            {onEdit ? '+' : '·'}
-          </span>
-          <span className="mt-2 block text-ink-soft">{empty}</span>
-          {presence ? <span className="mt-1 block text-micro text-ink-muted">{presence}</span> : null}
-        </>
+        <Avatar name={who} slot={slot} online={online} />
       )}
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-lead font-semibold text-ink">{who}</span>
+          {presence ? <span className="text-micro font-medium text-teal-700">{presence}</span> : null}
+        </span>
+        <span className="block truncate text-small text-ink-soft" suppressHydrationWarning>
+          {status ? `${status.emoji ? `${status.emoji} ` : ''}${status.text ?? ''} · ${timeAgo(status.at)}` : empty}
+        </span>
+      </span>
     </>
   );
-  const surface = cn(
-    'block h-full w-full rounded-sheet border bg-paper-raised p-4 text-left shadow-[0_12px_32px_-22px_rgba(36,25,51,0.4)]',
-    slot === 'a' ? 'border-rose-200' : 'border-teal-200',
-  );
+  const row = 'flex w-full items-center gap-4 py-2.5 text-left';
   return onEdit ? (
     <button
       type="button"
       onClick={onEdit}
       aria-label={`Your status: ${status?.text ?? 'not set'}. Change`}
-      className={cn(surface, 'transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400')}
+      className={cn(row, 'rounded-control transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400')}
     >
       {body}
     </button>
   ) : (
-    <div className={surface}>{body}</div>
+    <div className={row}>{body}</div>
   );
 }
 
@@ -420,17 +415,37 @@ function StatusForm({ initial, onSave }: { initial: Status | null; onSave: (s: {
   );
 }
 
-function Action({ label, href, onClick, badge, children }: { label: string; href?: string; onClick?: () => void; badge?: number; children: ReactNode }) {
+function Action({
+  label,
+  href,
+  onClick,
+  badge,
+  strong,
+  children,
+}: {
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  badge?: number;
+  strong?: boolean;
+  children: ReactNode;
+}) {
   const cls =
-    'relative flex flex-col items-center gap-2 rounded-sheet border border-paper-edge bg-paper-raised px-1 py-4 text-center text-micro font-medium leading-tight text-ink sm:text-small transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-paper-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';
+    'group relative flex flex-col items-center gap-2 text-center text-micro font-medium leading-tight text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 rounded-control';
   const inner = (
     <>
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-700" aria-hidden>
+      <span
+        className={cn(
+          'flex h-14 w-14 items-center justify-center rounded-full transition-transform group-hover:-translate-y-0.5',
+          strong ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700',
+        )}
+        aria-hidden
+      >
         {children}
       </span>
       {label}
       {badge ? (
-        <span className="absolute right-3 top-2 min-w-[20px] rounded-full bg-rose-600 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white">
+        <span className="absolute right-[calc(50%-34px)] top-0 min-w-[20px] rounded-full bg-rose-600 px-1.5 py-0.5 text-center text-[12px] font-bold leading-none text-white">
           {badge > 99 ? '99+' : badge}
           <span className="sr-only"> unread</span>
         </span>
