@@ -1,6 +1,6 @@
-import { formatClock, formatVoiceLength, groupReactions, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
-import { Copy, Pin, PinOff, Reply } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { formatClock, formatVoiceLength, groupReactions, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
+import { Copy, Pin, PinOff, Plus, Reply } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Ticks } from '@/components/ui/ticks';
 import { cn } from '@/lib/cn';
 
@@ -70,6 +70,25 @@ export function Bubble({
   const url = mediaUrl ?? message.localUri;
   const hasText = !!message.body?.trim();
   const settled = !message.pending && !message.failed;
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    if (!active) setMore(false);
+  }, [active]);
+  const reactButton = (e: string) => (
+    <button
+      key={e}
+      type="button"
+      aria-label={myReaction === e ? `Remove ${e}` : `React ${e}`}
+      aria-pressed={myReaction === e}
+      onClick={() => onReact?.(myReaction === e ? null : e)}
+      className={cn(
+        'flex h-9 w-9 items-center justify-center rounded-full text-[20px] transition-transform hover:scale-110 hover:bg-paper-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+        myReaction === e && 'bg-rose-50',
+      )}
+    >
+      {e}
+    </button>
+  );
 
   return (
     <li
@@ -80,23 +99,17 @@ export function Bubble({
         <div
           role="toolbar"
           aria-label="Message actions"
-          className={cn('mb-1 flex items-center gap-0.5 rounded-full border border-paper-edge bg-paper-raised p-1 shadow-[0_8px_24px_-12px_rgba(36,25,51,0.4)]')}
+          className={cn(
+            // Wraps rather than running off a phone-width screen.
+            'mb-1 flex max-w-[calc(100vw-2rem)] flex-wrap items-center gap-0.5 rounded-[22px] border border-paper-edge bg-paper-raised p-1 shadow-[0_8px_24px_-12px_rgba(36,25,51,0.4)] sm:max-w-md',
+            mine ? 'justify-end' : 'justify-start',
+          )}
         >
-          {QUICK_REACTIONS.map((e) => (
-            <button
-              key={e}
-              type="button"
-              aria-label={myReaction === e ? `Remove ${e}` : `React ${e}`}
-              aria-pressed={myReaction === e}
-              onClick={() => onReact?.(myReaction === e ? null : e)}
-              className={cn(
-                'flex h-9 w-9 items-center justify-center rounded-full text-[20px] transition-transform hover:scale-110 hover:bg-paper-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
-                myReaction === e && 'bg-rose-50',
-              )}
-            >
-              {e}
-            </button>
-          ))}
+          {QUICK_REACTIONS.map(reactButton)}
+          <ToolButton label={more ? 'Fewer reactions' : 'More reactions'} onClick={() => setMore((v) => !v)}>
+            <Plus className="h-4 w-4" />
+          </ToolButton>
+          {more ? <div className="flex w-full flex-wrap gap-0.5 border-y border-paper-edge py-1">{MORE_REACTIONS.map(reactButton)}</div> : null}
           <span className="mx-1 h-6 w-px bg-paper-edge" aria-hidden />
           <ToolButton label="Reply" onClick={onReply}>
             <Reply className="h-4 w-4" />
@@ -118,6 +131,12 @@ export function Bubble({
             // Taps on links, media controls and quotes do their own thing.
             if ((e.target as HTMLElement).closest('a,button,audio')) return;
             onToggleActive?.();
+          }}
+          onDoubleClick={(e) => {
+            // Double-tap toggles a heart.
+            if (!settled || (e.target as HTMLElement).closest('a,button,audio')) return;
+            window.getSelection()?.removeAllRanges();
+            onReact?.(myReaction === '❤️' ? null : '❤️');
           }}
           className={cn(
             'relative cursor-default rounded-bubble text-body transition-shadow',

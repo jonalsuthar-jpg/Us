@@ -1,10 +1,10 @@
-import { clusters, formatDay, groupByDay, listPinned, messagePreview, QUICK_REACTIONS, searchMessages, type Message } from '@us/shared';
+import { clusters, formatDay, groupByDay, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, type Message } from '@us/shared';
 import { useCallManager, useChatMedia, useCouple, useCoupleData, useMessages, useTyping } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { Copy, Phone, Pin, PinOff, Reply, Search, Settings, Video } from 'lucide-react-native';
+import { Copy, Phone, Pin, PinOff, Plus, Reply, Search, Settings, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, FlatList, Modal, Pressable, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -228,6 +228,7 @@ export default function Talk() {
                   setActing(item.message);
                 }}
                 onReact={(emoji) => void react(item.message.id, emoji).catch(fail)}
+                onReply={() => setReplyTo(item.message)}
                 onOpenPhoto={setPhoto}
                 onJumpTo={(id) => !jumpTo(id) && say('That message is further up. Scroll up to load it.')}
               />
@@ -287,6 +288,8 @@ function MessageActions({
 }) {
   const c = usePalette();
   const mine = message?.reactions?.[myId] ?? null;
+  const [more, setMore] = useState(false);
+  useEffect(() => setMore(false), [message]);
   const act = (fn: (m: Message) => void) => () => {
     if (message) fn(message);
     onClose();
@@ -300,20 +303,27 @@ function MessageActions({
               {messagePreview(message)}
             </Text>
           ) : null}
-          <View className="flex-row justify-between">
+          <View className="flex-row items-center justify-between rounded-full bg-paper-sunken p-1">
             {QUICK_REACTIONS.map((e) => (
-              <Pressable
-                key={e}
-                accessibilityRole="button"
-                accessibilityLabel={mine === e ? `Remove ${e}` : `React ${e}`}
-                accessibilityState={{ selected: mine === e }}
-                onPress={act((m) => onReact(m, mine === e ? null : e))}
-                className={cn('h-12 w-12 items-center justify-center rounded-full', mine === e ? 'bg-rose-50' : 'active:bg-paper-sunken')}
-              >
-                <Text className="text-[26px] leading-[32px]">{e}</Text>
-              </Pressable>
+              <ReactionButton key={e} emoji={e} selected={mine === e} onPress={act((m) => onReact(m, mine === e ? null : e))} />
             ))}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={more ? 'Fewer reactions' : 'More reactions'}
+              accessibilityState={{ expanded: more }}
+              onPress={() => setMore((v) => !v)}
+              className={cn('h-11 w-11 items-center justify-center rounded-full', more ? 'bg-paper-raised' : 'active:bg-paper-raised')}
+            >
+              <Plus size={22} color={c.inkSoft} />
+            </Pressable>
           </View>
+          {more ? (
+            <View className="flex-row flex-wrap justify-between gap-y-1">
+              {MORE_REACTIONS.map((e) => (
+                <ReactionButton key={e} emoji={e} selected={mine === e} onPress={act((m) => onReact(m, mine === e ? null : e))} />
+              ))}
+            </View>
+          ) : null}
           <ActionRow label="Reply" onPress={act(onReply)} icon={<Reply size={20} color={c.ink} />} />
           <ActionRow
             label={message?.pinned_at ? 'Unpin' : 'Pin for both of you'}
@@ -326,6 +336,20 @@ function MessageActions({
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+function ReactionButton({ emoji, selected, onPress }: { emoji: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={selected ? `Remove ${emoji}` : `React ${emoji}`}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      className={cn('h-11 w-11 items-center justify-center rounded-full', selected ? 'bg-rose-100' : 'active:bg-paper-raised')}
+    >
+      <Text className="text-[24px] leading-[30px]">{emoji}</Text>
+    </Pressable>
   );
 }
 

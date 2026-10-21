@@ -422,7 +422,7 @@ function StatusForm({ initial, onSave }: { initial: Status | null; onSave: (s: {
 
 function Action({ label, href, onClick, badge, children }: { label: string; href?: string; onClick?: () => void; badge?: number; children: ReactNode }) {
   const cls =
-    'relative flex flex-col items-center gap-2 rounded-sheet border border-paper-edge bg-paper-raised px-1 py-4 text-center text-micro font-medium text-ink sm:text-small transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-paper-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';
+    'relative flex flex-col items-center gap-2 rounded-sheet border border-paper-edge bg-paper-raised px-1 py-4 text-center text-micro font-medium leading-tight text-ink sm:text-small transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-paper-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';
   const inner = (
     <>
       <span className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-700" aria-hidden>

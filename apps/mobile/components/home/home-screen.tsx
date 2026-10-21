@@ -160,14 +160,14 @@ export function HomeScreen() {
       </View>
 
       {/* Reach each other */}
-      <View className="flex-row gap-3">
+      <View className="flex-row gap-2">
         <Action label="Message" onPress={() => router.push('/talk')} badge={unread}>
           <MessageCircleHeart size={22} color={c.roseStrong} />
         </Action>
-        <Action label="Voice call" onPress={() => void calls.startCall('audio')}>
+        <Action label="Call" onPress={() => void calls.startCall('audio')}>
           <Phone size={22} color={c.roseStrong} />
         </Action>
-        <Action label="Video call" onPress={() => void calls.startCall('video')}>
+        <Action label="Video" onPress={() => void calls.startCall('video')}>
           <Video size={22} color={c.roseStrong} />
         </Action>
         <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onPress={() => void tap()}>
@@ -280,7 +280,7 @@ function StatusCard({
   onPress?: () => void;
 }) {
   const inner = (
-    <Sheet pad="sm" className={cn('flex-1 gap-2', slot === 'a' ? 'border-rose-200' : 'border-teal-200')}>
+    <Sheet pad="sm" className={cn('grow gap-2', slot === 'a' ? 'border-rose-200' : 'border-teal-200')}>
       <View className="flex-row items-center gap-2">
         <Avatar name={who} slot={slot} size="sm" online={online} />
         <Text className="flex-1 font-sans-medium text-small" numberOfLines={1}>
@@ -379,10 +379,11 @@ function Action({ label, onPress, badge, children }: { label: string; onPress: (
       accessibilityRole="button"
       accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
       onPress={onPress}
-      className="flex-1 items-center gap-1.5 rounded-sheet border border-paper-edge bg-paper-raised py-3.5 active:bg-paper-sunken"
+      className="flex-1 items-center gap-1.5 rounded-sheet border border-paper-edge bg-paper-raised px-1 pb-3 pt-3.5 active:bg-paper-sunken"
     >
       <View className="h-11 w-11 items-center justify-center rounded-full bg-rose-50">{children}</View>
-      <Text className="px-1 font-sans-medium text-small" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+      {/* Two short lines rather than shrink-to-fit, which Android draws past the card at this width. */}
+      <Text className="px-1 text-center font-sans-medium text-micro" numberOfLines={2}>
         {label}
       </Text>
       {badge ? (

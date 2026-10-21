@@ -171,6 +171,13 @@ export function messagePreview(m: Pick<MessageRow, 'body' | 'media_kind' | 'kind
 
 export const QUICK_REACTIONS = ['❤️', '😂', '😮', '😢', '👍', '🔥'] as const;
 
+/** Behind the "+" next to the quick reactions. Any emoji works; these are the ones a couple reaches for. */
+export const MORE_REACTIONS = [
+  '😍', '🥰', '😘', '🤗', '🥺', '😊', '😁', '🤣', '😅', '😉', '😎', '🤔',
+  '😴', '😭', '😡', '🙄', '😬', '🤯', '🥳', '🙈', '💕', '💖', '💔', '✨',
+  '🙏', '👏', '💪', '👌', '🤞', '🌹', '🎉', '💯',
+] as const;
+
 /** Set (or with null, remove) my reaction. */
 export async function reactToMessage(sb: UsClient, id: string, emoji: string | null): Promise<MessageRow> {
   const { data, error } = await sb.rpc('react_to_message', { p_id: id, p_emoji: emoji });

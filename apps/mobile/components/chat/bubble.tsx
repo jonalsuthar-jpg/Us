@@ -1,8 +1,9 @@
 import { describeCall, formatClock, formatVoiceLength, groupReactions, messagePreview, type Message, type PartnerSlot } from '@us/shared';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { Pause, Phone, PhoneMissed, Pin, Play, Video } from 'lucide-react-native';
-import { useEffect } from 'react';
+import { Pause, Phone, PhoneMissed, Pin, Play, Reply, Video } from 'lucide-react-native';
+import { useEffect, useRef } from 'react';
 import { Image, Pressable, View } from 'react-native';
+import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { cn } from '../ui/cn';
 import { Text } from '../ui/text';
 import { Ticks } from '../ui/ticks';
@@ -32,6 +33,7 @@ export function Bubble({
   onRetry,
   onLongPress,
   onReact,
+  onReply,
   onOpenPhoto,
   onJumpTo,
 }: {
@@ -49,6 +51,8 @@ export function Bubble({
   /** Opens reactions / reply / pin. */
   onLongPress?: () => void;
   onReact?: (emoji: string | null) => void;
+  /** Swipe right, as in most messengers. */
+  onReply?: () => void;
   onOpenPhoto?: (url: string) => void;
   onJumpTo?: (id: string) => void;
 }) {
@@ -58,91 +62,122 @@ export function Bubble({
   const photo = message.media_kind === 'image';
   const meta = message.media_meta;
   const describe = hasText ? message.body : messagePreview(message);
+  const settled = !message.pending && !message.failed;
+  const swipe = useRef<SwipeableMethods>(null);
+  const lastTap = useRef(0);
+  // Double-tap toggles a heart.
+  const onPress = () => {
+    const now = Date.now();
+    if (settled && now - lastTap.current < 300) {
+      lastTap.current = 0;
+      onReact?.(message.reactions?.[myId] === '❤️' ? null : '❤️');
+    } else lastTap.current = now;
+  };
   return (
-    <View className={cn(mine ? 'items-end' : 'items-start', first ? 'mt-3' : 'mt-0.5', reactions.length ? 'mb-3' : '')}>
-      <Pressable
-        onLongPress={onLongPress}
-        delayLongPress={300}
-        accessibilityHint="Long press to react, reply or pin"
-        accessibilityActions={[{ name: 'longpress', label: 'React, reply or pin' }]}
-        onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && onLongPress?.()}
-        className="max-w-[80%]"
-      >
-        <View
-          accessible
-          accessibilityLabel={`${mine ? 'You' : authorName}: ${describe}. ${formatClock(message.created_at)}${
-            mine ? `, ${message.failed ? 'not sent' : message.pending ? 'sending' : message.status}` : ''
-          }${message.pinned_at ? ', pinned' : ''}`}
-          className={cn(
-            'rounded-bubble',
-            photo && url ? 'overflow-hidden p-1' : 'px-3.5 pb-1.5 pt-2',
-            mine ? MINE[slot] : THEIRS[slot],
-            last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
-            message.pending && 'opacity-80',
-            highlighted && 'border-2 border-gold-400',
-          )}
-        >
-          {quote ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Reply to ${quote.author}: ${quote.text}. Show it`}
-              onPress={() => onJumpTo?.(quote.id)}
-              className={cn('mb-1.5 rounded-[10px] border-l-[3px] px-2.5 py-1.5', mine ? 'border-white/70 bg-white/15' : 'border-plum-300 bg-paper-sunken', photo && url && 'm-1')}
-            >
-              <Text className={cn('font-sans-medium text-micro', mine ? 'text-white' : 'text-ink')}>{quote.author}</Text>
-              <Text numberOfLines={2} className={cn('text-small', mine ? 'text-white/85' : 'text-ink-soft')}>
-                {quote.text}
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {photo ? (
-            url ? (
-              <Pressable accessibilityRole="imagebutton" accessibilityLabel="Open photo" onPress={() => onOpenPhoto?.(url)} onLongPress={onLongPress}>
-                <Image
-                  source={{ uri: url }}
-                  style={{ width: 240, aspectRatio: meta?.width && meta?.height ? Math.max(meta.width / meta.height, 0.6) : 4 / 3 }}
-                  className="rounded-[14px] bg-black/10"
-                  resizeMode="cover"
-                />
-              </Pressable>
-            ) : (
-              <View style={{ width: 240, height: 180 }} className="rounded-[14px] bg-black/10" />
-            )
-          ) : null}
-
-          {message.media_kind === 'audio' ? <VoiceNote url={url} durationMs={meta?.duration_ms} mine={mine} /> : null}
-
-          {hasText ? <Text className={cn(mine ? 'text-white' : 'text-ink', photo && url && 'px-2.5 pt-1.5')}>{message.body}</Text> : null}
-          <View className={cn('mt-0.5 flex-row items-center justify-end gap-1 self-end', photo && url && 'px-2 pb-1')}>
-            {message.pinned_at ? <Pin size={11} color={mine ? 'rgba(255,255,255,0.75)' : '#8a7f94'} /> : null}
-            <Text className={cn('text-[11px] leading-[14px]', mine ? 'text-white/75' : 'text-ink-muted')}>{formatClock(message.created_at)}</Text>
-            {mine && <Ticks status={message.status} pending={message.pending} failed={message.failed} />}
+    <Swipeable
+      ref={swipe}
+      enabled={settled && !!onReply}
+      friction={2}
+      leftThreshold={56}
+      overshootLeft={false}
+      renderLeftActions={() => (
+        <View className="w-14 items-center justify-center">
+          <View className="h-8 w-8 items-center justify-center rounded-full bg-paper-sunken">
+            <Reply size={16} color="#8a7f94" />
           </View>
         </View>
-        {reactions.length ? (
-          <View className="absolute -bottom-3.5 left-3 flex-row gap-1">
-            {reactions.map((r) => (
-              <Pressable
-                key={r.emoji}
-                accessibilityRole="button"
-                accessibilityLabel={`${r.emoji} ${r.count}${r.mine ? ', yours. Remove' : ''}`}
-                onPress={() => onReact?.(r.mine ? null : r.emoji)}
-                className={cn('h-6 flex-row items-center gap-0.5 rounded-full border bg-paper-raised px-1.5', r.mine ? 'border-rose-300' : 'border-paper-edge')}
-              >
-                <Text className="text-[13px] leading-[16px]">{r.emoji}</Text>
-                {r.count > 1 ? <Text className="text-micro text-ink-muted">{String(r.count)}</Text> : null}
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-      </Pressable>
-      {message.failed && onRetry && (
-        <Pressable accessibilityRole="button" onPress={onRetry} className="mt-1 py-1">
-          <Text className="font-sans-medium text-micro text-rose-700">Not sent — tap to retry</Text>
-        </Pressable>
       )}
-    </View>
+      onSwipeableWillOpen={() => {
+        onReply?.();
+        swipe.current?.close();
+      }}
+    >
+      <View className={cn(mine ? 'items-end' : 'items-start', first ? 'mt-3' : 'mt-0.5', reactions.length ? 'mb-3' : '')}>
+        <Pressable
+          onPress={onPress}
+          onLongPress={onLongPress}
+          delayLongPress={300}
+          accessibilityHint="Double tap for a heart. Long press to react, reply or pin"
+          accessibilityActions={[{ name: 'longpress', label: 'React, reply or pin' }]}
+          onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && onLongPress?.()}
+          className="max-w-[80%]"
+        >
+          <View
+            accessible
+            accessibilityLabel={`${mine ? 'You' : authorName}: ${describe}. ${formatClock(message.created_at)}${
+              mine ? `, ${message.failed ? 'not sent' : message.pending ? 'sending' : message.status}` : ''
+            }${message.pinned_at ? ', pinned' : ''}`}
+            className={cn(
+              'rounded-bubble',
+              photo && url ? 'overflow-hidden p-1' : 'px-3.5 pb-1.5 pt-2',
+              mine ? MINE[slot] : THEIRS[slot],
+              last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
+              message.pending && 'opacity-80',
+              highlighted && 'border-2 border-gold-400',
+            )}
+          >
+            {quote ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Reply to ${quote.author}: ${quote.text}. Show it`}
+                onPress={() => onJumpTo?.(quote.id)}
+                className={cn('mb-1.5 rounded-[10px] border-l-[3px] px-2.5 py-1.5', mine ? 'border-white/70 bg-white/15' : 'border-plum-300 bg-paper-sunken', photo && url && 'm-1')}
+              >
+                <Text className={cn('font-sans-medium text-micro', mine ? 'text-white' : 'text-ink')}>{quote.author}</Text>
+                <Text numberOfLines={2} className={cn('text-small', mine ? 'text-white/85' : 'text-ink-soft')}>
+                  {quote.text}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {photo ? (
+              url ? (
+                <Pressable accessibilityRole="imagebutton" accessibilityLabel="Open photo" onPress={() => onOpenPhoto?.(url)} onLongPress={onLongPress}>
+                  <Image
+                    source={{ uri: url }}
+                    style={{ width: 240, aspectRatio: meta?.width && meta?.height ? Math.max(meta.width / meta.height, 0.6) : 4 / 3 }}
+                    className="rounded-[14px] bg-black/10"
+                    resizeMode="cover"
+                  />
+                </Pressable>
+              ) : (
+                <View style={{ width: 240, height: 180 }} className="rounded-[14px] bg-black/10" />
+              )
+            ) : null}
+
+            {message.media_kind === 'audio' ? <VoiceNote url={url} durationMs={meta?.duration_ms} mine={mine} /> : null}
+
+            {hasText ? <Text className={cn(mine ? 'text-white' : 'text-ink', photo && url && 'px-2.5 pt-1.5')}>{message.body}</Text> : null}
+            <View className={cn('mt-0.5 flex-row items-center justify-end gap-1 self-end', photo && url && 'px-2 pb-1')}>
+              {message.pinned_at ? <Pin size={11} color={mine ? 'rgba(255,255,255,0.75)' : '#8a7f94'} /> : null}
+              <Text className={cn('text-[11px] leading-[14px]', mine ? 'text-white/75' : 'text-ink-muted')}>{formatClock(message.created_at)}</Text>
+              {mine && <Ticks status={message.status} pending={message.pending} failed={message.failed} />}
+            </View>
+          </View>
+          {reactions.length ? (
+            <View className="absolute -bottom-3.5 left-3 flex-row gap-1">
+              {reactions.map((r) => (
+                <Pressable
+                  key={r.emoji}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${r.emoji} ${r.count}${r.mine ? ', yours. Remove' : ''}`}
+                  onPress={() => onReact?.(r.mine ? null : r.emoji)}
+                  className={cn('h-6 flex-row items-center gap-0.5 rounded-full border bg-paper-raised px-1.5', r.mine ? 'border-rose-300' : 'border-paper-edge')}
+                >
+                  <Text className="text-[13px] leading-[16px]">{r.emoji}</Text>
+                  {r.count > 1 ? <Text className="text-micro text-ink-muted">{String(r.count)}</Text> : null}
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </Pressable>
+        {message.failed && onRetry && (
+          <Pressable accessibilityRole="button" onPress={onRetry} className="mt-1 py-1">
+            <Text className="font-sans-medium text-micro text-rose-700">Not sent — tap to retry</Text>
+          </Pressable>
+        )}
+      </View>
+    </Swipeable>
   );
 }
 
