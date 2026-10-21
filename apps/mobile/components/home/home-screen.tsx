@@ -23,6 +23,7 @@ import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View }
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bootHome, saveHome } from '@/lib/boot-cache';
 import { ErrorNote } from '../module-screen';
+import { SnapRow } from '../snaps/snap-row';
 import { Avatar } from '../ui/avatar';
 import { Button, IconButton } from '../ui/button';
 import { cn } from '../ui/cn';
@@ -153,6 +154,8 @@ export function HomeScreen() {
         </View>
       </View>
       {photoError ? <ErrorNote>{photoError}</ErrorNote> : null}
+
+      <SnapRow />
 
       {/* How you both are */}
       <View className="flex-row gap-3">

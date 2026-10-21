@@ -28,6 +28,8 @@ export async function fetchMessage(sb: UsClient, id: string): Promise<Message | 
 
 export interface DraftExtras {
   replyTo?: string | null;
+  /** A reply to one of our snaps. */
+  snapId?: string | null;
   media?: {
     kind: MediaKind;
     meta?: MediaMeta | null;
@@ -58,6 +60,7 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
     reactions: {},
     pinned_at: null,
     pinned_by: null,
+    snap_id: extras.snapId ?? null,
     call: null,
     pending: true,
     localUri: extras.media?.localUri,
@@ -84,6 +87,7 @@ export async function sendMessage(sb: UsClient, draft: Message): Promise<Message
       sender_id: draft.sender_id,
       body: draft.body?.trim() ? draft.body : null,
       reply_to: draft.reply_to,
+      snap_id: draft.snap_id,
       media_path: mediaPath,
       media_kind: mediaPath || linked ? draft.media_kind : null,
       media_meta: mediaPath || linked ? draft.media_meta : null,

@@ -709,6 +709,79 @@ await test('chat: one reaction each, pins by either of us, nothing for outsiders
   await rejects(as(carol, () => q(`select public.pin_message($1, true)`, [msgId])), /message_not_found/, 'outsider pins');
 });
 
+console.log('\nSnaps');
+
+await test('snaps: shared with my partner for 24 hours, posted as yourself, in our folder', async () => {
+  const post = (who, path) =>
+    as(who, () => one(`insert into public.snaps (couple_id, author_id, photo_path, caption) values ($1::uuid, $2, $1::text || $3, 'hi') returning *`, [couple.id, who, path]));
+  const snap = await post(alice, '/s1.jpg');
+  assert.ok(new Date(snap.expires_at) - new Date(snap.created_at) <= 24 * 3600_000 + 1000, '24h window');
+  assert.equal((await as(bob, () => q(`select id from public.snaps`))).length, 1, 'partner sees it');
+  assert.equal((await as(carol, () => q(`select id from public.snaps`))).length, 0, 'outsider');
+  await rejects(
+    as(bob, () => q(`insert into public.snaps (couple_id, author_id, photo_path) values ($1::uuid, $2, $1::text || '/x.jpg')`, [couple.id, alice])),
+    /row-level security/,
+    'spoof author',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.snaps (couple_id, author_id, photo_path) values ($1, $2, $3)`, [couple.id, alice, `${otherCouple.id}/x.jpg`])),
+    /snaps_photo_in_couple_folder/,
+    'foreign folder',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.snaps (couple_id, author_id, photo_path, seen_at) values ($1::uuid, $2, $1::text || '/x.jpg', now())`, [couple.id, alice])),
+    /row-level security/,
+    'pre-seen',
+  );
+  await rejects(as(alice, () => q(`update public.snaps set caption = 'edited'`)), /permission denied/, 'direct edit');
+  assert.equal((await as(bob, () => q(`delete from public.snaps returning id`))).length, 0, "partner can't delete mine");
+  await rejects(
+    q(`update public.snaps set expires_at = created_at + interval '30 days' where id = $1`, [snap.id]),
+    /snaps_max_window/,
+    'longer than a day',
+  );
+});
+
+await test('snaps: only my partner marks seen and reacts; replies and keeps stay in our couple', async () => {
+  const snap = (await as(alice, () => one(`select id from public.snaps`))).id;
+  await rejects(as(alice, () => q(`select public.mark_snap_seen($1)`, [snap])), /only your partner/, 'own seen');
+  await rejects(as(alice, () => q(`select public.react_to_snap($1, '❤️')`, [snap])), /only your partner/, 'own reaction');
+  await rejects(as(carol, () => q(`select public.mark_snap_seen($1)`, [snap])), /snap_not_found/, 'outsider seen');
+  const seen = (await as(bob, () => one(`select seen_at from public.mark_snap_seen($1)`, [snap]))).seen_at;
+  assert.ok(seen);
+  assert.equal((await as(bob, () => one(`select seen_at from public.mark_snap_seen($1)`, [snap]))).seen_at.getTime(), seen.getTime(), 'first time counts');
+  assert.equal((await as(bob, () => one(`select reaction from public.react_to_snap($1, '😍')`, [snap]))).reaction, '😍');
+  assert.equal((await as(bob, () => one(`select reaction from public.react_to_snap($1, null)`, [snap]))).reaction, null, 'taken back');
+
+  await as(bob, () => q(`insert into public.messages (couple_id, sender_id, body, snap_id) values ($1, $2, 'love it', $3)`, [couple.id, bob, snap]));
+  const theirs = (await as(carol, () => one(`insert into public.snaps (couple_id, author_id, photo_path) values ($1::uuid, $2, $1::text || '/c.jpg') returning id`, [otherCouple.id, carol]))).id;
+  await rejects(
+    as(alice, () => q(`insert into public.messages (couple_id, sender_id, body, snap_id) values ($1, $2, 'x', $3)`, [couple.id, alice, theirs])),
+    /row-level security/,
+    'reply to another couple',
+  );
+  const keep = `insert into public.memories (couple_id, created_by, title, happened_on, from_snap) values ($1, $2, 'kept', current_date, $3)`;
+  await as(bob, () => q(keep, [couple.id, bob, snap]));
+  await rejects(as(alice, () => q(keep, [couple.id, alice, snap])), /duplicate key/, 'kept twice');
+  await rejects(as(alice, () => q(keep, [couple.id, alice, theirs])), /row-level security/, 'keep theirs');
+});
+
+await test('snaps: gone for both of us once expired; at most 10 live each', async () => {
+  const snap = (await as(alice, () => one(`select id from public.snaps`))).id;
+  await q(`update public.snaps set created_at = now() - interval '25 hours', expires_at = now() - interval '1 hour' where id = $1`, [snap]);
+  assert.equal((await as(alice, () => q(`select id from public.snaps`))).length, 0, 'author');
+  assert.equal((await as(bob, () => q(`select id from public.snaps`))).length, 0, 'partner');
+  await rejects(as(bob, () => q(`select public.react_to_snap($1, '❤️')`, [snap])), /snap_not_found/, 'react to expired');
+  for (let i = 0; i < 10; i++) {
+    await as(bob, () => q(`insert into public.snaps (couple_id, author_id, photo_path) values ($1::uuid, $2, $1::text || '/b' || $3 || '.jpg')`, [couple.id, bob, String(i)]));
+  }
+  await rejects(
+    as(bob, () => q(`insert into public.snaps (couple_id, author_id, photo_path) values ($1::uuid, $2, $1::text || '/b10.jpg')`, [couple.id, bob])),
+    /too_many_snaps/,
+    'eleventh',
+  );
+});
+
 console.log('\nLeaving');
 
 await test('unpair: removes everything we shared, keeps private data, frees both of us', async () => {

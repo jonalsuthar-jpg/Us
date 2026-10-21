@@ -1,13 +1,14 @@
 import type { UsClient } from '../supabase';
 import { MEMORY_BUCKET } from './memory';
 import { CHAT_BUCKET } from './messages';
+import { SNAPS_BUCKET } from './snaps';
 
 /** Buckets that keep files under "<couple_id>/". */
-export const COUPLE_BUCKETS = [MEMORY_BUCKET, CHAT_BUCKET];
+export const COUPLE_BUCKETS = [MEMORY_BUCKET, CHAT_BUCKET, SNAPS_BUCKET];
 
 /**
  * Delete every file in the couple's Storage folders (memories, the photo of
- * us, chat photos and voice notes). SQL can't reach Storage, so this runs
+ * us, chat photos and voice notes, snaps). SQL can't reach Storage, so this runs
  * before the couple row goes.
  */
 export async function removeCouplePhotos(sb: UsClient, coupleId: string): Promise<void> {

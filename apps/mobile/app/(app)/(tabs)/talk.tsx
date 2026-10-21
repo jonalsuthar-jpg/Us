@@ -1,5 +1,5 @@
-import { clusters, formatDay, groupByDay, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, type Message } from '@us/shared';
-import { useCallManager, useChatMedia, useCouple, useCoupleData, useMessages, useTyping } from '@us/shared/react';
+import { clusters, formatDay, groupByDay, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, type Message } from '@us/shared';
+import { useCallManager, useChatMedia, useCouple, useCoupleData, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -73,7 +73,10 @@ export default function Talk() {
 
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const authorOf = (m: Pick<Message, 'sender_id'>) => (m.sender_id === me.id ? 'You' : partner.display_name);
+  const snaps = useSnaps();
   const quoteFor = (m: Message): ReplyQuote | null => {
+    const snap = snapReplyQuote(m, me.id, partner.display_name, [...(snaps.data?.mine ?? []), ...(snaps.data?.partner ?? [])]);
+    if (snap) return { id: `snap-${m.snap_id}`, ...snap };
     if (!m.reply_to) return null;
     const r = byId.get(m.reply_to);
     return r ? { id: r.id, author: authorOf(r), text: messagePreview(r) } : { id: m.reply_to, author: 'Earlier message', text: 'Scroll up to see it' };
@@ -274,7 +277,7 @@ export default function Talk() {
                   }}
                   onReact={(emoji) => void react(item.message.id, emoji).catch(fail)}
                   onOpenPhoto={setPhoto}
-                  onJumpTo={(id) => !jumpTo(id) && say('That message is further up. Scroll up to load it.')}
+                  onJumpTo={(id) => !id.startsWith('snap-') && !jumpTo(id) && say('That message is further up. Scroll up to load it.')}
                 />
               )
             }

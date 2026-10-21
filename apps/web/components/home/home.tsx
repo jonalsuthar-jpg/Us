@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
 import { ErrorNote } from '@/components/app/module-header';
+import { SnapRow } from '@/components/snaps/snap-row';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, Spinner } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -167,6 +168,8 @@ export function Home() {
 
         <div className="space-y-6">
           {photoError ? <ErrorNote>{photoError}</ErrorNote> : null}
+
+          <SnapRow />
 
           {/* How you both are */}
           <div className="grid grid-cols-2 gap-3">

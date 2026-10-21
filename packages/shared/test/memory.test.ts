@@ -12,6 +12,7 @@ const mem = (id: string, happened_on: string): Memory => ({
   photo_path: null,
   kind: 'moment',
   created_at: '',
+  from_snap: null,
 });
 
 describe('onThisDay', () => {

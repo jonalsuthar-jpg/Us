@@ -12,6 +12,7 @@ const mem = (id: string, happened_on: string, photo_path: string | null = null):
   photo_path,
   kind: 'moment',
   created_at: '',
+  from_snap: null,
 });
 
 describe('freshStatus', () => {

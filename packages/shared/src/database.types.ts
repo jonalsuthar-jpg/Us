@@ -122,6 +122,8 @@ export type Database = {
           reactions: Record<string, string>;
           pinned_at: string | null;
           pinned_by: string | null;
+          /** A reply to one of our snaps (kept after the snap itself is gone). */
+          snap_id: string | null;
         };
         Insert: {
           id?: string;
@@ -134,6 +136,7 @@ export type Database = {
           media_path?: string | null;
           media_kind?: MediaKind | null;
           media_meta?: MediaMeta | null;
+          snap_id?: string | null;
         };
         Update: never;
         Relationships: [
@@ -253,6 +256,8 @@ export type Database = {
           photo_path: string | null;
           kind: MemoryKind;
           created_at: string;
+          /** The snap this memory was kept from. */
+          from_snap: string | null;
         };
         Insert: {
           id?: string;
@@ -263,6 +268,7 @@ export type Database = {
           happened_on: string;
           photo_path?: string | null;
           kind?: MemoryKind;
+          from_snap?: string | null;
         };
         Update: { title?: string; body?: string | null; happened_on?: string; photo_path?: string | null; kind?: MemoryKind };
         Relationships: [];
@@ -314,6 +320,25 @@ export type Database = {
       taps: {
         Row: { id: string; couple_id: string; from_id: string; created_at: string };
         Insert: { id?: string; couple_id: string; from_id: string };
+        Update: never;
+        Relationships: [];
+      };
+      snaps: {
+        Row: {
+          id: string;
+          couple_id: string;
+          author_id: string;
+          /** "<couple_id>/<uuid>.<ext>" in the private snaps bucket. */
+          photo_path: string;
+          caption: string | null;
+          created_at: string;
+          /** Unreadable for both of us from then on; cleaned up hourly. */
+          expires_at: string;
+          seen_at: string | null;
+          reaction: string | null;
+          reacted_at: string | null;
+        };
+        Insert: { id?: string; couple_id: string; author_id: string; photo_path: string; caption?: string | null };
         Update: never;
         Relationships: [];
       };
@@ -428,6 +453,8 @@ export type Database = {
       cancel_arrival: { Args: { p_id: string }; Returns: Database['public']['Tables']['arrival_checks']['Row'] };
       react_to_message: { Args: { p_id: string; p_emoji: string | null }; Returns: Database['public']['Tables']['messages']['Row'] };
       pin_message: { Args: { p_id: string; p_pinned: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };
+      mark_snap_seen: { Args: { p_id: string }; Returns: Database['public']['Tables']['snaps']['Row'] };
+      react_to_snap: { Args: { p_id: string; p_emoji: string | null }; Returns: Database['public']['Tables']['snaps']['Row'] };
     };
     Enums: {
       call_media: CallMedia;
@@ -459,6 +486,7 @@ export type DailyQuestion = Tables['daily_questions']['Row'];
 export type Countdown = Tables['countdowns']['Row'];
 export type ListItem = Tables['list_items']['Row'];
 export type Tap = Tables['taps']['Row'];
+export type SnapRow = Tables['snaps']['Row'];
 export type LocationShare = Tables['location_shares']['Row'];
 export type ArrivalCheck = Tables['arrival_checks']['Row'];
 export type DailyEntry = Database['public']['Functions']['daily_history']['Returns'][number];

@@ -38,3 +38,7 @@ verify_jwt = true
 
 [functions.fight-translator]
 verify_jwt = true
+
+# Called by pg_cron with x-cron-secret, not by signed-in users.
+[functions.snaps-cleanup]
+verify_jwt = false

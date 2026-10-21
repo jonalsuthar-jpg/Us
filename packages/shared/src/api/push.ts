@@ -15,7 +15,9 @@ export type PushCategory =
   | 'daily_question' // my partner answered today's question (never carries the answer)
   | 'thinking_of_you' // a one-tap "thinking of you"
   | 'location_shared' // my partner started sharing their location with me
-  | 'arrival'; // asked to say when home / got home safe
+  | 'arrival' // asked to say when home / got home safe
+  | 'new_snap' // my partner posted a snap
+  | 'snap_reaction'; // my partner reacted to my snap
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }
@@ -24,7 +26,8 @@ export type PushRequest =
   | { category: 'daily_question'; questionId: string }
   | { category: 'thinking_of_you'; tapId: string }
   | { category: 'location_shared' }
-  | { category: 'arrival'; checkId: string };
+  | { category: 'arrival'; checkId: string }
+  | { category: 'new_snap' | 'snap_reaction'; snapId: string };
 
 /** Payload attached to every notification (`data`) for deep-link routing. */
 export interface PushData {
@@ -37,6 +40,7 @@ export interface PushData {
   media?: 'audio' | 'video';
   checkinId?: string;
   checkId?: string;
+  snapId?: string;
 }
 
 /**

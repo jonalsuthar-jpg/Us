@@ -9,6 +9,8 @@ const MESSAGES: Record<string, string> = {
   call_not_found: 'That call is no longer available.',
   no_options: 'Add a few options to this list first.',
   ends_after_start: 'The end needs to be after the start.',
+  too_many_snaps: 'You have 10 snaps up already. Let one expire, or delete one, first.',
+  snap_not_found: 'That snap has expired.',
   'Invalid login credentials': "That email and password don't match.",
   'User already registered': 'An account with that email already exists. Try signing in.',
 };

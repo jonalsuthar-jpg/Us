@@ -4,7 +4,7 @@
  * Body: {} (the caller is taken from the JWT; nobody can delete someone else).
  *
  * If the caller is paired, the couple's Storage folders ("<couple_id>/" in the
- * memories and chat buckets) are removed first, because SQL cascades can't reach Storage.
+ * memories, chat and snaps buckets) are removed first, because SQL cascades can't reach Storage.
  * Deleting the auth user then cascades through profiles → couples → every
  * couple-scoped table, and every owner-only table.
  *
@@ -12,7 +12,7 @@
  */
 import { cors, json, requireUser } from '../_shared/auth.ts';
 
-const BUCKETS = ['memories', 'chat'];
+const BUCKETS = ['memories', 'chat', 'snaps'];
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });

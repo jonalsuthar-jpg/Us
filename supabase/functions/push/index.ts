@@ -4,6 +4,7 @@
  * Body: { category: 'new_message', messageId } | { category: 'incoming_call' | 'call_ended', callId }
  *     | { category: 'wellbeing_nudge', checkinId } | { category: 'daily_question', questionId }
  *     | { category: 'thinking_of_you', tapId } | { category: 'location_shared' } | { category: 'arrival', checkId }
+ *     | { category: 'new_snap' | 'snap_reaction', snapId }
  *
  * The record is re-read with the service role and the caller must be its
  * sender/caller, so a client can't push arbitrary content. Each category maps
@@ -25,7 +26,9 @@ type Category =
   | 'daily_question'
   | 'thinking_of_you'
   | 'location_shared'
-  | 'arrival';
+  | 'arrival'
+  | 'new_snap'
+  | 'snap_reaction';
 
 interface Style {
   iosSound?: string;
@@ -63,6 +66,8 @@ const CATEGORIES: Record<Category, Style> = {
   location_shared: { priority: 5, iosInterruption: 'passive', threadId: 'location' },
   // "Got home safe" should reach someone waiting up, even in a focus mode.
   arrival: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'time-sensitive', threadId: 'arrival' },
+  new_snap: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'snaps' },
+  snap_reaction: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'snaps' },
 };
 
 Deno.serve(async (req) => {
@@ -209,6 +214,28 @@ Deno.serve(async (req) => {
       content = `Will let you know when they get ${check.label === 'home' ? 'home' : `to ${check.label}`}.`;
     } else {
       return json({ skipped: 'nothing_to_say' });
+    }
+  } else if (body.category === 'new_snap' || body.category === 'snap_reaction') {
+    const { data: snap } = await admin
+      .from('snaps')
+      .select('id, couple_id, author_id, caption, created_at, expires_at, reaction, reacted_at')
+      .eq('id', body.snapId)
+      .maybeSingle();
+    if (!snap || snap.couple_id !== coupleId || Date.parse(snap.expires_at) <= Date.now()) return json({ error: 'forbidden' }, 403);
+    category = body.category;
+    data = { category, url: '/home', snapId: snap.id };
+    if (category === 'new_snap') {
+      if (snap.author_id !== userId) return json({ error: 'forbidden' }, 403);
+      if (Date.now() - Date.parse(snap.created_at) > 10 * 60_000) return json({ skipped: 'stale' });
+      content = snap.caption ? `📸 ${truncate(snap.caption, 120)}` : '📸 Shared a snap. It’s here for 24 hours.';
+      // A few snaps in a row show as one notification.
+      collapseId = `snap-${userId}`;
+    } else {
+      // My partner's snap, which I just reacted to.
+      if (snap.author_id !== partnerId || !snap.reaction || !snap.reacted_at) return json({ error: 'forbidden' }, 403);
+      if (Date.now() - Date.parse(snap.reacted_at) > 2 * 60_000) return json({ skipped: 'stale' });
+      content = `Reacted ${snap.reaction} to your snap.`;
+      collapseId = `snap-reaction-${snap.id}`;
     }
   } else {
     return json({ error: 'unknown_category' }, 400);
