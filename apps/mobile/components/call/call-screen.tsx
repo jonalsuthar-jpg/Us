@@ -1,8 +1,9 @@
 import { formatDuration, type CallState } from '@us/shared';
 import { useCallManager, useCallState, useCouple } from '@us/shared/react';
-import { ChevronDown, Ear, Mic, MicOff, MonitorUp, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
+import * as ScreenOrientation from 'expo-screen-orientation';
+import { ChevronDown, Ear, Maximize, Mic, MicOff, Minimize, MonitorUp, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import { Modal, Pressable, StatusBar, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
@@ -17,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediaStream, RTCView } from 'react-native-webrtc';
 import { setSpeaker, startCallAudio, stopCallAudio } from '@/lib/audio-route';
 import { Avatar } from '../ui/avatar';
+import { cn } from '../ui/cn';
 import { Button, IconButton } from '../ui/button';
 import { Display, Text } from '../ui/text';
 
@@ -28,7 +30,22 @@ import { Display, Text } from '../ui/text';
 export function CallScreen() {
   const state = useCallState();
   const [minimised, setMinimised] = useState(false);
+  // Watching their shared screen full screen, turned sideways.
+  const [full, setFull] = useState(false);
+  const sharing = (state.phase === 'connected' || state.phase === 'reconnecting') && state.remote.screen && !!state.remoteStream;
   useCallAudio(state);
+  useEffect(() => {
+    if (!sharing) setFull(false);
+  }, [sharing]);
+  useEffect(() => {
+    if (!full) return;
+    void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+    StatusBar.setHidden(true, 'fade');
+    return () => {
+      void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      StatusBar.setHidden(false, 'fade');
+    };
+  }, [full]);
   const canMinimise = state.phase !== 'idle' && state.phase !== 'incoming' && state.phase !== 'ended';
   // A new ring or the end of the call always brings the full screen back.
   useEffect(() => {
@@ -44,12 +61,47 @@ export function CallScreen() {
         animationType="fade"
         presentationStyle="fullScreen"
         statusBarTranslucent
-        onRequestClose={minimise}
+        supportedOrientations={['portrait', 'landscape']}
+        onRequestClose={full ? () => setFull(false) : minimise}
       >
-        {state.phase !== 'idle' && <Surface state={state} onMinimise={canMinimise ? minimise : undefined} />}
+        {state.phase !== 'idle' &&
+          (full && sharing ? (
+            <FullScreenShare state={state} onExit={() => setFull(false)} />
+          ) : (
+            <Surface state={state} onMinimise={canMinimise ? minimise : undefined} onFullScreen={sharing ? () => setFull(true) : undefined} />
+          ))}
       </Modal>
       {minimised && <CallBar state={state} onExpand={() => setMinimised(false)} />}
     </>
+  );
+}
+
+/**
+ * Their shared screen and nothing else, sideways. A tap brings up exit and
+ * hang-up for a few seconds.
+ */
+function FullScreenShare({ state, onExit }: { state: CallState; onExit: () => void }) {
+  const m = useCallManager();
+  const [controls, setControls] = useState(true);
+  useEffect(() => {
+    if (!controls) return;
+    const t = setTimeout(() => setControls(false), 3000);
+    return () => clearTimeout(t);
+  }, [controls]);
+  return (
+    <Pressable accessibilityLabel="Show call controls" onPress={() => setControls((v) => !v)} className="flex-1 bg-black">
+      <RTCView streamURL={(state.remoteStream as unknown as MediaStream).toURL()} objectFit="contain" style={{ flex: 1 }} />
+      {controls ? (
+        <Animated.View entering={FadeIn.duration(200)} className="absolute right-5 top-5 flex-row gap-3">
+          <IconButton label="Exit full screen" tone="night" onPress={onExit}>
+            <Minimize size={20} color="#FCFAFB" />
+          </IconButton>
+          <IconButton label="End call" tone="end" onPress={() => void m.hangup()}>
+            <PhoneOff size={20} color="#fff" />
+          </IconButton>
+        </Animated.View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -128,7 +180,7 @@ function useElapsed(start: number | null) {
   return start ? now - start : 0;
 }
 
-function Surface({ state, onMinimise }: { state: CallState; onMinimise?: () => void }) {
+function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMinimise?: () => void; onFullScreen?: () => void }) {
   const m = useCallManager();
   const { partner, partnerSlot } = useCouple();
   const insets = useSafeAreaInsets();
@@ -136,10 +188,13 @@ function Surface({ state, onMinimise }: { state: CallState; onMinimise?: () => v
   const [nudge, setNudge] = useState(false);
   // Matches InCallManager's automatic default until the person chooses.
   const [speaker, setSpeakerOn] = useState(state.media === 'video');
+  // The self view sits just above the controls, however tall they turn out.
+  const [controlsHeight, setControlsHeight] = useState(208);
 
   const live = state.phase === 'connected' || state.phase === 'reconnecting';
   const ringing = state.phase === 'outgoing' || state.phase === 'incoming' || state.phase === 'connecting';
-  const remoteVideo = live && state.remote.camera && state.remoteStream;
+  // A shared screen arrives on the camera's track, so show it even with their camera off.
+  const remoteVideo = live && (state.remote.camera || state.remote.screen) && state.remoteStream;
   const isVideo = state.media === 'video';
 
   const status =
@@ -166,6 +221,18 @@ function Surface({ state, onMinimise }: { state: CallState; onMinimise?: () => v
           />
         </Animated.View>
       )}
+      {remoteVideo && state.remote.screen ? (
+        <View style={{ top: insets.top + 68 }} className="absolute inset-x-0 flex-row items-center justify-center gap-2" pointerEvents="box-none">
+          <View className="rounded-full bg-plum-900/70 px-3 py-1">
+            <Text className="text-micro text-paper/90">{`${partner.display_name} is sharing their screen`}</Text>
+          </View>
+          {onFullScreen ? (
+            <IconButton label="Full screen" tone="night" size="sm" onPress={onFullScreen}>
+              <Maximize size={18} color="#FCFAFB" />
+            </IconButton>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={{ paddingTop: insets.top + 12 }} className="flex-row items-center justify-between gap-3 px-5">
         {onMinimise && (
@@ -208,7 +275,10 @@ function Surface({ state, onMinimise }: { state: CallState; onMinimise?: () => v
       )}
 
       {live && state.local.camera && selfTrack && (
-        <View className="absolute bottom-52 right-4 h-44 w-32 overflow-hidden rounded-[18px] border border-white/15">
+        <View
+          style={{ bottom: controlsHeight + 12 }}
+          className={cn('absolute right-4 overflow-hidden rounded-[18px] border border-white/15', state.remote.screen ? 'h-28 w-20' : 'h-44 w-32')}
+        >
           <RTCView
             streamURL={new MediaStream([selfTrack as never]).toURL()}
             objectFit="cover"
@@ -219,7 +289,11 @@ function Surface({ state, onMinimise }: { state: CallState; onMinimise?: () => v
         </View>
       )}
 
-      <View style={{ paddingBottom: insets.bottom + 24 }} className="flex-row items-center justify-center gap-4 px-6 pt-6">
+      <View
+        onLayout={(e) => setControlsHeight(e.nativeEvent.layout.height)}
+        style={{ paddingBottom: insets.bottom + 24 }}
+        className="flex-row items-center justify-center gap-4 px-6 pt-6"
+      >
         {state.phase === 'incoming' ? (
           <>
             <Labeled label="Decline">

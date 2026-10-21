@@ -5,8 +5,10 @@ import { useCallManager, useCallState, useCouple } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronDown,
+  Maximize,
   Mic,
   MicOff,
+  Minimize,
   MonitorUp,
   MonitorX,
   Phone,
@@ -111,6 +113,23 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
   const live = state.phase === 'connected' || state.phase === 'reconnecting';
   const ringing = state.phase === 'outgoing' || state.phase === 'incoming' || state.phase === 'connecting';
   const remoteVideo = live && (state.remote.camera || state.remote.screen);
+  const watchingShare = !!remoteVideo && state.remote.screen;
+
+  // Full screen for watching their shared screen: just the video, nothing over it.
+  const root = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const sync = () => setFull(!!root.current && document.fullscreenElement === root.current);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+  useEffect(() => {
+    if (!watchingShare && root.current && document.fullscreenElement === root.current) void document.exitFullscreen().catch(() => {});
+  }, [watchingShare]);
+  const toggleFull = () => {
+    if (full) void document.exitFullscreen().catch(() => {});
+    else void root.current?.requestFullscreen().catch(() => {});
+  };
   const isVideo = state.media === 'video';
   const outputs = useAudioOutputs(state.phase !== 'idle' && state.phase !== 'ended');
   const currentOutput = sinkId ?? outputs.find((o) => o.deviceId === 'default')?.deviceId ?? outputs[0]?.deviceId;
@@ -129,6 +148,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
 
   return (
     <motion.div
+      ref={root}
       role="dialog"
       aria-modal="true"
       aria-label={`Call with ${partner.display_name}`}
@@ -158,12 +178,17 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
             exit={{ opacity: 0 }}
             transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
           >
-            <StreamVideo
-              stream={state.remoteStream}
-              revision={state.revision}
-              fit={state.remote.screen ? 'contain' : 'cover'}
-            />
-            {state.remote.screen && (
+            <div className="h-full w-full" onDoubleClick={watchingShare ? toggleFull : undefined}>
+              <StreamVideo stream={state.remoteStream} revision={state.revision} fit={state.remote.screen ? 'contain' : 'cover'} />
+            </div>
+            {full && (
+              <div className="absolute right-4 top-4 opacity-30 transition-opacity hover:opacity-100 focus-within:opacity-100">
+                <IconButton label="Exit full screen" tone="night" size="sm" onClick={toggleFull}>
+                  <Minimize className="h-4 w-4" />
+                </IconButton>
+              </div>
+            )}
+            {state.remote.screen && !full && (
               <p className="absolute left-1/2 top-20 -translate-x-1/2 rounded-full bg-plum-900/70 px-3 py-1 text-micro text-paper/90 backdrop-blur">
                 {partner.display_name} is sharing their screen
               </p>
@@ -173,7 +198,12 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
       </AnimatePresence>
 
       {/* Top bar */}
-      <header className="relative z-10 flex items-center justify-between gap-4 bg-gradient-to-b from-plum-900/70 to-transparent px-5 pb-10 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-8">
+      <header
+        className={cn(
+          'relative z-10 flex items-center justify-between gap-4 bg-gradient-to-b from-plum-900/70 to-transparent px-5 pb-10 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-8 [@media(max-height:500px)]:pb-2 [@media(max-height:500px)]:pt-3',
+          full && 'hidden',
+        )}
+      >
         {onMinimise && (
           <IconButton label="Minimise call" tone="night" size="sm" onClick={onMinimise}>
             <ChevronDown className="h-5 w-5" />
@@ -190,6 +220,11 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
           <span className="flex-1" />
         )}
         <div className="flex items-center gap-2">
+          {watchingShare && (
+            <IconButton label="Full screen" tone="night" size="sm" onClick={toggleFull}>
+              <Maximize className="h-4 w-4" />
+            </IconButton>
+          )}
           {live && state.route === 'relay' && (
             <span
               className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-micro text-paper/80"
@@ -209,7 +244,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
       {/* Centre: the breathing initial (ringing, voice calls, camera off) */}
       {!remoteVideo && (
         <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 text-center">
-          <div className="relative flex items-center justify-center">
+          <div className="relative flex items-center justify-center [@media(max-height:500px)]:scale-75">
             {(ringing || state.phase === 'reconnecting') && (
               <>
                 {[0, 0.8, 1.6].map((delay) => (
@@ -227,7 +262,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
             )}
             <Avatar name={partner.display_name} slot={partnerSlot} size="xl" className="[&>span]:ring-offset-plum-800" />
           </div>
-          <h2 className="mt-10 font-display text-hero font-light">{partner.display_name}</h2>
+          <h2 className="mt-10 font-display text-hero font-light [@media(max-height:500px)]:mt-2 [@media(max-height:500px)]:text-title">{partner.display_name}</h2>
           <p className="mt-2 text-lead tabular-nums text-paper/70" aria-live="polite">
             {statusLine}
           </p>
@@ -237,15 +272,27 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
       {remoteVideo && <div className="flex-1" />}
 
       {/* Self view */}
-      {live && (state.local.camera || state.local.screen) && (
-        <div className="absolute bottom-32 right-4 z-20 aspect-[3/4] w-28 overflow-hidden rounded-[18px] border border-white/15 bg-plum-900 shadow-2xl sm:bottom-36 sm:right-8 sm:w-40">
+      {live && !full && (state.local.camera || state.local.screen) && (
+        <div
+          className={cn(
+            'absolute bottom-32 right-4 z-20 aspect-[3/4] overflow-hidden rounded-[18px] border border-white/15 bg-plum-900 shadow-2xl sm:bottom-36 sm:right-8 [@media(max-height:500px)]:bottom-24',
+            // Smaller while their screen is up, so it covers less of it.
+            watchingShare ? 'w-20 sm:w-28' : 'w-28 sm:w-40',
+          )}
+        >
           <SelfView state={state} />
           <span className="sr-only">Your camera</span>
         </div>
       )}
 
       {/* Controls */}
-      <footer className="relative z-10 flex items-center justify-center gap-3 bg-gradient-to-t from-plum-900/80 to-transparent px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-10 sm:gap-5">
+      <footer
+        className={cn(
+          // Five buttons fit a 360px phone at this spacing; wraps rather than overflowing on anything narrower.
+          'relative z-10 flex flex-wrap items-center justify-center gap-2 bg-gradient-to-t from-plum-900/80 to-transparent px-3 pb-[max(2rem,env(safe-area-inset-bottom))] pt-10 sm:gap-5 sm:px-6 [@media(max-height:500px)]:pb-3 [@media(max-height:500px)]:pt-3',
+          full && 'hidden',
+        )}
+      >
         {state.phase === 'incoming' ? (
           <>
             <ControlStack label="Decline">
