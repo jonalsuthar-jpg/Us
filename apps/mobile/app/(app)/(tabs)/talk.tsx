@@ -43,7 +43,8 @@ function useViewing() {
 
 export default function Talk() {
   const insets = useSafeAreaInsets();
-  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline } = useCouple();
+  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf } = useCouple();
+  const partnerPhoto = photoOf(partnerSlot);
   const viewing = useViewing();
   const { messages, loading, hasOlder, loadOlder, send, retry, react, pin } = useMessages({ viewing });
   const media = useChatMedia(messages);
@@ -153,7 +154,15 @@ export default function Talk() {
     // lift the composer ourselves on both platforms.
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.chat }} behavior="padding">
       <View style={{ paddingTop: insets.top + 8 }} className="flex-row items-center gap-2 border-b border-paper-edge bg-paper-raised pb-2.5 pl-4 pr-2">
-        <Avatar name={partner.display_name} slot={partnerSlot} online={partnerOnline} />
+        <Pressable
+          accessibilityRole="imagebutton"
+          accessibilityLabel={`${partner.display_name}'s photo. Open`}
+          disabled={!partnerPhoto}
+          onPress={() => setPhoto(partnerPhoto)}
+          className="active:opacity-70"
+        >
+          <Avatar name={partner.display_name} slot={partnerSlot} online={partnerOnline} />
+        </Pressable>
         <View className="flex-1">
           <Display className="text-lead" numberOfLines={1}>
             {partner.display_name}
