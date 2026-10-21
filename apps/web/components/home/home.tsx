@@ -16,7 +16,7 @@ import {
   type Status,
 } from '@us/shared';
 import { useCallManager, useCouple, useCoupleData, useTyping } from '@us/shared/react';
-import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Phone, Sparkles, Video } from 'lucide-react';
+import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Pencil, Phone, Sparkles, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
@@ -342,6 +342,12 @@ function StatusCard({
           {presence ? <span className="mt-1 block text-micro text-ink-muted">{presence}</span> : null}
         </>
       )}
+      {onEdit ? (
+        <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-micro font-semibold text-rose-700" aria-hidden>
+          <Pencil className="h-3 w-3" />
+          {status ? 'Update' : 'Set status'}
+        </span>
+      ) : null}
     </>
   );
   const surface = cn(
@@ -422,15 +428,15 @@ function StatusForm({ initial, onSave }: { initial: Status | null; onSave: (s: {
 
 function Action({ label, href, onClick, badge, children }: { label: string; href?: string; onClick?: () => void; badge?: number; children: ReactNode }) {
   const cls =
-    'relative flex flex-col items-center gap-2 rounded-sheet border border-paper-edge bg-paper-raised px-1 py-4 text-center text-micro font-medium leading-tight text-ink sm:text-small transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-paper-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';
+    'relative flex flex-col items-center gap-2 rounded-sheet border border-paper-edge bg-paper-raised px-1 py-4 text-center text-micro font-medium leading-tight text-ink sm:text-small shadow-[0_6px_16px_-8px_rgba(36,25,51,0.35)] transition-[transform,background-color,box-shadow] hover:-translate-y-0.5 hover:bg-paper-sunken hover:shadow-[0_10px_22px_-10px_rgba(36,25,51,0.45)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';
   const inner = (
     <>
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-700" aria-hidden>
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-600 text-white" aria-hidden>
         {children}
       </span>
       {label}
       {badge ? (
-        <span className="absolute right-3 top-2 min-w-[20px] rounded-full bg-rose-600 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white">
+        <span className="absolute right-3 top-2 min-w-[22px] rounded-full border-2 border-paper-raised bg-rose-600 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white">
           {badge > 99 ? '99+' : badge}
           <span className="sr-only"> unread</span>
         </span>

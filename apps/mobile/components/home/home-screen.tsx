@@ -17,7 +17,7 @@ import { useCallManager, useCouple, useCoupleData, useTyping } from '@us/shared/
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Phone, Settings, Sparkles, Video } from 'lucide-react-native';
+import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Pencil, Phone, Settings, Sparkles, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -170,16 +170,16 @@ export function HomeScreen() {
       {/* Reach each other */}
       <View className="flex-row gap-2">
         <Action label="Message" onPress={() => router.push('/talk')} badge={unread}>
-          <MessageCircleHeart size={22} color={c.roseStrong} />
+          <MessageCircleHeart size={22} color="#fff" />
         </Action>
         <Action label="Call" onPress={() => void calls.startCall('audio')}>
-          <Phone size={22} color={c.roseStrong} />
+          <Phone size={22} color="#fff" />
         </Action>
         <Action label="Video" onPress={() => void calls.startCall('video')}>
-          <Video size={22} color={c.roseStrong} />
+          <Video size={22} color="#fff" />
         </Action>
         <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onPress={() => void tap()}>
-          <HeartPulse size={22} color={c.roseStrong} />
+          <HeartPulse size={22} color="#fff" />
         </Action>
       </View>
 
@@ -287,6 +287,7 @@ function StatusCard({
   empty: string;
   onPress?: () => void;
 }) {
+  const c = usePalette();
   const inner = (
     <Sheet pad="sm" className={cn('grow gap-2', slot === 'a' ? 'border-rose-200' : 'border-teal-200')}>
       <View className="flex-row items-center gap-2">
@@ -313,10 +314,16 @@ function StatusCard({
           {presence ? <Text className="text-micro text-ink-muted">{presence}</Text> : null}
         </>
       )}
+      {onPress ? (
+        <View className="mt-auto flex-row items-center gap-1 self-start rounded-full bg-rose-50 px-2.5 py-1">
+          <Pencil size={12} color={c.onRose} />
+          <Text className="font-sans-semibold text-micro text-rose-700">{status ? 'Update' : 'Set status'}</Text>
+        </View>
+      ) : null}
     </Sheet>
   );
   return onPress ? (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Your status: ${status?.text ?? 'not set'}. Change`} onPress={onPress} className="flex-1">
+    <Pressable accessibilityRole="button" accessibilityLabel={`Your status: ${status?.text ?? 'not set'}. Change`} onPress={onPress} className="flex-1 active:opacity-75">
       {inner}
     </Pressable>
   ) : (
@@ -387,15 +394,15 @@ function Action({ label, onPress, badge, children }: { label: string; onPress: (
       accessibilityRole="button"
       accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
       onPress={onPress}
-      className="flex-1 items-center gap-1.5 rounded-sheet border border-paper-edge bg-paper-raised px-1 pb-3 pt-3.5 active:bg-paper-sunken"
+      className="flex-1 items-center gap-1.5 rounded-sheet border border-paper-edge bg-paper-raised px-1 pb-3 pt-3.5 shadow-md shadow-plum-800/25 active:scale-95 active:bg-paper-sunken"
     >
-      <View className="h-11 w-11 items-center justify-center rounded-full bg-rose-50">{children}</View>
+      <View className="h-11 w-11 items-center justify-center rounded-full bg-rose-600">{children}</View>
       {/* Two short lines rather than shrink-to-fit, which Android draws past the card at this width. */}
       <Text className="px-1 text-center font-sans-medium text-micro" numberOfLines={2}>
         {label}
       </Text>
       {badge ? (
-        <View className="absolute right-3 top-2 min-w-[20px] items-center rounded-full bg-rose-600 px-1.5 py-0.5">
+        <View className="absolute right-3 top-2 min-w-[22px] items-center rounded-full border-2 border-paper-raised bg-rose-600 px-1.5 py-0.5">
           <Text className="text-[11px] font-sans-semibold leading-[13px] text-white">{badge > 99 ? '99+' : badge}</Text>
         </View>
       ) : null}
