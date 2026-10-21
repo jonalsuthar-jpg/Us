@@ -189,6 +189,10 @@ export default function Talk() {
           data={rows}
           keyExtractor={(r) => r.key}
           keyboardDismissMode="interactive"
+          initialNumToRender={20}
+          maxToRenderPerBatch={10}
+          windowSize={9}
+          removeClippedSubviews
           onEndReached={() => hasOlder && void loadOlder()}
           onEndReachedThreshold={0.3}
           ListHeaderComponent={<TypingBubble visible={partnerTyping} name={partner.display_name} slot={partnerSlot} />}
@@ -228,7 +232,6 @@ export default function Talk() {
                   setActing(item.message);
                 }}
                 onReact={(emoji) => void react(item.message.id, emoji).catch(fail)}
-                onReply={() => setReplyTo(item.message)}
                 onOpenPhoto={setPhoto}
                 onJumpTo={(id) => !jumpTo(id) && say('That message is further up. Scroll up to load it.')}
               />
