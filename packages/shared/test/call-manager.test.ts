@@ -269,6 +269,31 @@ describe('CallManager', () => {
     await vi.waitFor(() => expect(bob.getState().remote.camera).toBe(true));
   });
 
+  it("a shared screen's sound goes out mixed with the mic, and the mic alone returns after", async () => {
+    const w = makeWorld();
+    const screen = new FakeStream([new FakeTrack('video'), new FakeTrack('audio')]);
+    const mixed = new FakeTrack('audio');
+    const close = vi.fn();
+    const mixAudio = vi.fn(() => ({ track: mixed, close }));
+    const alice = w.manager('alice', 'bob', { rtc: { getDisplayMedia: async () => screen, mixAudio } as never });
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('audio');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+
+    const audio = pcOf(alice).transceivers.find((t) => t.receiver.track.kind === 'audio')!;
+    const mic = audio.sender.track;
+    await alice.startScreenShare();
+    expect(mixAudio).toHaveBeenCalledWith([mic, screen.tracks[1]]);
+    expect(audio.sender.track).toBe(mixed);
+
+    await alice.stopScreenShare();
+    expect(audio.sender.track).toBe(mic);
+    expect(close).toHaveBeenCalled();
+    expect(screen.tracks[1]!.stopped).toBe(true);
+  });
+
   it('declining ends both sides and records it', async () => {
     const w = makeWorld();
     const alice = w.manager('alice', 'bob');

@@ -14,6 +14,12 @@ export interface RtcAdapter {
   getUserMedia(constraints: MediaStreamConstraints): Promise<MediaStream>;
   /** Web only. Absent on mobile, where the UI nudges toward the web app instead. */
   getDisplayMedia?: () => Promise<MediaStream>;
+  /**
+   * Web: mix several audio tracks into one. A shared screen's sound goes out
+   * mixed with my mic on the one audio sender, so neither drops and nothing
+   * renegotiates. Without it, a share is picture only.
+   */
+  mixAudio?: (tracks: MediaStreamTrack[]) => { track: MediaStreamTrack; close: () => void };
   /** Mobile: point an existing camera track at the front or back camera, in place. */
   switchCamera?: (track: MediaStreamTrack, facing: CameraFacing) => void | Promise<void>;
   /** Web: the cameras on this device, so calls can offer a flip when there's more than one. */
@@ -141,6 +147,9 @@ export class CallManager {
   private videoTx: RTCRtpTransceiver | null = null;
   private cameraTrack: MediaStreamTrack | null = null;
   private screenTrack: MediaStreamTrack | null = null;
+  /** The shared screen's sound, and the mic + sound mix going out while sharing. */
+  private screenAudio: MediaStreamTrack | null = null;
+  private audioMix: { track: MediaStreamTrack; close: () => void } | null = null;
   private pendingIce: RTCIceCandidateInit[] = [];
   private iceServers: Promise<RTCIceServer[]> | null = null;
   private iceRestarts = 0;
@@ -406,6 +415,14 @@ export class CallManager {
     track.addEventListener('ended', () => void this.stopScreenShare());
     this.screenTrack = track;
     await this.videoTx?.sender.replaceTrack(track);
+    const sound = display.getAudioTracks()[0];
+    const mic = this.state.localStream?.getAudioTracks()[0];
+    if (sound && mic && this.opts.rtc.mixAudio) {
+      // Muting still works: a disabled mic track feeds the mix silence.
+      this.screenAudio = sound;
+      this.audioMix = this.opts.rtc.mixAudio([mic, sound]);
+      await this.audioTx?.sender.replaceTrack(this.audioMix.track);
+    } else sound?.stop();
     this.setLocal({ screen: true });
   }
 
@@ -414,7 +431,15 @@ export class CallManager {
     this.screenTrack.stop();
     this.screenTrack = null;
     await this.videoTx?.sender.replaceTrack(this.cameraTrack ?? null);
+    if (this.audioMix) await this.audioTx?.sender.replaceTrack(this.state.localStream?.getAudioTracks()[0] ?? null);
+    this.stopScreenAudio();
     this.setLocal({ screen: false });
+  }
+
+  private stopScreenAudio() {
+    this.audioMix?.close();
+    this.screenAudio?.stop();
+    this.audioMix = this.screenAudio = null;
   }
 
   /** The track to show as my self-view (screen while sharing, else camera). */
@@ -723,6 +748,7 @@ export class CallManager {
     this.cameraTrack?.stop();
     this.screenTrack?.stop();
     this.cameraTrack = this.screenTrack = null;
+    this.stopScreenAudio();
     this.pc?.close();
     this.pc = null;
     this.audioTx = this.videoTx = null;
