@@ -23,6 +23,7 @@ import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View }
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bootHome, saveHome } from '@/lib/boot-cache';
 import { ErrorNote } from '../module-screen';
+import { PlantCard } from '../plant/plant-card';
 import { SnapRow } from '../snaps/snap-row';
 import { Avatar } from '../ui/avatar';
 import { Button, IconButton } from '../ui/button';
@@ -255,6 +256,8 @@ export function HomeScreen() {
         detail="One question a day. Your answers open once you’ve both replied."
         onPress={() => router.push('/connect')}
       />
+
+      {d ? <PlantCard /> : null}
 
       <FormSheet centered open={editingStatus} title="Your status" onClose={() => setEditingStatus(false)}>
         {editingStatus ? (

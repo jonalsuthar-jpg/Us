@@ -21,6 +21,8 @@ export * from './api/connect';
 export * from './api/account';
 export * from './api/together';
 export * from './api/snaps';
+export * from './api/plant';
+export * from './plant-art';
 
 export * from './realtime/couple-channel';
 export * from './realtime/typing';

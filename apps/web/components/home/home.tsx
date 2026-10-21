@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
 import { ErrorNote } from '@/components/app/module-header';
+import { PlantCard } from '@/components/plant/plant-card';
 import { SnapRow } from '@/components/snaps/snap-row';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, Spinner } from '@/components/ui/button';
@@ -277,6 +278,8 @@ export function Home() {
           />
         </div>
       ) : null}
+
+      {d ? <PlantCard /> : null}
 
       <Dialog open={editingStatus} onOpenChange={setEditingStatus} title="Your status" description={`${theirName} sees this on their Home. It fades after a day.`}>
         {editingStatus ? (

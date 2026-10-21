@@ -17,7 +17,8 @@ export type PushCategory =
   | 'location_shared' // my partner started sharing their location with me
   | 'arrival' // asked to say when home / got home safe
   | 'new_snap' // my partner posted a snap
-  | 'snap_reaction'; // my partner reacted to my snap
+  | 'snap_reaction' // my partner reacted to my snap
+  | 'plant'; // evening nudge: only my partner watered our plant today (sent by a schedule)
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }

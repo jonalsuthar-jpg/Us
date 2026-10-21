@@ -782,13 +782,46 @@ await test('snaps: gone for both of us once expired; at most 10 live each', asyn
   );
 });
 
+console.log('\nPlant');
+
+await test('plant: a day counts for each of us when we do something; outsiders see nothing; only triggers write', async () => {
+  // Everything above happened "today": messages, taps, snaps, answers and calls from both of us.
+  const rows = await as(bob, () => q(`select a_at, b_at from public.plant_days`));
+  assert.equal(rows.length, 1);
+  assert.ok(rows[0].a_at && rows[0].b_at, 'both watered');
+  assert.equal((await as(carol, () => q(`select * from public.plant_days where couple_id = $1`, [couple.id]))).length, 0, 'outsider');
+  await rejects(as(alice, () => q(`insert into public.plant_days (couple_id, day) values ($1, current_date + 1)`, [couple.id])), /permission denied/, 'insert');
+  await rejects(as(alice, () => q(`update public.plant_days set b_at = now()`)), /permission denied/, 'update');
+  await rejects(as(alice, () => q(`select public.plant_water($1, $2, now())`, [couple.id, alice])), /permission denied/, 'call plant_water');
+});
+
+await test('plant: a call waters both of us once it is answered; the call log itself does not', async () => {
+  await q(`delete from public.plant_days`);
+  const call = (await as(alice, () => one(`insert into public.calls (couple_id, caller_id, callee_id) values ($1, $2, $3) returning id`, [couple.id, alice, bob]))).id;
+  assert.equal((await q(`select * from public.plant_days`)).length, 0, 'ringing waters nothing');
+  await as(bob, () => q(`select public.set_call_status($1, 'active')`, [call]));
+  const row = await one(`select a_at, b_at from public.plant_days where couple_id = $1`, [couple.id]);
+  assert.ok(row.a_at && row.b_at, 'both, once answered');
+  await q(`delete from public.plant_days`);
+  await as(alice, () => q(`select public.set_call_status($1, 'ended')`, [call]));
+  assert.equal((await q(`select * from public.plant_days`)).length, 0, 'call log entry waters nothing');
+});
+
+await test("plant: my timezone must be real, and the couple's day follows partner A's clock", async () => {
+  await rejects(as(alice, () => q(`update public.profiles set timezone = 'Mars/Olympus' where id = $1`, [alice])), /profiles_timezone_valid/, 'made-up zone');
+  await as(alice, () => q(`update public.profiles set timezone = 'Pacific/Kiritimati' where id = $1`, [alice]));
+  await as(bob, () => q(`insert into public.messages (couple_id, sender_id, body) values ($1, $2, 'still waters')`, [couple.id, bob]));
+  const day = (await one(`select day::text from public.plant_days where couple_id = $1 and b_at is not null`, [couple.id])).day;
+  assert.equal(day, (await one(`select (now() at time zone 'Pacific/Kiritimati')::date::text as d`)).d, "A's clock");
+});
+
 console.log('\nLeaving');
 
 await test('unpair: removes everything we shared, keeps private data, frees both of us', async () => {
   await rejects(as(null, () => q(`select public.unpair()`)), /not_paired/, 'signed out');
   await as(alice, () => q(`select public.unpair()`));
   assert.equal((await q(`select count(*)::int as n from public.couples where id = $1`, [couple.id]))[0].n, 0, 'couple gone');
-  for (const table of ['messages', 'calls', 'calendar_events', 'memories', 'goals', 'future_letters', 'daily_questions', 'inside_jokes']) {
+  for (const table of ['messages', 'calls', 'calendar_events', 'memories', 'goals', 'future_letters', 'daily_questions', 'inside_jokes', 'snaps', 'plant_days']) {
     const n = (await q(`select count(*)::int as n from public.${table} where couple_id = $1`, [couple.id]))[0].n;
     assert.equal(n, 0, `${table} cleared`);
   }

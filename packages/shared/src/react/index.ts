@@ -5,3 +5,4 @@ export * from './call-provider';
 export * from './use-couple-data';
 export * from './use-chat-media';
 export * from './use-snaps';
+export * from './use-plant';

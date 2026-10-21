@@ -39,6 +39,8 @@ export type Database = {
           status_emoji: string | null;
           status_text: string | null;
           status_at: string | null;
+          /** The device's IANA zone; partner A's sets the couple's "today" for the plant. */
+          timezone: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -49,6 +51,7 @@ export type Database = {
           status_emoji?: string | null;
           status_text?: string | null;
           status_at?: string | null;
+          timezone?: string | null;
         };
         Relationships: [];
       };
@@ -342,6 +345,13 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      plant_days: {
+        /** When each of us first did something for the other that day. Written by triggers only. */
+        Row: { couple_id: string; day: string; a_at: string | null; b_at: string | null };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       location_shares: {
         Row: {
           owner_id: string;
@@ -487,6 +497,7 @@ export type Countdown = Tables['countdowns']['Row'];
 export type ListItem = Tables['list_items']['Row'];
 export type Tap = Tables['taps']['Row'];
 export type SnapRow = Tables['snaps']['Row'];
+export type PlantDay = Tables['plant_days']['Row'];
 export type LocationShare = Tables['location_shares']['Row'];
 export type ArrivalCheck = Tables['arrival_checks']['Row'];
 export type DailyEntry = Database['public']['Functions']['daily_history']['Returns'][number];
