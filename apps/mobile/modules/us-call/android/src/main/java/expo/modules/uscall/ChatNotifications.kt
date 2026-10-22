@@ -7,8 +7,13 @@ import android.app.PendingIntent
 import android.app.Person
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
+import java.io.File
+import java.net.URL
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -24,7 +29,7 @@ object ChatNotifications {
   private const val KEEP = 8
   private val ID = "us-chat".hashCode()
 
-  fun add(context: Context, sender: String, text: String) {
+  fun add(context: Context, sender: String, text: String, avatarUrl: String? = null) {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     val list = JSONArray(prefs.getString(KEY, "[]"))
     list.put(JSONObject().put("s", sender).put("t", text).put("w", System.currentTimeMillis()))
@@ -54,6 +59,9 @@ object ChatNotifications {
     val builder =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, CHANNEL)
       else @Suppress("DEPRECATION") Notification.Builder(context).setPriority(Notification.PRIORITY_HIGH)
+    // Their photo, like a messenger. Kept on disk so a failed download still shows the last one.
+    val photo = avatar(context, avatarUrl)
+    photo?.let { builder.setLargeIcon(it) }
     builder
       .setSmallIcon(CallRing.smallIcon(context))
       .setContentTitle(sender)
@@ -69,7 +77,9 @@ object ChatNotifications {
       val style = Notification.MessagingStyle(Person.Builder().setName("You").build())
       for (i in 0 until kept.length()) {
         val m = kept.getJSONObject(i)
-        style.addMessage(m.getString("t"), m.getLong("w"), Person.Builder().setName(m.getString("s")).build())
+        val person = Person.Builder().setName(m.getString("s"))
+        photo?.let { person.setIcon(Icon.createWithBitmap(it)) }
+        style.addMessage(m.getString("t"), m.getLong("w"), person.build())
       }
       builder.setStyle(style)
     } else {
@@ -78,6 +88,30 @@ object ChatNotifications {
       builder.setStyle(style)
     }
     context.getSystemService(NotificationManager::class.java).notify(ID, builder.build())
+  }
+
+  /** Runs on OneSignal's background thread, so a short blocking download is fine. */
+  private fun avatar(context: Context, url: String?): Bitmap? {
+    val file = File(context.cacheDir, "us-partner-avatar.png")
+    // No photo in the push means they have none now.
+    if (url == null) {
+      file.delete()
+      return null
+    }
+    run {
+      try {
+        val conn = URL(url).openConnection().apply { connectTimeout = 4000; readTimeout = 4000 }
+        val bmp = conn.getInputStream().use { BitmapFactory.decodeStream(it) }
+        if (bmp != null) {
+          val side = minOf(bmp.width, bmp.height)
+          val square = Bitmap.createBitmap(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side)
+          val sized = Bitmap.createScaledBitmap(square, 256, 256, true)
+          file.outputStream().use { sized.compress(Bitmap.CompressFormat.PNG, 100, it) }
+          return sized
+        }
+      } catch (_: Exception) {}
+    }
+    return if (file.exists()) BitmapFactory.decodeFile(file.path) else null
   }
 
   fun clear(context: Context) {

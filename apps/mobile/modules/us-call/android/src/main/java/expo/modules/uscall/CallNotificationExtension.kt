@@ -16,7 +16,12 @@ class CallNotificationExtension : INotificationServiceExtension {
       // With Us open, the app shows messages live and suppresses the push.
       if (CallRing.appInForeground(event.context)) return
       event.preventDefault()
-      ChatNotifications.add(event.context, event.notification.title ?: "Us", event.notification.body ?: "New message")
+      ChatNotifications.add(
+        event.context,
+        event.notification.title ?: "Us",
+        event.notification.body ?: "New message",
+        data.optString("avatar").ifEmpty { null },
+      )
       return
     }
     val callId = data.optString("callId").takeIf { it.isNotEmpty() } ?: return
