@@ -3,7 +3,8 @@
  *
  * Called daily by pg_cron (see 20261026000000_plant.sql). For every couple
  * where exactly one of us has watered the plant today, the other one hears
- * about it. Nobody is nudged when both have, or when neither has.
+ * about it. Nobody is nudged when both have, or when neither has. When we're
+ * close to our next Spark Rank, the nudge says so.
  *
  * Auth: the x-cron-secret header must match the CRON_SECRET function secret.
  */
@@ -34,6 +35,7 @@ Deno.serve(async (req) => {
   const ids = [...new Set((couples ?? []).flatMap((c) => [c.user_a_id, c.user_b_id]))];
   const { data: people } = await admin.from('profiles').select('id, display_name, timezone').in('id', ids);
   const person = new Map((people ?? []).map((p) => [p.id, p]));
+  const { data: ladder } = await admin.rpc('spark_ladder');
 
   let sent = 0;
   for (const c of couples ?? []) {
@@ -42,10 +44,19 @@ Deno.serve(async (req) => {
     if (!row || !!row.a_at === !!row.b_at) continue;
     const [waterer, thirsty] = row.a_at ? [c.user_a_id, c.user_b_id] : [c.user_b_id, c.user_a_id];
     const name = person.get(waterer)?.display_name ?? 'Your partner';
+    const { data: season } = await admin
+      .from('spark_seasons')
+      .select('sparks')
+      .eq('couple_id', c.id)
+      .eq('season', `${day.slice(0, 8)}01`)
+      .maybeSingle();
+    const next: { name: string; at: number } | undefined = season ? (ladder ?? []).find((l: { at: number }) => l.at > season.sparks) : undefined;
+    const gap = next && season ? next.at - season.sparks : null;
+    const near = next && gap !== null && gap <= 40 ? ` You two are ${gap} Sparks from ${next.name}.` : '';
     const ok = await sendPush({
       to: thirsty,
       heading: 'Your plant is thirsty 🌱',
-      content: `${name} watered it today. A message or a snap from you helps it grow.`,
+      content: `${name} watered it today. A message or a snap from you helps it grow.${near}`,
       url: '/home',
       category: 'plant',
       threadId: 'plant',

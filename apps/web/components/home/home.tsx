@@ -23,6 +23,7 @@ import { MobileSettingsLink } from '@/components/app/app-shell';
 import { ErrorNote } from '@/components/app/module-header';
 import { PlantCard } from '@/components/plant/plant-card';
 import { SnapRow } from '@/components/snaps/snap-row';
+import { RankChip } from '@/components/spark/rank-chip';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, Spinner } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -105,14 +106,15 @@ export function Home() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-5 py-8 sm:px-10 sm:py-12">
-      <header className="flex items-center justify-between gap-4">
-        <div>
+      <header className="flex items-center gap-2.5">
+        <div className="min-w-0 flex-1">
           <p className="text-small text-ink-muted" suppressHydrationWarning>
             {hello},
           </p>
-          <h1 className="font-display text-title text-ink sm:text-[40px] sm:leading-[1.1]">{myName}</h1>
+          <h1 className="truncate font-display text-title text-ink sm:text-[40px] sm:leading-[1.1]">{myName}</h1>
         </div>
-        <MobileSettingsLink />
+        <RankChip />
+        <MobileSettingsLink className="h-10 w-10" />
       </header>
 
       <input

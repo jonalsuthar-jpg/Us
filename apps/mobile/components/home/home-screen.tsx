@@ -25,6 +25,7 @@ import { bootHome, saveHome } from '@/lib/boot-cache';
 import { ErrorNote } from '../module-screen';
 import { PlantCard } from '../plant/plant-card';
 import { SnapRow } from '../snaps/snap-row';
+import { RankChip } from '../spark/rank-chip';
 import { Avatar } from '../ui/avatar';
 import { Button, IconButton } from '../ui/button';
 import { cn } from '../ui/cn';
@@ -113,11 +114,14 @@ export function HomeScreen() {
       contentContainerClassName="gap-5 px-5"
       refreshControl={<RefreshControl refreshing={home.loading && !!d} onRefresh={() => void home.reload()} />}
     >
-      <View className="flex-row items-center justify-between">
-        <View>
+      <View className="flex-row items-center gap-2.5">
+        <View className="flex-1">
           <Text className="text-small text-ink-muted">{greeting()},</Text>
-          <Display className="text-title">{myName}</Display>
+          <Display className="text-title" numberOfLines={1}>
+            {myName}
+          </Display>
         </View>
+        <RankChip />
         <IconButton label="Settings" size="sm" tone="raised" onPress={() => router.push('/settings')}>
           <Settings size={19} color={c.inkSoft} />
         </IconButton>

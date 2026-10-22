@@ -23,6 +23,8 @@ export * from './api/together';
 export * from './api/snaps';
 export * from './api/plant';
 export * from './plant-art';
+export * from './api/spark';
+export * from './spark-art';
 
 export * from './realtime/couple-channel';
 export * from './realtime/typing';

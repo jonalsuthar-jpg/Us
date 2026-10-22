@@ -18,7 +18,8 @@ export type PushCategory =
   | 'arrival' // asked to say when home / got home safe
   | 'new_snap' // my partner posted a snap
   | 'snap_reaction' // my partner reacted to my snap
-  | 'plant'; // evening nudge: only my partner watered our plant today (sent by a schedule)
+  | 'plant' // evening nudge: only my partner watered our plant today (sent by a schedule)
+  | 'spark_rank'; // the two of us just reached a new Spark Rank
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }
@@ -28,7 +29,8 @@ export type PushRequest =
   | { category: 'thinking_of_you'; tapId: string }
   | { category: 'location_shared' }
   | { category: 'arrival'; checkId: string }
-  | { category: 'new_snap' | 'snap_reaction'; snapId: string };
+  | { category: 'new_snap' | 'snap_reaction'; snapId: string }
+  | { category: 'spark_rank' };
 
 /** Payload attached to every notification (`data`) for deep-link routing. */
 export interface PushData {

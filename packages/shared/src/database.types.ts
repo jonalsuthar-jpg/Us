@@ -26,6 +26,18 @@ export type MessageKind = 'text' | 'call';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
 export type MemoryKind = 'moment' | 'trip' | 'date';
 export type LoveLanguage = 'words' | 'acts' | 'gifts' | 'time' | 'touch';
+export type SparkKind =
+  | 'first_move'
+  | 'message'
+  | 'media'
+  | 'tap'
+  | 'snap'
+  | 'status'
+  | 'call_start'
+  | 'call_pickup'
+  | 'call_minutes'
+  | 'question'
+  | 'together';
 
 export type Database = {
   public: {
@@ -352,6 +364,38 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      spark_events: {
+        /** Sparks one of us earned. I can read only my own. Written by triggers only. */
+        Row: {
+          id: number;
+          couple_id: string;
+          /** Null for the together bonus, which is ours. */
+          user_id: string | null;
+          day: string;
+          kind: SparkKind;
+          sparks: number;
+          source: string;
+          created_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      spark_seasons: {
+        /** Our running total for a month (season is its first day). Written by triggers only. */
+        Row: {
+          couple_id: string;
+          season: string;
+          carry_in: number;
+          sparks: number;
+          today: string | null;
+          today_sparks: number;
+          notified_rank: number;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       location_shares: {
         Row: {
           owner_id: string;
@@ -498,6 +542,8 @@ export type ListItem = Tables['list_items']['Row'];
 export type Tap = Tables['taps']['Row'];
 export type SnapRow = Tables['snaps']['Row'];
 export type PlantDay = Tables['plant_days']['Row'];
+export type SparkEvent = Tables['spark_events']['Row'];
+export type SparkSeason = Tables['spark_seasons']['Row'];
 export type LocationShare = Tables['location_shares']['Row'];
 export type ArrivalCheck = Tables['arrival_checks']['Row'];
 export type DailyEntry = Database['public']['Functions']['daily_history']['Returns'][number];

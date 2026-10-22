@@ -1,6 +1,6 @@
 'use client';
 
-import { draftMessage, tokens, type Message } from '@us/shared';
+import { draftMessage, SPARK_DIVISIONS, tokens, type Message } from '@us/shared';
 import { Mic, MicOff, MonitorUp, Phone, PhoneOff, Video } from 'lucide-react';
 import { useState } from 'react';
 import { Bubble } from '@/components/chat/bubble';
@@ -13,6 +13,8 @@ import { Field } from '@/components/ui/field';
 import { IconButton } from '@/components/ui/icon-button';
 import { PrivacyBadge } from '@/components/ui/privacy';
 import { Sheet } from '@/components/ui/sheet';
+import { ChipFace } from '@/components/spark/rank-chip';
+import { Emblem } from '@/components/spark/emblem';
 
 const SWATCHES: { name: string; role: string; hex: string; text?: boolean }[] = [
   { name: 'Deep plum', role: 'Ink · dark surfaces · calls', hex: tokens.colors.plum[800], text: true },
@@ -211,6 +213,28 @@ export default function DesignPage() {
         <p className="mt-4 text-small text-ink-muted">
           Ticks: clock = sending · one = sent · two = delivered · two gold = read.
         </p>
+      </Section>
+
+      <Section title="Spark Rank">
+        <div className="flex flex-wrap gap-3">
+          {[
+            { d: SPARK_DIVISIONS[0]!, progress: 0.2 },
+            { d: SPARK_DIVISIONS[8]!, progress: 0.55 },
+            { d: SPARK_DIVISIONS[13]!, progress: 0.85 },
+            { d: SPARK_DIVISIONS[21]!, progress: 1 },
+          ].map(({ d, progress }) => (
+            <ChipFace key={d.index} division={d} progress={progress} label={d.name} />
+          ))}
+        </div>
+        <ul className="mt-6 grid grid-cols-3 gap-4 sm:grid-cols-6">
+          {SPARK_DIVISIONS.map((d) => (
+            <li key={d.index} className="flex flex-col items-center gap-1.5">
+              <Emblem division={d} className="h-14 w-14" />
+              <span className="text-micro text-ink-muted">{d.name}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-small text-ink-muted">Each step of a tier gets more gold: I plain, II a rim, III a heavier rim, wings and a gem.</p>
       </Section>
 
       <Dialog

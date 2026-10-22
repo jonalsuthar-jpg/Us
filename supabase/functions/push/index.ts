@@ -4,7 +4,7 @@
  * Body: { category: 'new_message', messageId } | { category: 'incoming_call' | 'call_ended', callId }
  *     | { category: 'wellbeing_nudge', checkinId } | { category: 'daily_question', questionId }
  *     | { category: 'thinking_of_you', tapId } | { category: 'location_shared' } | { category: 'arrival', checkId }
- *     | { category: 'new_snap' | 'snap_reaction', snapId }
+ *     | { category: 'new_snap' | 'snap_reaction', snapId } | { category: 'spark_rank' }
  *
  * The record is re-read with the service role and the caller must be its
  * sender/caller, so a client can't push arbitrary content. Each category maps
@@ -28,7 +28,8 @@ type Category =
   | 'location_shared'
   | 'arrival'
   | 'new_snap'
-  | 'snap_reaction';
+  | 'snap_reaction'
+  | 'spark_rank';
 
 interface Style {
   iosSound?: string;
@@ -68,6 +69,7 @@ const CATEGORIES: Record<Category, Style> = {
   arrival: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'time-sensitive', threadId: 'arrival' },
   new_snap: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'snaps' },
   snap_reaction: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'snaps' },
+  spark_rank: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'spark' },
 };
 
 Deno.serve(async (req) => {
@@ -237,6 +239,16 @@ Deno.serve(async (req) => {
       content = `Reacted ${snap.reaction} to your snap.`;
       collapseId = `snap-reaction-${snap.id}`;
     }
+  } else if (body.category === 'spark_rank') {
+    // We just reached a new rank. The database hands out each rank once, so
+    // however many of our apps ask, my partner hears about it one time.
+    const { data: rank } = await admin.rpc('spark_claim_rank_up', { p_couple: coupleId });
+    if (!rank) return json({ skipped: 'nothing_new' });
+    category = 'spark_rank';
+    heading = 'Spark Rank';
+    content = `You two just reached ${rank} together ✨`;
+    collapseId = `spark-${coupleId}`;
+    data = { category, url: '/home' };
   } else {
     return json({ error: 'unknown_category' }, 400);
   }
