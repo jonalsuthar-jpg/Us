@@ -51,35 +51,48 @@ export function StreamAudio({ stream, revision, sinkId }: { stream: MediaStream 
   return <audio ref={ref} autoPlay />;
 }
 
-export interface AudioOutput {
+export interface AudioDevice {
   deviceId: string;
   label: string;
 }
 
 /**
- * Speakers / headphones this browser can route call audio to. Empty where
- * output selection isn't supported (Safari, most phone browsers), which is
- * where the OS already handles routing.
+ * The speakers / headphones and the microphones this browser can use, kept
+ * current as devices come and go. Outputs are empty where output selection
+ * isn't supported (Safari, most phone browsers): there the OS routes sound.
+ * `defaultOutput` names whatever the system plays through right now.
  */
-export function useAudioOutputs(active: boolean): AudioOutput[] {
-  const [outputs, setOutputs] = useState<AudioOutput[]>([]);
+export function useAudioDevices(active: boolean): { outputs: AudioDevice[]; inputs: AudioDevice[]; defaultOutput: string | null } {
+  const [devices, setDevices] = useState<{ outputs: AudioDevice[]; inputs: AudioDevice[]; defaultOutput: string | null }>({
+    outputs: [],
+    inputs: [],
+    defaultOutput: null,
+  });
   useEffect(() => {
-    if (!active || typeof HTMLMediaElement === 'undefined' || !('setSinkId' in HTMLMediaElement.prototype)) return;
+    if (!active || typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
     const md = navigator.mediaDevices;
+    const canPickOutput = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
+    const list = (all: MediaDeviceInfo[], kind: MediaDeviceKind, fallback: string) =>
+      all
+        .filter((d) => d.kind === kind && d.deviceId && d.deviceId !== 'communications')
+        .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `${fallback} ${i + 1}` }));
     const load = () =>
       void md
         .enumerateDevices()
-        .then((all) =>
-          setOutputs(
-            all
-              .filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'communications')
-              .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Speaker ${i + 1}` })),
-          ),
-        )
+        .then((all) => {
+          const outs = all.filter((d) => d.kind === 'audiooutput');
+          const def = outs.find((d) => d.deviceId === 'default') ?? outs[0];
+          setDevices({
+            outputs: canPickOutput ? list(all, 'audiooutput', 'Speaker') : [],
+            inputs: list(all, 'audioinput', 'Microphone'),
+            // Its label changes ("Default - Headphones") when the system switches.
+            defaultOutput: def ? `${def.groupId}|${def.label}` : null,
+          });
+        })
         .catch(() => {});
     load();
     md.addEventListener('devicechange', load);
     return () => md.removeEventListener('devicechange', load);
   }, [active]);
-  return outputs;
+  return devices;
 }

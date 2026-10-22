@@ -134,6 +134,15 @@ export interface CallState {
   canSwitchCamera: boolean;
   /** How my screen share trades quality when the connection is tight. */
   shareMode: ShareMode;
+  /** The microphone I picked (a deviceId), or null for the system default. */
+  micDeviceId: string | null;
+  /** My share is sending its sound (a tab, or the whole screen on Windows). */
+  shareSound: boolean;
+  /**
+   * The sound I was sharing stopped arriving — it ended, went silent at the
+   * source, or my speakers changed under it. Sharing again picks it back up.
+   */
+  shareSoundLost: boolean;
   /** Bumped whenever tracks on either stream change, so views can re-bind. */
   revision: number;
 }
@@ -154,8 +163,13 @@ const INITIAL: CallState = {
   facing: 'user',
   canSwitchCamera: false,
   shareMode: 'smooth',
+  micDeviceId: null,
+  shareSound: false,
+  shareSoundLost: false,
   revision: 0,
 };
+
+const AUDIO_CONSTRAINTS: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 
 const VIDEO_CONSTRAINTS: MediaTrackConstraints = {
   facingMode: 'user',
@@ -344,6 +358,62 @@ export class CallManager {
     await this.opts.backend.setStatus(call.id, 'ended').catch(() => {});
   }
 
+  /**
+   * Speak through another microphone, mid-call. Muted stays muted, and a
+   * share's sound stays mixed in. `null` goes back to the system default.
+   */
+  async setMicrophone(deviceId: string | null) {
+    const stream = this.state.localStream;
+    const old = stream?.getAudioTracks()[0];
+    if (!stream || !old) return;
+    let fresh: MediaStreamTrack | undefined;
+    try {
+      const got = await this.opts.rtc.getUserMedia({ audio: deviceId ? { ...AUDIO_CONSTRAINTS, deviceId: { exact: deviceId } } : AUDIO_CONSTRAINTS, video: false });
+      fresh = got.getAudioTracks()[0];
+    } catch (e) {
+      this.log('microphone not switched', e);
+    }
+    if (!fresh || this.state.localStream !== stream) {
+      fresh?.stop();
+      return;
+    }
+    fresh.enabled = old.enabled;
+    stream.removeTrack(old);
+    stream.addTrack(fresh);
+    old.stop();
+    this.watchMic(fresh);
+    if (this.audioMix && this.screenAudio) {
+      this.audioMix.close();
+      this.audioMix = this.opts.rtc.mixAudio!([fresh, this.screenAudio]);
+      await this.audioTx?.sender.replaceTrack(this.audioMix.track);
+    } else {
+      await this.audioTx?.sender.replaceTrack(fresh);
+    }
+    this.set({ micDeviceId: deviceId, revision: this.state.revision + 1 });
+  }
+
+  /** A mic that's unplugged mid-call hands over to the default one. */
+  private watchMic(track: MediaStreamTrack | undefined) {
+    track?.addEventListener('ended', () => {
+      if (this.state.localStream?.getAudioTracks()[0] === track) void this.setMicrophone(null);
+    });
+  }
+
+  /**
+   * My speakers changed while I share sound (say, to headphones). On some
+   * systems the shared sound stays with the old ones, so my partner stops
+   * hearing it; the UI offers to share again.
+   */
+  outputChanged() {
+    if (this.state.shareSound) this.set({ shareSoundLost: true });
+  }
+
+  /** Stop and start my share, from a click: the browser asks what to share again. */
+  async reshareScreen() {
+    await this.stopScreenShare();
+    await this.startScreenShare();
+  }
+
   toggleMic() {
     const track = this.state.localStream?.getAudioTracks()[0];
     if (!track) return;
@@ -473,6 +543,15 @@ export class CallManager {
       this.audioMix = this.opts.rtc.mixAudio([mic, sound]);
       await this.audioTx?.sender.replaceTrack(this.audioMix.track);
       await this.setAudioBitrate(SHARE_AUDIO_BITRATE);
+      const lost = () => {
+        if (this.screenAudio === sound) this.set({ shareSoundLost: true });
+      };
+      sound.addEventListener('ended', lost);
+      sound.addEventListener('mute', lost);
+      sound.addEventListener('unmute', () => {
+        if (this.screenAudio === sound) this.set({ shareSoundLost: false });
+      });
+      this.set({ shareSound: true, shareSoundLost: false });
     } else sound?.stop();
     this.setLocal({ screen: true });
   }
@@ -571,6 +650,7 @@ export class CallManager {
     this.audioMix?.close();
     this.screenAudio?.stop();
     this.audioMix = this.screenAudio = null;
+    if (this.state.shareSound || this.state.shareSoundLost) this.set({ shareSound: false, shareSoundLost: false });
   }
 
   /** The track to show as my self-view (screen while sharing, else camera). */
@@ -656,10 +736,11 @@ export class CallManager {
   private async acquireLocalMedia(media: CallMedia) {
     if (this.state.localStream) return;
     const stream = await this.opts.rtc.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: AUDIO_CONSTRAINTS,
       video: media === 'video' ? VIDEO_CONSTRAINTS : false,
     });
     this.cameraTrack = stream.getVideoTracks()[0] ?? null;
+    this.watchMic(stream.getAudioTracks()[0]);
     this.set({ localStream: stream });
     this.setLocal({ mic: true, camera: Boolean(this.cameraTrack), screen: false }, false);
     void this.refreshCameraOptions();

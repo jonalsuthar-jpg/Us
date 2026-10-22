@@ -28,7 +28,13 @@ class FakeTrack {
   async applyConstraints(c: unknown) {
     this.constraints = c;
   }
-  addEventListener() {}
+  private handlers: Record<string, (() => void)[]> = {};
+  addEventListener(type: string, fn: () => void) {
+    (this.handlers[type] ??= []).push(fn);
+  }
+  emit(type: string) {
+    this.handlers[type]?.forEach((fn) => fn());
+  }
 }
 
 class FakeStream {
@@ -308,6 +314,80 @@ describe('CallManager', () => {
     expect(audio.sender.track).toBe(mic);
     expect(close).toHaveBeenCalled();
     expect(screen.tracks[1]!.stopped).toBe(true);
+  });
+
+  it('switches the microphone mid-call, staying muted and keeping a shared sound mixed in', async () => {
+    const w = makeWorld();
+    const screen = new FakeStream([new FakeTrack('video'), new FakeTrack('audio')]);
+    const mixAudio = vi.fn((tracks: FakeTrack[]) => ({ track: new FakeTrack('audio'), close: vi.fn(), tracks }));
+    const opened: (string | undefined)[] = [];
+    const alice = w.manager('alice', 'bob', {
+      rtc: {
+        getDisplayMedia: async () => screen,
+        mixAudio,
+        getUserMedia: (async (c: MediaStreamConstraints) => {
+          const a = c.audio as MediaTrackConstraints | boolean;
+          const id = typeof a === 'object' && typeof a.deviceId === 'object' ? (a.deviceId as { exact: string }).exact : 'default';
+          opened.push(id);
+          return new FakeStream([new FakeTrack('audio', id), ...(c.video ? [new FakeTrack('video')] : [])]);
+        }) as unknown as RtcAdapter['getUserMedia'],
+      } as never,
+    });
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('audio');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+
+    const audio = pcOf(alice).transceivers.find((t) => t.receiver.track.kind === 'audio')!;
+    const first = audio.sender.track as unknown as FakeTrack;
+    alice.toggleMic();
+    await alice.setMicrophone('usb-mic');
+    const usb = audio.sender.track as unknown as FakeTrack;
+    expect(usb.deviceId).toBe('usb-mic');
+    expect(usb.enabled).toBe(false);
+    expect(first.stopped).toBe(true);
+    expect(alice.getState().micDeviceId).toBe('usb-mic');
+    expect(alice.getState().localStream!.getAudioTracks()).toEqual([usb]);
+
+    await alice.startScreenShare();
+    await alice.setMicrophone('headset');
+    const mix = mixAudio.mock.results.at(-1)!.value;
+    expect((mix.tracks[0] as FakeTrack).deviceId).toBe('headset');
+    expect(mix.tracks[1]).toBe(screen.tracks[1]);
+    expect(audio.sender.track).toBe(mix.track);
+    expect(mixAudio.mock.results[0]!.value.close).toHaveBeenCalled();
+
+    // Unplugged: back to the default mic.
+    (alice.getState().localStream!.getAudioTracks()[0] as unknown as FakeTrack).emit('ended');
+    await vi.waitFor(() => expect(alice.getState().micDeviceId).toBeNull());
+    expect(opened.at(-1)).toBe('default');
+  });
+
+  it("flags a shared sound that stopped, or whose speakers changed, until it's shared again", async () => {
+    const w = makeWorld();
+    const sound = new FakeTrack('audio');
+    const alice = w.manager('alice', 'bob', {
+      rtc: { getDisplayMedia: async () => new FakeStream([new FakeTrack('video'), sound]), mixAudio: () => ({ track: new FakeTrack('audio'), close: () => {} }) } as never,
+    });
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('audio');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+
+    alice.outputChanged();
+    expect(alice.getState().shareSoundLost).toBe(false); // nothing shared yet
+    await alice.startScreenShare();
+    expect(alice.getState()).toMatchObject({ shareSound: true, shareSoundLost: false });
+    alice.outputChanged();
+    expect(alice.getState().shareSoundLost).toBe(true);
+    await alice.reshareScreen();
+    expect(alice.getState()).toMatchObject({ shareSoundLost: false, local: { screen: true } });
+    sound.emit('ended');
+    expect(alice.getState().shareSoundLost).toBe(true);
+    await alice.stopScreenShare();
+    expect(alice.getState()).toMatchObject({ shareSound: false, shareSoundLost: false });
   });
 
   it('a share goes out smooth by default, switches to sharp, and gives the camera its settings back', async () => {

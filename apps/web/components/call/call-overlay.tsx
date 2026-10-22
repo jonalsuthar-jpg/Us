@@ -17,7 +17,8 @@ import {
   SwitchCamera,
   Video,
   VideoOff,
-  Volume2,
+  SlidersHorizontal,
+  VolumeX,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '@/components/ui/avatar';
@@ -25,7 +26,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
 import { useElapsed } from '@/lib/hooks';
-import { StreamAudio, StreamVideo, useAudioOutputs } from './media';
+import { StreamAudio, StreamVideo, useAudioDevices, type AudioDevice } from './media';
 
 /**
  * Full-screen call surface, mounted once for the whole app. Plum, quiet, and
@@ -104,7 +105,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
   const m = useCallManager();
   const { partner, partnerSlot, me } = useCouple();
   const [shareNudge, setShareNudge] = useState(false);
-  const [outputPicker, setOutputPicker] = useState(false);
+  const [audioPicker, setAudioPicker] = useState(false);
   // undefined = the browser's default output.
   const [sinkId, setSinkId] = useState<string | undefined>(undefined);
   const elapsed = useElapsed(state.connectedAt);
@@ -145,8 +146,16 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
     else void root.current?.requestFullscreen().catch(() => {});
   };
   const isVideo = state.media === 'video';
-  const outputs = useAudioOutputs(state.phase !== 'idle' && state.phase !== 'ended');
+  const { outputs, inputs, defaultOutput } = useAudioDevices(state.phase !== 'idle' && state.phase !== 'ended');
   const currentOutput = sinkId ?? outputs.find((o) => o.deviceId === 'default')?.deviceId ?? outputs[0]?.deviceId;
+  const currentInput = state.micDeviceId ?? inputs.find((i) => i.deviceId === 'default')?.deviceId ?? inputs[0]?.deviceId;
+
+  // The system switched speakers (say, to headphones) while I share sound.
+  const lastOutput = useRef(defaultOutput);
+  useEffect(() => {
+    if (lastOutput.current && defaultOutput && defaultOutput !== lastOutput.current) m.outputChanged();
+    lastOutput.current = defaultOutput;
+  }, [defaultOutput, m]);
 
   useEffect(() => primary.current?.focus(), [state.phase]);
 
@@ -247,9 +256,9 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
               <Radio className="h-3.5 w-3.5" aria-hidden /> Relayed
             </span>
           )}
-          {outputs.length > 1 && state.phase !== 'ended' && (
-            <IconButton label="Choose speaker or headphones" tone="night" size="sm" onClick={() => setOutputPicker(true)}>
-              <Volume2 className="h-4 w-4" />
+          {(outputs.length > 1 || inputs.length > 1) && state.phase !== 'ended' && (
+            <IconButton label="Choose microphone and speaker" tone="night" size="sm" onClick={() => setAudioPicker(true)}>
+              <SlidersHorizontal className="h-4 w-4" />
             </IconButton>
           )}
         </div>
@@ -325,6 +334,19 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
               </button>
             ))}
           </div>
+          {state.shareSoundLost ? (
+            <div role="status" className="flex items-center gap-2 rounded-full bg-gold-50 py-1 pl-3 pr-1 text-micro text-gold-800">
+              <VolumeX className="h-3.5 w-3.5" aria-hidden />
+              {partner.display_name} may not hear your shared sound since your speakers changed.
+              <button
+                type="button"
+                onClick={() => void m.reshareScreen()}
+                className="rounded-full bg-gold-700 px-2.5 py-1 font-medium text-white hover:bg-gold-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+              >
+                Share again
+              </button>
+            </div>
+          ) : null}
           {shareStats?.height ? (
             <p className="text-micro tabular-nums text-paper/70" aria-live="polite">
               {`${shareStats.height}p · ${Math.round(shareStats.fps ?? 0)} fps`}
@@ -411,33 +433,21 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
         )}
       </footer>
 
-      <Dialog open={outputPicker} onOpenChange={setOutputPicker} title="Play the call through">
-        <ul className="space-y-1" role="radiogroup" aria-label="Audio output">
-          {outputs.map((o) => {
-            const selected = o.deviceId === currentOutput;
-            return (
-              <li key={o.deviceId}>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => {
-                    setSinkId(o.deviceId);
-                    setOutputPicker(false);
-                  }}
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left text-ink transition-colors hover:bg-paper-sunken',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
-                    selected && 'bg-paper-sunken font-medium',
-                  )}
-                >
-                  <span className={cn('h-2 w-2 rounded-full', selected ? 'bg-rose-600' : 'bg-plum-200')} aria-hidden />
-                  {o.label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      <Dialog open={audioPicker} onOpenChange={setAudioPicker} title="Microphone and speaker">
+        <div className="space-y-5">
+          {inputs.length > 1 ? (
+            <DevicePicker
+              label="Speak through"
+              devices={inputs}
+              selected={currentInput}
+              onPick={(id) => void m.setMicrophone(id === 'default' ? null : id)}
+            />
+          ) : null}
+          {outputs.length > 1 ? <DevicePicker label="Hear the call through" devices={outputs} selected={currentOutput} onPick={setSinkId} /> : null}
+          {state.local.screen ? (
+            <p className="text-micro text-ink-muted">Changing your speakers while you share sound? If {partner.display_name} stops hearing it, share again.</p>
+          ) : null}
+        </div>
       </Dialog>
 
       <Dialog
@@ -447,6 +457,37 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
         description="Screen sharing works best from the Us web app on a laptop or desktop. Open it there and join the call — you can switch devices any time."
       />
     </motion.div>
+  );
+}
+
+function DevicePicker({ label, devices, selected, onPick }: { label: string; devices: AudioDevice[]; selected?: string; onPick: (deviceId: string) => void }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-small font-medium text-ink">{label}</p>
+      <ul className="space-y-1" role="radiogroup" aria-label={label}>
+        {devices.map((d) => {
+          const on = d.deviceId === selected;
+          return (
+            <li key={d.deviceId}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => onPick(d.deviceId)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left text-ink transition-colors hover:bg-paper-sunken',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+                  on && 'bg-paper-sunken font-medium',
+                )}
+              >
+                <span className={cn('h-2 w-2 shrink-0 rounded-full', on ? 'bg-rose-600' : 'bg-plum-200')} aria-hidden />
+                <span className="truncate">{d.label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
