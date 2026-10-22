@@ -1,7 +1,8 @@
 import { moduleById } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { useCouple, useFeature } from '@us/shared/react';
 import { View } from 'react-native';
 import { DailyQuestion, useDaily } from '@/components/connect/daily-question';
+import { FeatureOff } from '@/components/feature-off';
 import { ModuleScreen, SectionTitle } from '@/components/module-screen';
 import { PrivacyBadge } from '@/components/ui/privacy';
 import { Sheet } from '@/components/ui/sheet';
@@ -12,10 +13,11 @@ export default function Connect() {
   const { partner } = useCouple();
   const daily = useDaily();
   const soon = moduleById('connect').features.filter((f) => f.soon);
+  const on = useFeature('daily_question');
 
   return (
     <ModuleScreen id="connect" refreshing={daily.loading && !!daily.data} onRefresh={() => void daily.reload()}>
-      <DailyQuestion daily={daily} />
+      {on ? <DailyQuestion daily={daily} /> : <FeatureOff />}
       <View className="gap-3">
         <SectionTitle>Coming to Connect</SectionTitle>
         {soon.map((f) => (

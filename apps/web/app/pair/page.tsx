@@ -5,6 +5,7 @@ import {
   formatInviteCode,
   friendlyError,
   getCoupleContext,
+  getMyAccess,
   redeemInvite,
   watchForPairing,
   type CoupleContext,
@@ -39,6 +40,8 @@ export default function PairPage() {
     void sb.auth.getUser().then(async ({ data }) => {
       if (!data.user) return router.replace('/sign-in');
       setUserId(data.user.id);
+      const access = await getMyAccess(sb).catch(() => null);
+      if (access && access.status !== 'approved') return router.replace('/waiting');
       const ctx = await getCoupleContext(sb, data.user.id).catch(() => null);
       if (ctx) router.replace('/home');
       else setStep('choose');

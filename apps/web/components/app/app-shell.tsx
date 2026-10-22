@@ -1,7 +1,7 @@
 'use client';
 
-import { MODULES, type ModuleId } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { MODULES, TAB_FEATURES, type ModuleId } from '@us/shared';
+import { useCouple, useFeatures } from '@us/shared/react';
 import { HeartHandshake, House, MessageCircleHeart, NotebookPen, Settings, Sparkles, Sprout } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -32,6 +32,9 @@ const DOT: Record<ModuleId, string> = {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { me, partner, mySlot, partnerSlot, partnerOnline, unread, connection } = useCouple();
+  const has = useFeatures();
+  // Only the areas this couple has something in.
+  const modules = MODULES.filter((m) => TAB_FEATURES[m.id].some(has));
 
   return (
     <div className="flex min-h-dvh">
@@ -81,7 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className={cn('flex-1', pathname.startsWith('/home') ? 'font-serif text-lead italic' : 'text-body')}>Home</span>
             </Link>
           </li>
-          {MODULES.map((m) => {
+          {modules.map((m) => {
             const active = pathname.startsWith(`/${m.id}`);
             return (
               <li key={m.id}>
@@ -122,7 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-30 flex border-t border-paper-edge bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
       >
         <BottomTab href="/home" label="Home" icon={House} active={pathname.startsWith('/home')} />
-        {MODULES.map((m) => {
+        {modules.map((m) => {
           const Icon = ICONS[m.id];
           const active = pathname.startsWith(`/${m.id}`);
           return <BottomTab key={m.id} href={`/${m.id}`} label={m.title} icon={Icon} active={active} badge={m.id === 'talk' ? unread : 0} />;

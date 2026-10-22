@@ -33,3 +33,6 @@ export * from './webrtc/signals';
 export * from './webrtc/call-manager';
 
 export * from './modules';
+export * from './features';
+export * from './api/access';
+export * from './api/admin';

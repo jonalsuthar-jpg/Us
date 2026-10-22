@@ -1,12 +1,12 @@
-import { getCoupleContext, tokens, type CoupleContext } from '@us/shared';
-import { CallProvider, CoupleProvider, useCallManager, useCallState, useCouple } from '@us/shared/react';
+import { getCoupleContext, getMyAccess, tokens, type CoupleContext, type MyAccess } from '@us/shared';
+import { AccessProvider, CallProvider, CoupleProvider, useCallManager, useCallState, useCouple } from '@us/shared/react';
 import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { CallScreen } from '@/components/call/call-screen';
 import { TapHeart } from '@/components/tap-heart';
-import { readBoot, saveContext } from '@/lib/boot-cache';
+import { readAccess, readBoot, saveAccess, saveContext } from '@/lib/boot-cache';
 import { env } from '@/lib/env';
 import { initPush, onPush } from '@/lib/push';
 import { nativeRtc } from '@/lib/rtc';
@@ -14,9 +14,10 @@ import { playChime, startRing, stopRing } from '@/lib/sounds';
 import { supabase } from '@/lib/supabase';
 import { usePalette } from '@/components/ui/palette';
 
-/** Resolves the couple, then mounts realtime + calls for every screen (tabs and settings). */
+/** Resolves access and the couple, then mounts realtime + calls for every screen (tabs and settings). */
 export default function AppLayout() {
   const [ctx, setCtx] = useState<CoupleContext | null>(null);
+  const [access, setAccess] = useState<MyAccess | null>(null);
   const c = usePalette();
 
   useEffect(() => {
@@ -27,8 +28,10 @@ export default function AppLayout() {
       const { data } = await supabase.auth.getSession();
       const userId = data.session?.user.id;
       if (!userId) return router.replace('/sign-in');
-      const cached = await readBoot(userId);
+      const [cached, cachedAccess] = await Promise.all([readBoot(userId), readAccess(userId)]);
       if (cancelled) return;
+      if (cachedAccess.status !== 'approved') return router.replace('/waiting');
+      setAccess(cachedAccess);
       if (cached) setCtx(cached);
 
       const { data: fresh, error } = await supabase.auth.getUser();
@@ -39,6 +42,11 @@ export default function AppLayout() {
       if (offline) return;
       let next: CoupleContext | null;
       try {
+        const freshAccess = await getMyAccess(supabase);
+        if (cancelled) return;
+        saveAccess(userId, freshAccess);
+        if (freshAccess.status !== 'approved') return router.replace('/waiting');
+        if (JSON.stringify(freshAccess) !== JSON.stringify(cachedAccess)) setAccess(freshAccess);
         next = await getCoupleContext(supabase, userId);
       } catch {
         // Offline: keep the saved couple if we have one.
@@ -60,7 +68,7 @@ export default function AppLayout() {
     };
   }, []);
 
-  if (!ctx) {
+  if (!ctx || !access) {
     return (
       <View className="flex-1 items-center justify-center bg-paper">
         <ActivityIndicator color={tokens.colors.rose[400]} />
@@ -69,6 +77,15 @@ export default function AppLayout() {
   }
 
   return (
+    <AccessProvider
+      sb={supabase}
+      userId={ctx.me.id}
+      initial={access}
+      onBlocked={(a) => {
+        saveAccess(ctx.me.id, a);
+        router.replace('/waiting');
+      }}
+    >
     <CoupleProvider sb={supabase} context={ctx} platform={Platform.OS} onEnded={() => router.replace('/pair')}>
       <CallProvider rtc={nativeRtc} forceRelay={env.forceRelay}>
         <Bridge />
@@ -80,6 +97,7 @@ export default function AppLayout() {
         <CallScreen />
       </CallProvider>
     </CoupleProvider>
+    </AccessProvider>
   );
 }
 

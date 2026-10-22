@@ -9,7 +9,7 @@
  *   TURN_URLS        comma-separated, e.g. "turn:global.relay.metered.ca:80,turns:global.relay.metered.ca:443?transport=tcp"
  *   TURN_USERNAME, TURN_CREDENTIAL
  *
- * STUN is always included. Only paired users get credentials.
+ * STUN is always included. Only paired couples with calls get credentials.
  */
 import { cors, json, requireCaller } from '../_shared/auth.ts';
 
@@ -17,7 +17,7 @@ const STUN = { urls: ['stun:stun.relay.metered.ca:80', 'stun:stun.l.google.com:1
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  const caller = await requireCaller(req);
+  const caller = await requireCaller(req, 'calls');
   if (caller instanceof Response) return caller;
 
   const iceServers: RTCIceServer[] = [STUN];

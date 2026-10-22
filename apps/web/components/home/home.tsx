@@ -15,7 +15,7 @@ import {
   type PartnerSlot,
   type Status,
 } from '@us/shared';
-import { useCallManager, useCouple, useCoupleData, useTyping } from '@us/shared/react';
+import { useAccess, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
 import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Pencil, Phone, Sparkles, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -47,6 +47,8 @@ export function Home() {
   const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, unread, channel } = useCouple();
   const { partnerTyping } = useTyping();
   const calls = useCallManager();
+  const has = useFeatures();
+  const announcement = useAccess()?.announcement;
   const home = useCoupleData('home', () => getHome(sb, { coupleId: couple.id, meId: me.id }), [sb, couple.id, me.id]);
   const [editingStatus, setEditingStatus] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
@@ -113,9 +115,15 @@ export function Home() {
           </p>
           <h1 className="truncate font-display text-title text-ink sm:text-[40px] sm:leading-[1.1]">{myName}</h1>
         </div>
-        <RankChip />
+        {has('spark') && <RankChip />}
         <MobileSettingsLink className="h-10 w-10" />
       </header>
+
+      {announcement ? (
+        <Sheet tone="note" accent={announcement.tone === 'warning' ? 'gold' : 'plum'} pad="sm">
+          <p className="text-small text-ink">{announcement.body}</p>
+        </Sheet>
+      ) : null}
 
       <input
         ref={fileInput}
@@ -172,7 +180,7 @@ export function Home() {
         <div className="space-y-6">
           {photoError ? <ErrorNote>{photoError}</ErrorNote> : null}
 
-          <SnapRow />
+          {has('snaps') && <SnapRow />}
 
           {/* How you both are */}
           <div className="grid grid-cols-2 gap-3">
@@ -188,22 +196,30 @@ export function Home() {
           </div>
 
           {/* Reach each other */}
-          <div className="grid grid-cols-4 gap-2 sm:gap-3">
-            <Action label="Message" href="/talk" badge={unread}>
-              <MessageCircleHeart className="h-5 w-5" />
-            </Action>
-            <Action label="Voice call" onClick={() => void calls.startCall('audio')}>
-              <Phone className="h-5 w-5" />
-            </Action>
-            <Action label="Video call" onClick={() => void calls.startCall('video')}>
-              <Video className="h-5 w-5" />
-            </Action>
-            <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onClick={() => void tap()}>
-              <HeartPulse className={cn('h-5 w-5', tapState === 'sent' && 'animate-ping')} />
-            </Action>
+          <div className="grid auto-cols-fr grid-flow-col gap-2 sm:gap-3">
+            {has('chat') && (
+              <Action label="Message" href="/talk" badge={unread}>
+                <MessageCircleHeart className="h-5 w-5" />
+              </Action>
+            )}
+            {has('calls') && (
+              <Action label="Voice call" onClick={() => void calls.startCall('audio')}>
+                <Phone className="h-5 w-5" />
+              </Action>
+            )}
+            {has('calls') && (
+              <Action label="Video call" onClick={() => void calls.startCall('video')}>
+                <Video className="h-5 w-5" />
+              </Action>
+            )}
+            {has('taps') && (
+              <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onClick={() => void tap()}>
+                <HeartPulse className={cn('h-5 w-5', tapState === 'sent' && 'animate-ping')} />
+              </Action>
+            )}
           </div>
 
-          {d?.taps ? (
+          {d?.taps && has('taps') ? (
             <Sheet tone="note" accent="rose" pad="sm" className="flex items-center gap-3">
               <span className="text-[26px]" aria-hidden>
                 💗
@@ -219,7 +235,7 @@ export function Home() {
             </Sheet>
           ) : null}
 
-          {d?.nudged ? (
+          {d?.nudged && has('mood') ? (
             <Sheet tone="note" accent="rose" pad="sm">
               <p className="font-serif text-lead italic text-ink">{theirName} could use a little extra care today.</p>
               <p className="mt-1 text-small text-ink-soft">A message, a call, or something small that says you noticed.</p>
@@ -235,15 +251,16 @@ export function Home() {
         </div>
       ) : null}
 
-      {d ? (
+      {d && (has('countdowns') || has('location') || has('arrival')) ? (
         <div className="grid gap-6 lg:grid-cols-2">
-          <ComingUp countdowns={d.countdowns} mutate={home.mutate} />
-          <SafetyCard />
+          {has('countdowns') && <ComingUp countdowns={d.countdowns} mutate={home.mutate} />}
+          {(has('location') || has('arrival')) && <SafetyCard />}
         </div>
       ) : null}
 
       {d ? (
         <div className="grid gap-4 md:grid-cols-3">
+          {has('calendar') && (
           <Card
             href="/plan"
             icon={<CalendarHeart className="h-5 w-5 text-plum-700" />}
@@ -255,6 +272,8 @@ export function Home() {
                 : 'Plan a date, a trip, or a quiet night in.'
             }
           />
+          )}
+          {has('memories') && (
           <Link
             href="/memory"
             className="group block rounded-sheet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
@@ -271,6 +290,8 @@ export function Home() {
               </div>
             </Sheet>
           </Link>
+          )}
+          {has('daily_question') && (
           <Card
             href="/connect"
             icon={<HeartHandshake className="h-5 w-5 text-teal-700" />}
@@ -278,10 +299,11 @@ export function Home() {
             title="Today’s question"
             detail="One question a day. Your answers open once you’ve both replied."
           />
+          )}
         </div>
       ) : null}
 
-      {d ? <PlantCard /> : null}
+      {d && has('plant') ? <PlantCard /> : null}
 
       <Dialog open={editingStatus} onOpenChange={setEditingStatus} title="Your status" description={`${theirName} sees this on their Home. It fades after a day.`}>
         {editingStatus ? (

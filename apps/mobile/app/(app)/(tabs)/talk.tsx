@@ -1,5 +1,5 @@
 import { clusters, formatDay, groupByDay, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, type Message } from '@us/shared';
-import { useCallManager, useChatMedia, useCouple, useCoupleData, useMessages, useSnaps, useTyping } from '@us/shared/react';
+import { useCallManager, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,6 +11,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bubble, CallEntry, type ReplyQuote } from '@/components/chat/bubble';
 import { Composer } from '@/components/chat/composer';
+import { FeatureOff } from '@/components/feature-off';
 import { GifPicker } from '@/components/chat/gif-picker';
 import { clearMessageNotifications } from '@/modules/us-call';
 import { env } from '@/lib/env';
@@ -45,6 +46,19 @@ function useViewing() {
 }
 
 export default function Talk() {
+  const chat = useFeature('chat');
+  const insets = useSafeAreaInsets();
+  if (!chat) {
+    return (
+      <View className="flex-1 justify-center px-5" style={{ paddingTop: insets.top }}>
+        <FeatureOff />
+      </View>
+    );
+  }
+  return <Thread />;
+}
+
+function Thread() {
   const insets = useSafeAreaInsets();
   const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf } = useCouple();
   const partnerPhoto = photoOf(partnerSlot);

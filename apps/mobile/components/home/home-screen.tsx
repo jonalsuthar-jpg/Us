@@ -13,7 +13,7 @@ import {
   type PartnerSlot,
   type Status,
 } from '@us/shared';
-import { useCallManager, useCouple, useCoupleData, useTyping } from '@us/shared/react';
+import { useAccess, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
@@ -51,6 +51,8 @@ export function HomeScreen() {
   const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, unread, channel } = useCouple();
   const { partnerTyping } = useTyping();
   const calls = useCallManager();
+  const has = useFeatures();
+  const announcement = useAccess()?.announcement;
   const [saved] = useState(() => {
     const h = bootHome();
     return h?.couple.id === couple.id ? h : undefined;
@@ -121,11 +123,17 @@ export function HomeScreen() {
             {myName}
           </Display>
         </View>
-        <RankChip />
+        {has('spark') && <RankChip />}
         <IconButton label="Settings" size="sm" tone="raised" onPress={() => router.push('/settings')}>
           <Settings size={19} color={c.inkSoft} />
         </IconButton>
       </View>
+
+      {announcement ? (
+        <Sheet tone="note" accent={announcement.tone === 'warning' ? 'gold' : 'plum'} pad="sm">
+          <Text className="text-small">{announcement.body}</Text>
+        </Sheet>
+      ) : null}
 
       {/* The two of you */}
       <View className="overflow-hidden rounded-[28px] bg-plum-800">
@@ -160,7 +168,7 @@ export function HomeScreen() {
       </View>
       {photoError ? <ErrorNote>{photoError}</ErrorNote> : null}
 
-      <SnapRow />
+      {has('snaps') && <SnapRow />}
 
       {/* How you both are */}
       <View className="flex-row gap-3">
@@ -177,21 +185,29 @@ export function HomeScreen() {
 
       {/* Reach each other */}
       <View className="flex-row gap-2">
-        <Action label="Message" onPress={() => router.push('/talk')} badge={unread}>
-          <MessageCircleHeart size={22} color="#fff" />
-        </Action>
-        <Action label="Call" onPress={() => void calls.startCall('audio')}>
-          <Phone size={22} color="#fff" />
-        </Action>
-        <Action label="Video" onPress={() => void calls.startCall('video')}>
-          <Video size={22} color="#fff" />
-        </Action>
-        <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onPress={() => void tap()}>
-          <HeartPulse size={22} color="#fff" />
-        </Action>
+        {has('chat') && (
+          <Action label="Message" onPress={() => router.push('/talk')} badge={unread}>
+            <MessageCircleHeart size={22} color="#fff" />
+          </Action>
+        )}
+        {has('calls') && (
+          <Action label="Call" onPress={() => void calls.startCall('audio')}>
+            <Phone size={22} color="#fff" />
+          </Action>
+        )}
+        {has('calls') && (
+          <Action label="Video" onPress={() => void calls.startCall('video')}>
+            <Video size={22} color="#fff" />
+          </Action>
+        )}
+        {has('taps') && (
+          <Action label={tapState === 'sent' ? 'Sent 💗' : tapState === 'wait' ? 'One moment' : 'Thinking of you'} onPress={() => void tap()}>
+            <HeartPulse size={22} color="#fff" />
+          </Action>
+        )}
       </View>
 
-      {d?.taps ? (
+      {d?.taps && has('taps') ? (
         <Sheet tone="note" accent="rose" pad="sm" className="flex-row items-center gap-3">
           <Text className="text-[24px] leading-[30px]">💗</Text>
           <Text className="flex-1 text-small">
@@ -201,7 +217,7 @@ export function HomeScreen() {
         </Sheet>
       ) : null}
 
-      {d?.nudged ? (
+      {d?.nudged && has('mood') ? (
         <Sheet tone="note" accent="rose" className="gap-1">
           <Display italic className="text-lead">
             {theirName} could use a little extra care today.
@@ -213,10 +229,10 @@ export function HomeScreen() {
       {home.error && !d ? <ErrorNote>{home.error}</ErrorNote> : null}
       {!d && home.loading ? <ActivityIndicator color={c.rose} /> : null}
 
-      {d ? <ComingUp countdowns={d.countdowns} mutate={home.mutate} /> : null}
-      {d ? <SafetyCard /> : null}
+      {d && has('countdowns') ? <ComingUp countdowns={d.countdowns} mutate={home.mutate} /> : null}
+      {d && (has('location') || has('arrival')) ? <SafetyCard /> : null}
 
-      {d ? (
+      {d && has('calendar') ? (
         <Card
           icon={<CalendarHeart size={18} color={c.onPlum} />}
           eyebrow="Next up"
@@ -230,7 +246,7 @@ export function HomeScreen() {
         />
       ) : null}
 
-      {d ? (
+      {d && has('memories') ? (
         <Pressable accessibilityRole="button" onPress={() => router.push('/memory')}>
           <Sheet pad="none" className="overflow-hidden">
             {d.memoryPhotoUrl ? <Image source={{ uri: d.memoryPhotoUrl }} className="aspect-[16/9] w-full" resizeMode="cover" /> : null}
@@ -253,15 +269,17 @@ export function HomeScreen() {
         </Pressable>
       ) : null}
 
-      <Card
-        icon={<HeartHandshake size={18} color={c.onTeal} />}
-        eyebrow="Connect"
-        title="Today’s question"
-        detail="One question a day. Your answers open once you’ve both replied."
-        onPress={() => router.push('/connect')}
-      />
+      {has('daily_question') ? (
+        <Card
+          icon={<HeartHandshake size={18} color={c.onTeal} />}
+          eyebrow="Connect"
+          title="Today’s question"
+          detail="One question a day. Your answers open once you’ve both replied."
+          onPress={() => router.push('/connect')}
+        />
+      ) : null}
 
-      {d ? <PlantCard /> : null}
+      {d && has('plant') ? <PlantCard /> : null}
 
       <FormSheet centered open={editingStatus} title="Your status" onClose={() => setEditingStatus(false)}>
         {editingStatus ? (

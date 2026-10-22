@@ -45,3 +45,7 @@ verify_jwt = false
 
 [functions.plant-nudge]
 verify_jwt = false
+
+# Called by a database trigger with x-cron-secret when someone new signs up.
+[functions.admin-notify]
+verify_jwt = false

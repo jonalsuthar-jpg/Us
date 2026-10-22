@@ -1,5 +1,5 @@
-import { MODULES, type ModuleId } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { MODULES, TAB_FEATURES, type ModuleId } from '@us/shared';
+import { useCouple, useFeatures } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { TopTabs, type MaterialTopTabBarProps } from 'expo-router/js-top-tabs';
 import { HeartHandshake, House, MessageCircleHeart, NotebookPen, Sparkles, Sprout } from 'lucide-react-native';
@@ -24,6 +24,9 @@ const ICONS: Record<'home' | ModuleId, typeof MessageCircleHeart> = {
  */
 export default function AppTabs() {
   const c = usePalette();
+  const has = useFeatures();
+  // Only the areas this couple has something in.
+  const modules = MODULES.filter((m) => TAB_FEATURES[m.id].some(has));
   return (
     <TopTabs
       tabBarPosition="bottom"
@@ -39,7 +42,7 @@ export default function AppTabs() {
       style={{ backgroundColor: c.paper }}
     >
       <TopTabs.Screen name="home" options={{ title: 'Home' }} />
-      {MODULES.map((m) => (
+      {modules.map((m) => (
         <TopTabs.Screen key={m.id} name={m.id} options={{ title: m.title }} />
       ))}
     </TopTabs>

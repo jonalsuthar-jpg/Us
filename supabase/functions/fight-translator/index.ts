@@ -23,7 +23,7 @@ Keep it to one or two short sentences. Example: "I need to feel like my time mat
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  const caller = await requireCaller(req);
+  const caller = await requireCaller(req, 'fight_translator');
   if (caller instanceof Response) return caller;
 
   const { entryId } = await req.json().catch(() => ({}));

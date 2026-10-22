@@ -1,10 +1,11 @@
 'use client';
 
 import { clusters, formatDay, groupByDay, listPinned, messagePreview, searchMessages, snapReplyQuote, type Message } from '@us/shared';
-import { useCallManager, useChatMedia, useCouple, useCoupleData, useMessages, useSnaps, useTyping } from '@us/shared/react';
+import { useCallManager, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import { ChevronsDown, Phone, Pin, Search, Video } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
+import { FeatureOff } from '@/components/app/feature-off';
 import { Bubble, type ReplyQuote } from '@/components/chat/bubble';
 import { CallEntry } from '@/components/chat/call-entry';
 import { Composer } from '@/components/chat/composer';
@@ -21,6 +22,18 @@ import { usePageActive } from '@/lib/hooks';
 import { shrinkPhoto } from '@/lib/image';
 
 export default function TalkPage() {
+  const chat = useFeature('chat');
+  if (!chat) {
+    return (
+      <div className="mx-auto max-w-3xl px-5 py-10 sm:px-10 sm:py-14">
+        <FeatureOff />
+      </div>
+    );
+  }
+  return <Thread />;
+}
+
+function Thread() {
   const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf } = useCouple();
   const partnerPhoto = photoOf(partnerSlot);
   const active = usePageActive();

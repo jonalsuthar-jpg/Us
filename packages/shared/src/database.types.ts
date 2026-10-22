@@ -24,6 +24,7 @@ export type ListName = 'groceries' | 'bucket' | 'watch' | 'read';
 export type CallStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'declined';
 export type MessageKind = 'text' | 'call';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
+export type AccessStatusEnum = 'pending' | 'approved' | 'rejected' | 'suspended';
 export type MemoryKind = 'moment' | 'trip' | 'date';
 export type LoveLanguage = 'words' | 'acts' | 'gifts' | 'time' | 'touch';
 export type SparkKind =
@@ -466,6 +467,43 @@ export type Database = {
         Update: { scores?: Json; primary_language?: LoveLanguage; shared?: boolean; taken_at?: string };
         Relationships: [];
       };
+      features: {
+        Row: { key: string; label: string; module: string; sort: number; enabled: boolean; disabled_message: string | null; updated_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      plans: {
+        Row: { id: string; name: string; features: string[]; is_default: boolean; price_note: string | null; sort: number; created_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      user_access: {
+        Row: {
+          user_id: string;
+          status: AccessStatusEnum;
+          is_admin: boolean;
+          protected: boolean;
+          plan_id: string | null;
+          features: string[];
+          reason: string | null;
+          note: string | null;
+          requested_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      announcements: {
+        Row: { id: string; body: string; tone: 'note' | 'warning'; starts_at: string; ends_at: string | null; created_by: string | null; created_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -509,12 +547,37 @@ export type Database = {
       pin_message: { Args: { p_id: string; p_pinned: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };
       mark_snap_seen: { Args: { p_id: string }; Returns: Database['public']['Tables']['snaps']['Row'] };
       react_to_snap: { Args: { p_id: string; p_emoji: string | null }; Returns: Database['public']['Tables']['snaps']['Row'] };
+      my_access: { Args: Record<PropertyKey, never>; Returns: Json };
+      has_feature: { Args: { p_feature: string }; Returns: boolean };
+      is_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
+      admin_stats: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_list_people: { Args: { p_status?: AccessStatusEnum | null; p_search?: string | null }; Returns: Json[] };
+      admin_decide: {
+        Args: { p_user: string; p_status: AccessStatusEnum; p_plan?: string | null; p_features?: string[] | null; p_reason?: string | null };
+        Returns: Database['public']['Tables']['user_access']['Row'];
+      };
+      admin_set_couple_features: { Args: { p_couple: string; p_plan?: string | null; p_features?: string[] | null }; Returns: undefined };
+      admin_set_note: { Args: { p_user: string; p_note: string }; Returns: undefined };
+      admin_set_admin: { Args: { p_user: string; p_admin: boolean }; Returns: undefined };
+      admin_set_feature: { Args: { p_key: string; p_enabled: boolean; p_message?: string | null }; Returns: Database['public']['Tables']['features']['Row'] };
+      admin_save_plan: {
+        Args: { p_id: string; p_name: string; p_features: string[]; p_default?: boolean; p_price_note?: string | null };
+        Returns: Database['public']['Tables']['plans']['Row'];
+      };
+      admin_delete_plan: { Args: { p_id: string }; Returns: undefined };
+      admin_post_announcement: {
+        Args: { p_body: string; p_tone?: string; p_ends_at?: string | null };
+        Returns: Database['public']['Tables']['announcements']['Row'];
+      };
+      admin_end_announcement: { Args: { p_id: string }; Returns: undefined };
+      admin_audit_log: { Args: { p_limit?: number }; Returns: Json[] };
     };
     Enums: {
       call_media: CallMedia;
       call_status: CallStatus;
       message_kind: MessageKind;
       message_status: MessageStatus;
+      access_status: AccessStatusEnum;
     };
     CompositeTypes: { [_ in never]: never };
   };

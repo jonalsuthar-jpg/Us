@@ -25,7 +25,9 @@ const SHIM = `
   create table auth.users (
     id uuid primary key default gen_random_uuid(),
     email text,
-    raw_user_meta_data jsonb default '{}'::jsonb
+    raw_user_meta_data jsonb default '{}'::jsonb,
+    created_at timestamptz default now(),
+    last_sign_in_at timestamptz
   );
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
@@ -39,11 +41,21 @@ const SHIM = `
 
 await db.exec(SHIM);
 
+async function seedFounders() {
+  const { rows } = await db.query(`insert into auth.users (email, raw_user_meta_data) values
+    ('jonalsuthar@gmail.com', '{"display_name":"Jonal"}'), ('parulsutradhar11@gmail.com', '{"display_name":"Parul"}')
+    returning id`);
+  await db.query(`insert into public.couples (user_a_id, user_b_id) values ($1, $2)`, [rows[0].id, rows[1].id]);
+  await db.query(`insert into public.messages (couple_id, sender_id, body) select id, user_a_id, 'before admin' from public.couples`);
+}
+
 const migrations = readdirSync(join(root, 'supabase/migrations')).filter((f) => f.endsWith('.sql')).sort();
 for (const file of migrations) {
   let sql = readFileSync(join(root, 'supabase/migrations', file), 'utf8');
   // PGlite ships gen_random_uuid() in core; pgcrypto isn't needed here.
   sql = sql.replace(/create extension if not exists pgcrypto[^;]*;/i, '');
+  // The founding couple already exists when the admin migration arrives.
+  if (file === '20261028000000_admin.sql') await seedFounders();
   try {
     await db.exec(sql);
   } catch (e) {
@@ -98,12 +110,16 @@ const [alice, bob, carol, dave] = (
     returning id`)
 ).map((r) => r.id);
 
+// Sign-ups now wait for approval; the fixtures are approved with everything.
+await q(`update public.user_access set status = 'approved', features = (select array_agg(key) from public.features)
+         where user_id = any ($1)`, [[alice, bob, carol, dave]]);
+
 console.log('\nSecurity model');
 
 let couple;
 
 await test('profiles are created on signup (display name falls back to email)', async () => {
-  const rows = await q(`select display_name from public.profiles`);
+  const rows = await q(`select display_name from public.profiles where id = any ($1)`, [[alice, bob, carol, dave]]);
   assert.deepEqual(rows.map((r) => r.display_name).sort(), ['Alice', 'Carol', 'Dave', 'bob']);
 });
 
@@ -941,6 +957,112 @@ await test('unpair: removes everything we shared, keeps private data, frees both
   assert.equal((await as(carol, () => q(`select * from public.couples`))).length, 1, 'other couples untouched');
   await rejects(as(bob, () => q(`select public.unpair()`)), /not_paired/, 'already unpaired');
   assert.match((await as(alice, () => one(`select code from public.create_invite()`))).code, /-/, 'can pair again');
+});
+
+console.log('\nAdmin');
+
+const [jonal, parul] = (
+  await q(`select id from auth.users where email in ('jonalsuthar@gmail.com', 'parulsutradhar11@gmail.com') order by email`)
+).map((r) => r.id);
+const ALL = (await q(`select key from public.features order by sort`)).map((r) => r.key);
+const [erin, frank] = (
+  await q(`insert into auth.users (email, raw_user_meta_data) values
+    ('erin.admin@example.com', '{"display_name":"Erin"}'), ('frank@example.com', '{"display_name":"Frank"}') returning id`)
+).map((r) => r.id);
+let newCouple;
+
+await test('founders: approved, protected, admin, everything, and their messages still there', async () => {
+  const rows = await q(`select user_id, status, protected, is_admin from public.user_access where user_id = any ($1) order by user_id = $2 desc`, [[jonal, parul], jonal]);
+  assert.deepEqual(rows.map((r) => [r.status, r.protected, r.is_admin]), [['approved', true, true], ['approved', true, false]]);
+  for (const who of [jonal, parul]) {
+    const access = (await as(who, () => one(`select public.my_access() as a`))).a;
+    assert.equal(access.status, 'approved');
+    assert.deepEqual(access.features, ALL);
+    assert.equal((await as(who, () => q(`select body from public.messages where body = 'before admin'`))).length, 1);
+  }
+});
+
+await test('sign-up: waits for approval, sees nothing, cannot invite', async () => {
+  const access = (await as(erin, () => one(`select public.my_access() as a`))).a;
+  assert.equal(access.status, 'pending');
+  assert.deepEqual(access.features, []);
+  await rejects(as(erin, () => q(`select public.create_invite()`)), /not_approved/, 'invite');
+  assert.equal(await as(erin, () => one(`select public.current_couple_id() as c`)).then((r) => r.c), null);
+});
+
+await test('admin tools: only for admins', async () => {
+  for (const fn of [`public.admin_stats()`, `public.admin_list_people()`, `public.admin_decide('${erin}', 'approved')`]) {
+    await rejects(as(alice, () => q(`select ${fn}`)), /not_admin/, fn);
+  }
+  await rejects(as(alice, () => q(`update public.user_access set status = 'approved' where user_id = $1`, [erin])), null, 'direct write');
+  assert.equal((await as(alice, () => q(`select * from public.user_access`))).length, 1, 'only my own row');
+});
+
+await test('approve: a plan gives its features; the couple shares the overlap', async () => {
+  await as(jonal, () => q(`select public.admin_decide($1, 'approved', 'starter')`, [erin]));
+  await as(jonal, () => q(`select public.admin_decide($1, 'approved', null, $2)`, [frank, ['chat', 'countdowns', 'memories']]));
+  const { code } = await as(erin, () => one(`select code from public.create_invite()`));
+  newCouple = await as(frank, () => one(`select * from public.redeem_invite($1)`, [code]));
+  const features = (await as(erin, () => one(`select public.my_access() as a`))).a.features;
+  assert.deepEqual(features, ['chat', 'countdowns']);
+  await as(erin, () => q(`insert into public.messages (couple_id, sender_id, body) values ($1, $2, 'hi')`, [newCouple.id, erin]));
+  await rejects(
+    as(frank, () => q(`insert into public.memories (couple_id, created_by, title, happened_on) values ($1, $2, 'x', current_date)`, [newCouple.id, frank])),
+    /row-level security/,
+    'memories not granted',
+  );
+});
+
+await test('couple features: one edit, both partners', async () => {
+  await as(jonal, () => q(`select public.admin_set_couple_features($1, null, $2)`, [newCouple.id, ['chat', 'calls', 'memories']]));
+  for (const who of [erin, frank]) {
+    assert.deepEqual((await as(who, () => one(`select public.my_access() as a`))).a.features, ['chat', 'calls', 'memories']);
+  }
+  await rejects(
+    as(erin, () => q(`insert into public.countdowns (couple_id, created_by, title, on_date) values ($1, $2, 'x', current_date)`, [newCouple.id, erin])),
+    /row-level security/,
+    'countdowns taken away',
+  );
+});
+
+await test('kill switch: pauses a feature for everyone but the founders', async () => {
+  await as(jonal, () => q(`select public.admin_set_feature('chat', false, 'Back soon')`));
+  await rejects(
+    as(erin, () => q(`insert into public.messages (couple_id, sender_id, body) values ($1, $2, 'hi')`, [newCouple.id, erin])),
+    /row-level security/,
+    'chat paused',
+  );
+  assert.equal((await as(erin, () => one(`select public.my_access() as a`))).a.paused.chat, 'Back soon');
+  assert.ok((await as(jonal, () => one(`select public.my_access() as a`))).a.features.includes('chat'), 'founders keep chat');
+  await as(jonal, () => q(`select public.admin_set_feature('chat', true)`));
+});
+
+await test('protected: no admin action can touch the founders', async () => {
+  await rejects(as(jonal, () => q(`select public.admin_decide($1, 'suspended')`, [parul])), /protected/, 'suspend');
+  const founders = await one(`select id from public.couples where user_a_id = $1`, [jonal]);
+  await rejects(as(jonal, () => q(`select public.admin_set_couple_features($1, 'starter')`, [founders.id])), /protected/, 'features');
+});
+
+await test('suspend: the couple closes for them; reinstating opens it again', async () => {
+  await as(jonal, () => q(`select public.admin_decide($1, 'suspended', null, null, 'Spam')`, [frank]));
+  assert.equal((await as(frank, () => q(`select * from public.messages`))).length, 0);
+  assert.equal((await as(frank, () => one(`select public.my_access() as a`))).a.reason, 'Spam');
+  assert.deepEqual((await as(erin, () => one(`select public.my_access() as a`))).a.features, [], 'partner suspended → nothing shared works');
+  await as(jonal, () => q(`select public.admin_decide($1, 'approved')`, [frank]));
+  assert.equal((await as(frank, () => q(`select * from public.messages`))).length, 1);
+});
+
+await test('stats, people and audit', async () => {
+  const stats = (await as(jonal, () => one(`select public.admin_stats() as s`))).s;
+  assert.equal(stats.people, (await one(`select count(*)::int as n from public.profiles`)).n);
+  assert.equal(stats.couples, (await one(`select count(*)::int as n from public.couples`)).n);
+  assert.equal(stats.by_status.approved + (stats.by_status.pending ?? 0), stats.people);
+  const people = await as(jonal, () => q(`select * from public.admin_list_people(null, 'erin.admin')`));
+  assert.equal(people.length, 1);
+  assert.equal(people[0].partner_name, 'Frank');
+  const log = await as(jonal, () => q(`select action from public.admin_audit_log(50)`));
+  assert.ok(log.some((r) => r.action === 'decide:suspended'));
+  assert.ok(log.some((r) => r.action === 'feature_switch'));
 });
 
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`);

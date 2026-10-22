@@ -1,8 +1,8 @@
 'use client';
 
 import { clearMyPhoto, deleteAccount, friendlyError, setMyPhoto, unpair, updateMyProfile } from '@us/shared';
-import { COUPLE_ENDED_TOPIC, useCouple } from '@us/shared/react';
-import { BellRing, Camera, Check } from 'lucide-react';
+import { COUPLE_ENDED_TOPIC, useAccess, useCouple } from '@us/shared/react';
+import { BellRing, Camera, Check, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
@@ -19,6 +19,7 @@ import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme';
 
 export default function SettingsPage() {
   const { sb, me, partner, mySlot, partnerSlot, couple, channel, myPhotoPath, photosChanged } = useCouple();
+  const isAdmin = useAccess()?.is_admin ?? false;
   const router = useRouter();
   const photoInput = useRef<HTMLInputElement>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -86,6 +87,15 @@ export default function SettingsPage() {
       <header>
         <h1 className="font-display text-title text-ink">Settings</h1>
       </header>
+
+      {isAdmin && (
+        <Link href="/admin" className="block rounded-sheet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400">
+          <Sheet tone="note" accent="plum" pad="sm" className="flex items-center gap-3">
+            <ShieldCheck className="h-5 w-5 text-plum-700" aria-hidden />
+            <span className="flex-1 text-small text-ink">Admin console: requests, people, features</span>
+          </Sheet>
+        </Link>
+      )}
 
       <section aria-labelledby="you" className="space-y-5">
         <h2 id="you" className="font-display text-heading text-ink">

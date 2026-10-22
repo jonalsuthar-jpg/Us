@@ -14,7 +14,7 @@
  *      ONESIGNAL_ANDROID_CHANNEL_MESSAGES, ONESIGNAL_ANDROID_CHANNEL_CALLS, (optional)
  *      APP_URL (web origin for click-through, e.g. https://us.example.com)
  */
-import { cors, json, requireCaller } from '../_shared/auth.ts';
+import { cors, json, hasFeature, requireCaller } from '../_shared/auth.ts';
 
 type Category =
   | 'incoming_call'
@@ -30,6 +30,23 @@ type Category =
   | 'new_snap'
   | 'snap_reaction'
   | 'spark_rank';
+
+/** The feature our couple needs for each push (see public.features). */
+const FEATURE: Record<Category, string> = {
+  incoming_call: 'calls',
+  call_ended: 'calls',
+  new_message: 'chat',
+  wellbeing_nudge: 'mood',
+  memory_resurfaced: 'memories',
+  letter_unlocked: 'letters',
+  daily_question: 'daily_question',
+  thinking_of_you: 'taps',
+  location_shared: 'location',
+  arrival: 'arrival',
+  new_snap: 'snaps',
+  snap_reaction: 'snaps',
+  spark_rank: 'spark',
+};
 
 interface Style {
   iosSound?: string;
@@ -84,6 +101,8 @@ Deno.serve(async (req) => {
   if (!appId || !apiKey) return json({ skipped: 'onesignal_not_configured' });
 
   const body = await req.json().catch(() => ({}));
+  const needs = FEATURE[body.category as Category];
+  if (needs && !(await hasFeature(caller, needs))) return json({ skipped: 'feature_off' });
   // Temporary diagnostics for call pushes (see the push_log migration).
   const isCall = body.category === 'incoming_call' || body.category === 'call_ended';
   const trace = (outcome: string, detail?: unknown) =>
@@ -91,6 +110,13 @@ Deno.serve(async (req) => {
   await trace('received', { callId: body.callId ?? null });
   const { data: me } = await admin.from('profiles').select('display_name, avatar_url').eq('id', userId).single();
   const name = me?.display_name ?? 'Your partner';
+  // The photo sits in our private bucket, so the phone gets a signed link it
+  // can fetch for the notification (a week covers a push delivered late).
+  const avatar = me?.avatar_url
+    ? /^https?:/.test(me.avatar_url)
+      ? me.avatar_url
+      : (await admin.storage.from('memories').createSignedUrl(me.avatar_url, 7 * 24 * 3600)).data?.signedUrl ?? null
+    : null;
 
   let category: Category;
   let heading = name;
@@ -114,7 +140,7 @@ Deno.serve(async (req) => {
         '',
       160,
     );
-    data = { category, url: '/talk', messageId: msg.id };
+    data = { category, url: '/talk', messageId: msg.id, ...(avatar ? { avatar } : {}) };
     // TODO: true inline reply needs a native notification category (iOS) /
     // RemoteInput (Android); for now "Reply" deep-links into the composer.
     buttons = [{ id: 'reply', text: 'Reply' }];
@@ -273,7 +299,7 @@ Deno.serve(async (req) => {
     ...(style.ttl ? { ttl: style.ttl } : {}),
     ...(collapseId ? { collapse_id: collapseId } : {}),
     ...(buttons ? { buttons, web_buttons: buttons.map((b) => ({ id: b.id, text: b.text })) } : {}),
-    ...(me?.avatar_url ? { large_icon: me.avatar_url, chrome_web_icon: me.avatar_url, ios_attachments: { avatar: me.avatar_url } } : {}),
+    ...(avatar ? { large_icon: avatar, chrome_web_icon: avatar, ios_attachments: { avatar } } : {}),
     ...(appUrl ? { web_url: `${appUrl}${data.url}` } : {}),
     app_url: `us://${String(data.url).replace(/^\//, '')}`,
   };

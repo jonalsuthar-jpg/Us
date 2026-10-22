@@ -1,13 +1,14 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const APP_ROUTES = ['/home', '/talk', '/connect', '/plan', '/memory', '/growth', '/settings', '/pair'];
+const APP_ROUTES = ['/home', '/talk', '/connect', '/plan', '/memory', '/growth', '/settings', '/pair', '/waiting', '/admin'];
 const AUTH_ROUTES = ['/sign-in', '/sign-up'];
 
 /**
  * Refreshes the Supabase session cookie on every request and keeps signed-out
  * visitors out of the app (and signed-in people out of the auth screens).
- * Pairing state is checked client-side in the (app) layout.
+ * Approval and pairing are checked client-side in the (app) layout; /admin
+ * checks for an admin itself.
  */
 export async function proxy(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

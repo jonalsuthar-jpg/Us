@@ -1,7 +1,8 @@
 'use client';
 
 import { moduleById } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { useCouple, useFeature } from '@us/shared/react';
+import { FeatureOff } from '@/components/app/feature-off';
 import { ModuleHeader } from '@/components/app/module-header';
 import { DailyQuestion } from '@/components/connect/daily-question';
 import { PrivacyBadge } from '@/components/ui/privacy';
@@ -12,11 +13,12 @@ import { Sheet } from '@/components/ui/sheet';
 export default function ConnectPage() {
   const { partner } = useCouple();
   const soon = moduleById('connect').features.filter((f) => f.soon);
+  const daily = useFeature('daily_question');
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 px-5 py-10 sm:px-10 sm:py-14">
       <ModuleHeader id="connect" />
-      <DailyQuestion />
+      {daily ? <DailyQuestion /> : <FeatureOff />}
 
       <section aria-labelledby="coming" className="space-y-4">
         <h2 id="coming" className="font-display text-heading text-ink">

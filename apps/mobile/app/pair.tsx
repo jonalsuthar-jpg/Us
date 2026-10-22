@@ -3,6 +3,7 @@ import {
   formatInviteCode,
   friendlyError,
   getCoupleContext,
+  getMyAccess,
   redeemInvite,
   watchForPairing,
   type CoupleContext,
@@ -39,6 +40,8 @@ export default function Pair() {
     void supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return router.replace('/sign-in');
       setUserId(data.user.id);
+      const access = await getMyAccess(supabase).catch(() => null);
+      if (access && access.status !== 'approved') return router.replace('/waiting');
       const ctx = await getCoupleContext(supabase, data.user.id).catch(() => null);
       if (ctx) router.replace('/home');
       else setStep('choose');
