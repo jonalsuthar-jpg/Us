@@ -35,6 +35,7 @@ export function Bubble({
   onReact,
   onOpenPhoto,
   onJumpTo,
+  animate = true,
 }: {
   message: Message;
   mine: boolean;
@@ -52,6 +53,8 @@ export function Bubble({
   onReact?: (emoji: string | null) => void;
   onOpenPhoto?: (url: string) => void;
   onJumpTo?: (id: string) => void;
+  /** GIFs and stickers play; off while the chat isn't on screen. */
+  animate?: boolean;
 }) {
   const c = usePalette();
   const reactions = groupReactions(message.reactions, myId);
@@ -137,7 +140,7 @@ export function Bubble({
                 borderRadius: sticker ? 0 : 14,
               }}
               contentFit="contain"
-              autoplay
+              autoplay={animate}
             />
           ) : null}
 

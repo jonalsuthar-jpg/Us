@@ -291,6 +291,7 @@ function Thread() {
                   }}
                   onReact={(emoji) => void react(item.message.id, emoji).catch(fail)}
                   onOpenPhoto={setPhoto}
+                  animate={viewing}
                   onJumpTo={(id) => !id.startsWith('snap-') && !jumpTo(id) && say('That message is further up. Scroll up to load it.')}
                 />
               )

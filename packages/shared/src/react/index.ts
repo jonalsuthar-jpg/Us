@@ -7,4 +7,5 @@ export * from './use-chat-media';
 export * from './use-snaps';
 export * from './use-plant';
 export * from './use-spark';
+export * from './use-foreground-tick';
 export * from './access-provider';

@@ -84,6 +84,11 @@ export function GifPicker({ open, onClose, onPick }: { open: boolean; onClose: (
           contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}
           columnWrapperStyle={{ gap: 6 }}
           keyboardShouldPersistTaps="handled"
+          // Every preview animates, so keep only about a screen of them alive.
+          initialNumToRender={12}
+          maxToRenderPerBatch={9}
+          windowSize={3}
+          removeClippedSubviews
           onEndReached={() => !loading && items.length && void load(false)}
           onEndReachedThreshold={0.5}
           ListFooterComponent={loading ? <ActivityIndicator color={c.rose} style={{ marginVertical: 16 }} /> : undefined}

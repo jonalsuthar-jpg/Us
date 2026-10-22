@@ -3,6 +3,7 @@ import { notifyPartner } from '../api/push';
 import { getSpark, sparkState, SPARK_TOPIC, type SparkData, type SparkState } from '../api/spark';
 import { useCouple } from './couple-provider';
 import { useCoupleData, type CoupleData } from './use-couple-data';
+import { useForegroundTick } from './use-foreground-tick';
 
 /** Sparks I just earned, for the little "+8" that floats off the rank chip. */
 export interface SparkGain {
@@ -29,14 +30,14 @@ export function useSpark(): CoupleData<SparkData> & { state: SparkState | undefi
       timer.current = setTimeout(() => void reload(), 400);
     };
     const off = channel.sparks.on(soon);
-    // A new day (and month) begins on the couple's clock.
-    const tick = setInterval(() => void reload(), 15 * 60_000);
     return () => {
       off();
-      clearInterval(tick);
       clearTimeout(timer.current);
     };
   }, [channel, reload]);
+
+  // A new day (and month) begins on the couple's clock.
+  useForegroundTick(() => void reload(), 15 * 60_000);
 
   const state = useMemo(() => (spark.data ? sparkState(spark.data) : undefined), [spark.data]);
 

@@ -12,13 +12,24 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { setForegroundSource } from '@us/shared/react';
 import { ThemeProvider, usePalette } from '@/components/ui/palette';
 import { UpdateBanner } from '@/components/update-banner';
 
 void SplashScreen.preventAutoHideAsync();
+
+// Shared timers (the plant, Spark Rank) only tick while Us is on screen.
+setForegroundSource({
+  isActive: () => AppState.currentState === 'active',
+  subscribe: (cb) => {
+    const sub = AppState.addEventListener('change', (s) => cb(s === 'active'));
+    return () => sub.remove();
+  },
+});
 
 export default function RootLayout() {
   const [loaded] = useFonts({

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { getPlant, plantState, PLANT_TOPIC, setMyTimezone, type PlantData, type PlantState } from '../api/plant';
 import { useCouple } from './couple-provider';
 import { useCoupleData, type CoupleData } from './use-couple-data';
+import { useForegroundTick } from './use-foreground-tick';
 
 /**
  * Our plant, kept fresh: it changes whenever either of us does something, so
@@ -29,14 +30,14 @@ export function usePlant(): CoupleData<PlantData> & { state: PlantState | undefi
       channel.messages.on((c) => c.type === 'INSERT' && soon()),
       channel.calls.on((c) => c.type === 'UPDATE' && !!c.row.answered_at && soon()),
     ];
-    // A new day begins: today's cans go back to resting.
-    const tick = setInterval(() => void reload(), 15 * 60_000);
     return () => {
       offs.forEach((off) => off());
-      clearInterval(tick);
       clearTimeout(timer.current);
     };
   }, [channel, reload]);
+
+  // A new day begins: today's cans go back to resting.
+  useForegroundTick(() => void reload(), 15 * 60_000);
 
   const state = useMemo(() => (plant.data ? plantState(plant.data, mySlot) : undefined), [plant.data, mySlot]);
   return { ...plant, state };
