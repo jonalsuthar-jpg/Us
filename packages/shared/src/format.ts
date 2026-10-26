@@ -28,10 +28,15 @@ export function formatDuration(ms: number): string {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
+/** What a call is, in words: "voice call", "video call", "listen together", "watch together". */
+export function callKind(media: Call['media']): string {
+  return { audio: 'voice call', video: 'video call', listen: 'listen together', watch: 'watch together' }[media] ?? 'call';
+}
+
 /** Copy for a call-log entry in the thread, from the reader's point of view. */
 export function describeCall(call: Call, myId: string): { label: string; missed: boolean; detail?: string } {
   const outgoing = call.caller_id === myId;
-  const kind = call.media === 'video' ? 'video call' : 'voice call';
+  const kind = callKind(call.media);
   switch (call.status) {
     case 'ended': {
       const ms = call.answered_at && call.ended_at ? Date.parse(call.ended_at) - Date.parse(call.answered_at) : 0;

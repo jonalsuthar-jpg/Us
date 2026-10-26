@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
       return json({ error: 'forbidden' }, 403);
     }
     category = body.category;
-    const kind = call.media === 'video' ? 'video call' : 'voice call';
+    const kind = ({ audio: 'voice call', video: 'video call', listen: 'listen together', watch: 'watch together' } as Record<string, string>)[call.media] ?? 'call';
     // Same collapse id: the "missed" push replaces the ringing one.
     collapseId = `call-${call.id}`;
     if (category === 'incoming_call') {
@@ -159,7 +159,12 @@ Deno.serve(async (req) => {
         await trace('skipped_not_ringing', { status: call.status });
         return json({ skipped: 'not_ringing' });
       }
-      content = `Incoming ${kind}`;
+      content =
+        call.media === 'listen'
+          ? 'Wants to listen to music with you'
+          : call.media === 'watch'
+            ? 'Wants to watch something with you'
+            : `Incoming ${kind}`;
       buttons = [
         { id: 'decline', text: 'Decline' },
         { id: 'answer', text: 'Answer' },

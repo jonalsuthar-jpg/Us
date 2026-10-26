@@ -46,12 +46,14 @@ export interface DailyData {
   /** Earlier days where at least one of us answered, newest first. */
   past: DailyEntry[];
   streak: number;
+  /** Questions we've both answered, today included (the last year). */
+  together: number;
 }
 
 /** Today's question (created on first ask) plus recent days. */
 export async function getDaily(sb: UsClient, now = new Date()): Promise<DailyData> {
   const q = unwrap(await sb.rpc('todays_question', { p_date: toDateKey(now) }));
-  const history = unwrap(await sb.rpc('daily_history', { p_limit: 60 }));
+  const history = unwrap(await sb.rpc('daily_history', { p_limit: 365 }));
   const today = history.find((e) => e.question_id === q.id) ?? {
     question_id: q.id,
     prompt: q.prompt,
@@ -62,7 +64,21 @@ export async function getDaily(sb: UsClient, now = new Date()): Promise<DailyDat
     partner_answer: null,
   };
   const past = history.filter((e) => e.question_id !== q.id && (e.my_answer !== null || e.partner_answered));
-  return { today, past, streak: dailyStreak(history, now) };
+  return { today, past, streak: dailyStreak(history, now), together: history.filter((e) => dailyState(e) === 'revealed').length };
+}
+
+/** The archive's filters: everything, both answered, waiting on me, waiting on my partner. */
+export type DailyFilter = 'all' | 'both' | 'theirs' | 'mine';
+
+/** Past days matching a filter and a search over the prompt and the answers I can see. */
+export function filterDaily(entries: DailyEntry[], filter: DailyFilter, query = ''): DailyEntry[] {
+  const want = { all: null, both: 'revealed', theirs: 'nudge', mine: 'waiting' }[filter];
+  const q = query.trim().toLocaleLowerCase();
+  return entries.filter(
+    (e) =>
+      (!want || dailyState(e) === want) &&
+      (!q || [e.prompt, e.my_answer, e.partner_answer].some((t) => t?.toLocaleLowerCase().includes(q))),
+  );
 }
 
 /** Send my answer. It's sealed once sent. */

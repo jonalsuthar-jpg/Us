@@ -35,8 +35,8 @@ export function StreamVideo({
   );
 }
 
-/** Plays the remote audio, optionally on a chosen output device (`sinkId`). */
-export function StreamAudio({ stream, revision, sinkId }: { stream: MediaStream | null; revision: number; sinkId?: string }) {
+/** Plays the remote audio, optionally on a chosen output device (`sinkId`) and at a volume (0–1). */
+export function StreamAudio({ stream, revision, sinkId, volume = 1 }: { stream: MediaStream | null; revision: number; sinkId?: string; volume?: number }) {
   const ref = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -44,6 +44,9 @@ export function StreamAudio({ stream, revision, sinkId }: { stream: MediaStream 
     if (el.srcObject !== stream) el.srcObject = stream;
     if (stream) void el.play().catch(() => {});
   }, [stream, revision]);
+  useEffect(() => {
+    if (ref.current) ref.current.volume = Math.min(1, Math.max(0, volume));
+  }, [volume]);
   useEffect(() => {
     const el = ref.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
     if (el?.setSinkId && sinkId !== undefined) void el.setSinkId(sinkId).catch(() => {});

@@ -1,5 +1,5 @@
-import { describeCall, formatClock, type Message } from '@us/shared';
-import { Phone, PhoneMissed, Video } from 'lucide-react';
+import { describeCall, formatClock, type CallMedia, type Message } from '@us/shared';
+import { Headphones, Phone, PhoneMissed, Tv, Video } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 /** A call in the thread. Missed calls are a "call back" button. */
@@ -10,12 +10,12 @@ export function CallEntry({
 }: {
   message: Message;
   myId: string;
-  onCallBack: (media: 'audio' | 'video') => void;
+  onCallBack: (media: CallMedia) => void;
 }) {
   const call = message.call;
   if (!call) return null;
   const { label, missed, detail } = describeCall(call, myId);
-  const Icon = missed ? PhoneMissed : call.media === 'video' ? Video : Phone;
+  const Icon = missed ? PhoneMissed : { audio: Phone, video: Video, listen: Headphones, watch: Tv }[call.media];
 
   const body = (
     <>

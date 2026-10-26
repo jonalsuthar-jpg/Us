@@ -1,7 +1,7 @@
-import { describeCall, formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, messagePreview, type Message, type PartnerSlot } from '@us/shared';
+import { describeCall, formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, messagePreview, type CallMedia, type Message, type PartnerSlot } from '@us/shared';
 import { Image as AnimatedImage } from 'expo-image';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { Pause, Phone, PhoneMissed, Pin, Play, Video } from 'lucide-react-native';
+import { Headphones, Pause, Phone, PhoneMissed, Pin, Play, Tv, Video } from 'lucide-react-native';
 import { useEffect, useRef } from 'react';
 import { Image, Pressable, View } from 'react-native';
 import { cn } from '../ui/cn';
@@ -219,13 +219,13 @@ function VoiceNote({ url, durationMs, mine }: { url?: string; durationMs?: numbe
   );
 }
 
-export function CallEntry({ message, myId, onCallBack }: { message: Message; myId: string; onCallBack: (m: 'audio' | 'video') => void }) {
+export function CallEntry({ message, myId, onCallBack }: { message: Message; myId: string; onCallBack: (m: CallMedia) => void }) {
   const call = message.call;
   if (!call) return null;
   const { label, missed, detail } = describeCall(call, myId);
   const c = usePalette();
   const color = missed ? c.onRoseDeep : c.inkSoft;
-  const Icon = missed ? PhoneMissed : call.media === 'video' ? Video : Phone;
+  const Icon = missed ? PhoneMissed : { audio: Phone, video: Video, listen: Headphones, watch: Tv }[call.media];
   const text = `${label}${detail ? ` · ${detail}` : ''} · ${formatClock(call.created_at)}`;
   const inner = (
     <>

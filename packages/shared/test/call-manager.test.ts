@@ -316,6 +316,95 @@ describe('CallManager', () => {
     expect(screen.tracks[1]!.stopped).toBe(true);
   });
 
+  it('listen together: mics start muted, the picked sound goes out on connect with no picture, and pauses for both', async () => {
+    const w = makeWorld();
+    const tab = new FakeStream([new FakeTrack('video'), new FakeTrack('audio')]);
+    const mixed = new FakeTrack('audio');
+    const close = vi.fn();
+    const mixAudio = vi.fn(() => ({ track: mixed, close }));
+    const alice = w.manager('alice', 'bob', { rtc: { getDisplayMedia: async () => tab, mixAudio } as never });
+    const bob = w.manager('bob', 'alice');
+
+    await alice.startSession('listen', tab as unknown as MediaStream);
+    expect(w.calls.get(alice.getState().call!.id)!.media).toBe('listen');
+    expect(alice.getState().local.mic).toBe(false);
+    expect(alice.getState().localStream!.getAudioTracks()[0]!.enabled).toBe(false);
+    await until(bob, 'incoming');
+    await bob.accept();
+    expect(bob.getState().local.mic).toBe(false);
+    await until(alice, 'connected');
+    await vi.waitFor(() => expect(alice.getState().local.sound).toBe(true));
+
+    const audio = pcOf(alice).transceivers.find((t) => t.receiver.track.kind === 'audio')!;
+    const video = pcOf(alice).transceivers.find((t) => t.receiver.track.kind === 'video')!;
+    expect(audio.sender.track).toBe(mixed);
+    expect(video.sender.track).toBeNull(); // sound only
+    expect(tab.tracks[0]!.enabled).toBe(false);
+    expect(alice.getState().local.screen).toBe(false);
+    await vi.waitFor(() => expect(bob.getState().remote.sound).toBe(true));
+
+    alice.setNowPlaying('  Late night lo-fi  ');
+    alice.setSoundPaused(true);
+    expect(tab.tracks[1]!.enabled).toBe(false);
+    await vi.waitFor(() => expect(bob.getState().remote).toMatchObject({ soundPaused: true, nowPlaying: 'Late night lo-fi' }));
+
+    // Pausing on my side only: their sound keeps going out.
+    bob.setHearing(false);
+    expect(bob.getState().hearing).toBe(false);
+    expect(bob.getState().remoteStream!.getAudioTracks().every((t) => !t.enabled)).toBe(true);
+
+    // The browser's own "Stop sharing" ends the share, and the mic alone returns.
+    (tab.tracks[0] as FakeTrack).emit('ended');
+    await vi.waitFor(() => expect(alice.getState().local.sound).toBe(false));
+    expect(audio.sender.track).toBe(alice.getState().localStream!.getAudioTracks()[0]);
+    expect(close).toHaveBeenCalled();
+    expect(tab.tracks[1]!.stopped).toBe(true);
+  });
+
+  it('listen together: a pick with no sound says so and shares nothing', async () => {
+    const w = makeWorld();
+    const silent = new FakeStream([new FakeTrack('video')]);
+    const alice = w.manager('alice', 'bob', { rtc: { getDisplayMedia: async () => silent, mixAudio: vi.fn() } as never });
+    const bob = w.manager('bob', 'alice');
+    await alice.startSession('listen');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+    expect(await alice.startSoundShare()).toBe(false);
+    expect(alice.getState().local.sound).toBe(false);
+    expect(alice.getState().error).toMatch(/No sound/);
+    expect(silent.tracks[0]!.stopped).toBe(true);
+  });
+
+  it('watch together: the screen picked before ringing goes out on connect, mic on', async () => {
+    const w = makeWorld();
+    const screen = new FakeStream([new FakeTrack('video')]);
+    const alice = w.manager('alice', 'bob', { rtc: { getDisplayMedia: async () => screen } as never });
+    const bob = w.manager('bob', 'alice');
+    await alice.startSession('watch', screen as unknown as MediaStream);
+    expect(alice.getState().local.mic).toBe(true);
+    await until(bob, 'incoming');
+    expect(bob.getState().media).toBe('watch');
+    await bob.accept();
+    await until(alice, 'connected');
+    await vi.waitFor(() => expect(alice.getState().local.screen).toBe(true));
+    const video = pcOf(alice).transceivers.find((t) => t.receiver.track.kind === 'video')!;
+    expect(video.sender.track).toBe(screen.tracks[0]);
+    await vi.waitFor(() => expect(bob.getState().remote.screen).toBe(true));
+  });
+
+  it('a session declined before connecting lets go of what was picked', async () => {
+    const w = makeWorld();
+    const tab = new FakeStream([new FakeTrack('video'), new FakeTrack('audio')]);
+    const alice = w.manager('alice', 'bob', { rtc: { getDisplayMedia: async () => tab, mixAudio: vi.fn() } as never });
+    const bob = w.manager('bob', 'alice');
+    await alice.startSession('listen', tab as unknown as MediaStream);
+    await until(bob, 'incoming');
+    await bob.decline();
+    await until(alice, 'ended');
+    expect(tab.tracks.every((t) => t.stopped)).toBe(true);
+  });
+
   it('switches the microphone mid-call, staying muted and keeping a shared sound mixed in', async () => {
     const w = makeWorld();
     const screen = new FakeStream([new FakeTrack('video'), new FakeTrack('audio')]);

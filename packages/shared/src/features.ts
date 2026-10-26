@@ -80,7 +80,7 @@ export const featureLabel = (key: string) => FEATURES.find((f) => f.key === key)
 /** The app tabs, and the features that make each one worth showing. */
 export const TAB_FEATURES: Record<'talk' | 'connect' | 'plan' | 'memory' | 'growth', FeatureKey[]> = {
   talk: ['chat', 'calls'],
-  connect: ['daily_question'],
+  connect: ['daily_question', 'calls'],
   plan: ['calendar', 'lists', 'decide', 'labour', 'costs'],
   memory: ['memories'],
   growth: ['goals', 'mood', 'worries', 'love_languages'],

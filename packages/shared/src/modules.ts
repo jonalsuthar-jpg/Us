@@ -22,6 +22,18 @@ export interface AppModule {
   features: Feature[];
 }
 
+/** Live things to do together on Connect that are still to come, after Listen and Watch. */
+export const TOGETHER_SOON: { id: 'draw' | 'games' | 'read'; title: string; blurb: string; short: string }[] = [
+  { id: 'draw', title: 'Draw together', blurb: 'One live canvas, two pens. Keep the best ones in Memories.', short: 'One canvas, two pens' },
+  {
+    id: 'games',
+    title: 'Couple games',
+    blurb: 'How well do you know me, Would you rather, This or that. Answers revealed together.',
+    short: 'Quizzes revealed together',
+  },
+  { id: 'read', title: 'Read together', blurb: 'A short story or a poem, one shared page, highlights you both see.', short: 'One page, shared highlights' },
+];
+
 export const MODULES: AppModule[] = [
   {
     id: 'talk',

@@ -8,7 +8,8 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type CallMedia = 'audio' | 'video';
+/** audio / video calls, plus Listen together (sound only) and Watch together (a shared screen). */
+export type CallMedia = 'audio' | 'video' | 'listen' | 'watch';
 /** image / audio live in our chat folder; gif / sticker are GIPHY links (media_meta.url). */
 export type MediaKind = 'image' | 'audio' | 'gif' | 'sticker';
 /** Small, optional hints for rendering before the file loads. */

@@ -238,6 +238,16 @@ await test('calls: cancelled/unanswered → missed, logged once', async () => {
   assert.equal(log[0].n, 1);
 });
 
+await test('calls: listen and watch together ring and log like any call', async () => {
+  for (const media of ['listen', 'watch']) {
+    const id = (await as(alice, () => one(`insert into public.calls (couple_id, caller_id, callee_id, media) values ($1, $2, $3, $4) returning id`, [couple.id, alice, bob, media]))).id;
+    assert.equal((await as(bob, () => one(`select (public.set_call_status($1, 'active')).status`, [id]))).status, 'active');
+    assert.equal((await as(bob, () => one(`select (public.set_call_status($1, 'ended')).status`, [id]))).status, 'ended');
+    assert.equal((await as(bob, () => one(`select c.media from public.calls c where c.id = $1`, [id]))).media, media);
+    assert.equal((await q(`select count(*)::int as n from public.messages where call_id = $1`, [id]))[0].n, 1);
+  }
+});
+
 await test('private tables: partner can never read or write my rows', async () => {
   await as(alice, () => q(`insert into public.mood_checkins (owner_id, score, note) values ($1, 2, 'rough day')`, [alice]));
   assert.equal((await as(bob, () => q(`select * from public.mood_checkins`))).length, 0);

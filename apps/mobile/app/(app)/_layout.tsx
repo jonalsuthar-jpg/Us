@@ -92,6 +92,7 @@ export default function AppLayout() {
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.paper } }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="questions" options={{ animation: 'slide_from_right' }} />
         </Stack>
         <TapHeart />
         <CallScreen />
