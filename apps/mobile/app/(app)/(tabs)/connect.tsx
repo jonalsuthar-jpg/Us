@@ -1,7 +1,7 @@
 import { moduleById, TOGETHER_SOON } from '@us/shared';
 import { useFeature } from '@us/shared/react';
 import { router } from 'expo-router';
-import { BookOpen, Gamepad2, PenLine, Settings } from 'lucide-react-native';
+import { BookOpen, Gamepad2, HeartHandshake, PenLine, Settings } from 'lucide-react-native';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnswersCard, DailyQuestion, useDaily } from '@/components/connect/daily-question';
@@ -34,15 +34,22 @@ export default function Connect() {
       contentContainerClassName="gap-5 px-5"
       refreshControl={<RefreshControl refreshing={daily.loading && !!daily.data} onRefresh={() => void daily.reload()} />}
     >
-      {/* Same shape as Home's header: a small line, then the big one. */}
-      <View className="flex-row items-end gap-3">
-        <View className="flex-1">
-          <Text className="font-sans-semibold text-micro uppercase tracking-[1.2px] text-teal-700">Connect</Text>
-          <Display className="mt-0.5 text-[27px] leading-[32px]">Do something together</Display>
+      {/* Same header as Plan, Memory and Growth: the section's icon, its name, a line under it. */}
+      <View>
+        <View className="flex-row items-center gap-3">
+          <View className="h-11 w-11 items-center justify-center rounded-2xl bg-teal-100">
+            <HeartHandshake size={21} color={c.onTeal} strokeWidth={2.1} />
+          </View>
+          <Display className="flex-1 text-[34px] leading-[40px]" numberOfLines={1}>
+            Connect
+          </Display>
+          <IconButton label="Settings" size="sm" tone="raised" onPress={() => router.push('/settings')}>
+            <Settings size={19} color={c.inkSoft} />
+          </IconButton>
         </View>
-        <IconButton label="Settings" size="sm" tone="raised" onPress={() => router.push('/settings')}>
-          <Settings size={19} color={c.inkSoft} />
-        </IconButton>
+        <Display light italic className="mt-2.5 text-lead text-ink-soft">
+          Do something together.
+        </Display>
       </View>
 
       {calls ? <TogetherCards /> : null}
