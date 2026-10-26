@@ -1,5 +1,5 @@
 import { useCallManager, useCallState, useCouple } from '@us/shared/react';
-import { Headphones, Laptop, Music, Smartphone, Tv } from 'lucide-react-native';
+import { Headphones, Laptop, Music, Play, Smartphone, Tv } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Button } from '../ui/button';
@@ -7,6 +7,9 @@ import { cn } from '../ui/cn';
 import { FormSheet } from '../ui/form-sheet';
 import { Display, Text } from '../ui/text';
 import { Record, SoundBars } from './vinyl';
+
+// A soft, deep shadow, like Home's photo card (Android draws it from elevation).
+const TILE_SHADOW = { elevation: 8, shadowColor: '#170F21', shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 12 } } as const;
 
 /**
  * Listen together and Watch together on a phone. Phones can't capture
@@ -30,17 +33,23 @@ export function TogetherCards() {
           accessibilityState={{ disabled: busy }}
           disabled={busy}
           onPress={() => setAsk('listen')}
-          className="h-[210px] flex-1 justify-end gap-1 overflow-hidden rounded-[24px] bg-plum-800 p-4 active:opacity-90"
+          style={TILE_SHADOW}
+          className="h-[220px] flex-1 justify-between overflow-hidden rounded-[26px] bg-plum-800 p-4 active:opacity-90"
         >
-          <View pointerEvents="none" className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-rose-400/85" />
-          <View pointerEvents="none" className="absolute right-3 top-3">
-            <Record playing size={92} />
+          <View pointerEvents="none" className="absolute -right-12 -top-14 h-40 w-40 rounded-full bg-rose-400 opacity-90" />
+          <View pointerEvents="none" className="absolute -right-3 top-3">
+            <Record playing size={104} />
           </View>
-          <View className="absolute left-4 top-4 h-9 w-9 items-center justify-center rounded-xl bg-white/10">
-            <Headphones size={18} color="#FCFAFB" />
+          <View className="flex-row items-center gap-2">
+            <View className="h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
+              <Headphones size={19} color="#FCFAFB" />
+            </View>
           </View>
-          <Display className="text-[19px] leading-[22px] text-paper">Listen together</Display>
-          <Text className="text-micro text-plum-200">{`Hear what ${name} is playing`}</Text>
+          <View className="gap-1">
+            <SoundBars playing count={4} height={14} className="mb-1" />
+            <Display className="text-[20px] leading-[23px] text-paper">Listen together</Display>
+            <Text className="text-micro leading-[17px] text-plum-200">{`Hear what ${name} is playing`}</Text>
+          </View>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -48,20 +57,26 @@ export function TogetherCards() {
           accessibilityState={{ disabled: busy }}
           disabled={busy}
           onPress={() => setAsk('watch')}
-          className="h-[210px] flex-1 justify-end gap-1 overflow-hidden rounded-[24px] bg-teal-900 p-4 active:opacity-90"
+          style={TILE_SHADOW}
+          className="h-[220px] flex-1 justify-between overflow-hidden rounded-[26px] bg-teal-900 p-4 active:opacity-90"
         >
-          <View pointerEvents="none" className="absolute -bottom-16 -right-10 h-36 w-36 rounded-full bg-teal-500/80" />
-          <View pointerEvents="none" className="absolute right-3 top-4 h-16 w-[100px] overflow-hidden rounded-[10px] border-4 border-plum-900 bg-plum-700">
-            <View className="absolute -bottom-6 -left-4 h-14 w-20 rounded-full bg-gold-400/80" />
+          <View pointerEvents="none" className="absolute -bottom-16 -right-12 h-40 w-40 rounded-full bg-teal-500 opacity-80" />
+          <View pointerEvents="none" className="absolute right-3 top-4 h-[66px] w-[96px] items-center justify-center overflow-hidden rounded-xl border-4 border-plum-900 bg-plum-700">
+            <View className="absolute -bottom-6 -left-4 h-14 w-20 rounded-full bg-gold-400 opacity-80" />
+            <View className="h-7 w-7 items-center justify-center rounded-full bg-paper">
+              <Play size={12} color="#241933" fill="#241933" style={{ marginLeft: 2 }} />
+            </View>
           </View>
-          <View className="absolute left-4 top-4 h-9 w-9 items-center justify-center rounded-xl bg-white/10">
-            <Tv size={18} color="#FCFAFB" />
+          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
+            <Tv size={19} color="#FCFAFB" />
           </View>
-          <Display className="text-[19px] leading-[22px] text-paper">Watch together</Display>
-          <Text className="text-micro text-teal-200">{`Watch ${name}’s screen`}</Text>
+          <View className="gap-1">
+            <Display className="text-[20px] leading-[23px] text-paper">Watch together</Display>
+            <Text className="text-micro leading-[17px] text-teal-200">{`Watch ${name}’s screen`}</Text>
+          </View>
         </Pressable>
       </View>
-      <Text className="px-0.5 text-micro text-ink-muted">
+      <Text className="px-1 text-micro leading-[18px] text-ink-muted">
         {busy ? 'You’re on a call. Finish it to start something new.' : `Sharing starts from a computer. From here you ask ${name} to share, and listen or watch on your phone.`}
       </Text>
 

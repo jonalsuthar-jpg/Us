@@ -51,7 +51,54 @@ export function TogetherCards() {
 
   return (
     <section aria-label="Together, live" className="space-y-3">
-      <div className="grid gap-5 md:grid-cols-2">
+      {/* Phones: two compact tiles side by side, like the app. */}
+      <div className="grid grid-cols-2 gap-3 md:hidden">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void listen()}
+          aria-label={m.canShareSound ? 'Listen together. Start listening' : `Listen together. Ask ${name} to play`}
+          className="relative isolate flex h-[220px] flex-col justify-between overflow-hidden rounded-[26px] bg-plum-800 p-4 text-left text-paper shadow-[0_20px_40px_-24px_rgba(23,15,33,0.7)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 disabled:opacity-60"
+        >
+          <span aria-hidden className="absolute -right-12 -top-14 -z-10 h-40 w-40 rounded-full bg-rose-400/90" />
+          <Record playing className="absolute -right-3 top-3 -z-10 w-[104px] border-4" />
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
+            <Headphones className="h-[19px] w-[19px]" aria-hidden />
+          </span>
+          <span className="space-y-1">
+            <SoundBars playing className="mb-1.5 h-3.5" />
+            <span className="block font-display text-[20px] leading-[23px]">Listen together</span>
+            <span className="block text-micro text-plum-200">{m.canShareSound ? `Play something for ${name}` : `Hear what ${name} is playing`}</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => (m.canScreenShare ? setWatchOpen(true) : setAsk('watch'))}
+          aria-label={m.canScreenShare ? 'Watch together. Pick something to watch' : `Watch together. Ask ${name} to share`}
+          className="relative isolate flex h-[220px] flex-col justify-between overflow-hidden rounded-[26px] bg-teal-900 p-4 text-left text-paper shadow-[0_20px_40px_-24px_rgba(5,47,44,0.8)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 disabled:opacity-60"
+        >
+          <span aria-hidden className="absolute -bottom-16 -right-12 -z-10 h-40 w-40 rounded-full bg-teal-500/80" />
+          <span aria-hidden className="absolute right-3 top-4 -z-10 flex h-[66px] w-[96px] items-center justify-center overflow-hidden rounded-xl border-4 border-plum-900 bg-plum-700">
+            <span className="absolute -bottom-6 -left-4 h-14 w-20 rounded-full bg-gold-400/80" />
+            <span className="relative flex h-7 w-7 items-center justify-center rounded-full bg-paper text-plum-800">
+              <Play className="ml-0.5 h-3 w-3" fill="currentColor" />
+            </span>
+          </span>
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
+            <Tv className="h-[19px] w-[19px]" aria-hidden />
+          </span>
+          <span className="space-y-1">
+            <span className="block font-display text-[20px] leading-[23px]">Watch together</span>
+            <span className="block text-micro text-teal-200">{m.canScreenShare ? 'Share a film or a show' : `Watch ${name}’s screen`}</span>
+          </span>
+        </button>
+      </div>
+      {!m.canShareSound ? (
+        <p className="px-1 text-micro text-ink-muted md:hidden">Sharing starts from a computer. From here you ask {name} to share, and listen or watch on your phone.</p>
+      ) : null}
+
+      <div className="hidden gap-5 md:grid md:grid-cols-2">
         {/* Listen together */}
         <div className="relative isolate flex min-h-[260px] flex-col justify-between overflow-hidden rounded-[28px] bg-plum-800 p-6 text-paper shadow-[0_24px_48px_-28px_rgba(36,25,51,0.6)] sm:min-h-[300px] sm:p-7">
           <span aria-hidden className="absolute -right-16 -top-20 -z-10 h-72 w-72 rounded-full bg-rose-400/85" />

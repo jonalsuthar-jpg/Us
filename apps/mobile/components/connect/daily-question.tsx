@@ -1,7 +1,7 @@
 import { answerDaily, dailyState, DAILY_ANSWER_MAX, fromDateKey, getDaily, type DailyEntry } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
 import { router } from 'expo-router';
-import { ChevronRight, Flame, Hourglass } from 'lucide-react-native';
+import { ChevronRight, Flame, Hourglass, Lock } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { ErrorNote } from '../module-screen';
@@ -9,7 +9,6 @@ import { Avatar } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { usePalette } from '../ui/palette';
-import { PrivacyBadge } from '../ui/privacy';
 import { Sheet } from '../ui/sheet';
 import { Display, Text } from '../ui/text';
 
@@ -19,6 +18,7 @@ export const dayLabel = (key: string, long = false) =>
 /** Today's prompt, a sealed answer and the reveal. Earlier days live in Our answers. */
 export function DailyQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
   const { sb, me, partner, partnerSlot } = useCouple();
+  const c = usePalette();
   const [answer, setAnswer] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -51,15 +51,23 @@ export function DailyQuestion({ daily }: { daily: ReturnType<typeof useDaily> })
   }
 
   return (
-    <Sheet className="gap-4 rounded-[22px]">
-      <View className="flex-row flex-wrap items-center justify-between gap-2">
+    <Sheet className="gap-4 rounded-[24px] p-5">
+      <View className="flex-row items-center justify-between gap-2">
         <View className="flex-row items-center gap-2">
           <View className="h-2 w-2 rounded-full bg-teal-500" />
           <Text className="font-sans-semibold text-small text-teal-700">Today’s question</Text>
         </View>
-        <PrivacyBadge privacy="private-until-reveal" partnerName={partner.display_name} />
+        {/* The short form of the privacy badge, so the row never wraps. */}
+        <View
+          accessible
+          accessibilityLabel="Hidden until you’ve both answered"
+          className="flex-row items-center gap-1.5 rounded-full bg-plum-50 py-1 pl-2 pr-2.5"
+        >
+          <Lock size={12} color={c.onPlum} strokeWidth={2.25} />
+          <Text className="font-sans-medium text-micro text-plum-600">Hidden until both</Text>
+        </View>
       </View>
-      <Display light className="text-[24px] leading-[31px]">
+      <Display light className="text-[25px] leading-[32px]">
         {today.prompt}
       </Display>
 
@@ -103,17 +111,19 @@ export function AnswersCard({ daily }: { daily: ReturnType<typeof useDaily> }) {
       accessibilityRole="button"
       accessibilityLabel={`Our answers. ${together} answered together${streak > 1 ? `, ${streak} days in a row` : ''}`}
       onPress={() => router.push('/questions')}
-      className="flex-row items-center gap-3.5 rounded-[22px] bg-gold-50 p-4 active:opacity-80"
+      className="flex-row items-center gap-4 rounded-[24px] bg-gold-50 p-4 active:opacity-80"
     >
-      <View className="h-14 w-14 items-center justify-center rounded-2xl bg-paper-raised">
-        <Display className="text-[22px] leading-[24px]">{String(together)}</Display>
-        <Text className="text-[10px] text-ink-muted">together</Text>
+      <View className="h-[60px] w-[60px] items-center justify-center rounded-[18px] bg-paper-raised">
+        <Display className="text-[24px] leading-[26px]">{String(together)}</Display>
+        <Text className="text-[10px] leading-[12px] text-ink-muted">answered</Text>
       </View>
       <View className="flex-1 gap-1">
-        <Display className="text-lead">Our answers</Display>
+        <Text className="font-sans-semibold text-lead">Our answers</Text>
         <View className="flex-row items-center gap-1.5">
           {streak > 1 ? <Flame size={13} color={c.gold} /> : null}
-          <Text className="text-micro text-gold-700">{streak > 1 ? `${streak} days in a row · every question so far` : 'Every question so far, both answers'}</Text>
+          <Text className="flex-1 text-micro text-gold-700" numberOfLines={1}>
+            {streak > 1 ? `${streak} days in a row · every question` : 'Every question, both answers'}
+          </Text>
         </View>
       </View>
       <ChevronRight size={20} color={c.onGold} />

@@ -2,7 +2,7 @@
 
 import { answerDaily, dailyState, DAILY_ANSWER_MAX, fromDateKey, getDaily, type DailyEntry } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { ChevronRight, Flame, Hourglass } from 'lucide-react';
+import { ChevronRight, Flame, Hourglass, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { ErrorNote } from '@/components/app/module-header';
@@ -34,7 +34,7 @@ export function DailyQuestion() {
       </div>
     );
   return (
-    <section aria-label="Daily question" className="grid gap-5 lg:grid-cols-[2fr_1fr]">
+    <section aria-label="Daily question" className="grid gap-3 sm:gap-5 lg:grid-cols-[2fr_1fr]">
       <TodayQuestion daily={daily} />
       <AnswersCard past={daily.data.past} streak={daily.data.streak} together={daily.data.together} />
     </section>
@@ -65,15 +65,22 @@ function TodayQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
   }
 
   return (
-    <Sheet pad="none" className="space-y-5 rounded-[24px] p-6 sm:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <Sheet pad="none" className="space-y-4 rounded-[24px] p-5 sm:space-y-5 sm:p-8">
+      <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-small font-semibold text-teal-700">
           <span className="h-2 w-2 rounded-full bg-teal-500" aria-hidden />
-          Today’s question · {dayLabel(today.for_date)}
+          Today’s question<span className="hidden sm:inline"> · {dayLabel(today.for_date)}</span>
         </p>
-        <PrivacyBadge privacy="private-until-reveal" partnerName={partner.display_name} />
+        <PrivacyBadge privacy="private-until-reveal" partnerName={partner.display_name} className="hidden sm:inline-flex" />
+        {/* Phones: the short form, so the row never wraps. */}
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-plum-50 px-2.5 py-1 text-micro font-medium text-plum-600 sm:hidden">
+          <Lock className="h-3 w-3" aria-hidden />
+          <span>
+            Hidden until both<span className="sr-only"> of you have answered</span>
+          </span>
+        </span>
       </div>
-      <h2 className="text-balance font-serif text-[28px] leading-tight text-ink sm:text-[32px]">{today.prompt}</h2>
+      <h2 className="text-balance font-serif text-[25px] leading-[1.25] text-ink sm:text-[32px] sm:leading-tight">{today.prompt}</h2>
 
       {state === 'ask' || state === 'nudge' ? (
         <form
@@ -133,9 +140,35 @@ function TodayQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
 /** Streak, how many we've answered together, and the last few prompts. Opens the archive. */
 function AnswersCard({ past, streak, together }: { past: DailyEntry[]; streak: number; together: number }) {
   return (
+    <>
+      {/* Phones: one row, like the app. */}
+      <Link
+        href="/connect/questions"
+        className="flex items-center gap-4 rounded-[24px] bg-gold-50 p-4 text-ink active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 sm:hidden"
+      >
+        <span className="flex h-[60px] w-[60px] shrink-0 flex-col items-center justify-center rounded-[18px] bg-paper-raised">
+          <span className="font-display text-[24px] leading-[26px]">{together}</span>
+          <span className="text-[10px] leading-3 text-ink-muted">answered</span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-lead font-semibold">Our answers</span>
+          <span className="flex items-center gap-1.5 text-micro text-gold-700">
+            {streak > 1 ? <Flame className="h-3.5 w-3.5 shrink-0 text-gold-500" aria-hidden /> : null}
+            <span className="truncate">{streak > 1 ? `${streak} days in a row · every question` : 'Every question, both answers'}</span>
+          </span>
+        </span>
+        <ChevronRight className="h-5 w-5 shrink-0 text-gold-700" aria-hidden />
+      </Link>
+      <AnswersPanel past={past} streak={streak} together={together} />
+    </>
+  );
+}
+
+function AnswersPanel({ past, streak, together }: { past: DailyEntry[]; streak: number; together: number }) {
+  return (
     <Link
       href="/connect/questions"
-      className="group flex flex-col gap-4 rounded-[24px] bg-gold-50 p-6 text-ink transition-shadow hover:shadow-[0_12px_32px_-18px_rgba(124,80,6,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+      className="group hidden flex-col gap-4 rounded-[24px] bg-gold-50 p-6 sm:flex text-ink transition-shadow hover:shadow-[0_12px_32px_-18px_rgba(124,80,6,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
     >
       <span className="flex items-center justify-between">
         <span className="text-small font-semibold text-gold-700">Our answers</span>
