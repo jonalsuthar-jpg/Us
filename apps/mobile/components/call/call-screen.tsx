@@ -1,9 +1,10 @@
 import { formatDuration, type CallState } from '@us/shared';
-import { useCallManager, useCallState, useCouple } from '@us/shared/react';
+import { useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { Bluetooth, Check, ChevronDown, Ear, Headphones, Maximize, Mic, MicOff, Minimize, MonitorPlay, MonitorUp, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
+import { Bluetooth, Check, ChevronDown, Ear, Headphones, Maximize, Mic, MicOff, Minimize, MonitorPlay, MonitorUp, PenLine, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StatusBar, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   FadeIn,
@@ -20,6 +21,7 @@ import { chooseRoute, onAudioRoutes, startCallAudio, stopCallAudio, type AudioRo
 import { cancelIncomingRing, setShowWhenLocked, startCallService, stopCallService } from '@/modules/us-call';
 import { Avatar } from '../ui/avatar';
 import { cn } from '../ui/cn';
+import { LiveBoard } from '../draw/live-board';
 import { Button, IconButton } from '../ui/button';
 import { Display, Text } from '../ui/text';
 import { ListenSurface } from './listen-surface';
@@ -219,6 +221,8 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
   const insets = useSafeAreaInsets();
   const elapsed = useElapsed(state.connectedAt);
   const [nudge, setNudge] = useState(false);
+  const canDraw = useFeature('draw');
+  const [drawing, setDrawing] = useState(false);
   // Where the sound goes. Android reports the devices (earpiece, speaker, wired,
   // Bluetooth); elsewhere it's a plain speaker toggle that starts at the default.
   const [routes, setRoutes] = useState<{ available: AudioRoute[]; selected: AudioRoute | null }>({ available: [], selected: null });
@@ -389,6 +393,11 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
                   <MonitorUp size={20} color="#FCFAFB" />
                 </IconButton>
               )}
+              {live && canDraw && (
+                <IconButton label="Draw together" tone="night" onPress={() => setDrawing(true)}>
+                  <PenLine size={20} color="#FCFAFB" />
+                </IconButton>
+              )}
             </View>
             <View className="flex-row items-center justify-center gap-5">
               <IconButton
@@ -416,6 +425,33 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
           </View>
         )}
       </View>
+
+      {/* Draw together over the call: a strip with the call on top, the canvas in a sheet below. Audio carries on. */}
+      {drawing && live ? (
+        <GestureHandlerRootView style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <View className="flex-1 bg-plum-950">
+            <View pointerEvents="none" className="absolute -left-20 -top-16 h-[300px] w-[300px] rounded-full bg-plum-700" />
+            <View className="flex-row items-center gap-3 px-4 pb-3.5" style={{ paddingTop: insets.top + 8 }}>
+              <View className={partnerSlot === 'a' ? 'h-11 w-11 items-center justify-center rounded-full bg-rose-400' : 'h-11 w-11 items-center justify-center rounded-full bg-teal-500'}>
+                <Text className="font-sans-bold text-lead text-white">{partner.display_name.slice(0, 1).toUpperCase()}</Text>
+              </View>
+              <View className="flex-1">
+                <Text className="font-sans-bold text-lead text-paper">{partner.display_name}</Text>
+                <Text className="text-micro text-plum-200">{`On a call · ${status}`}</Text>
+              </View>
+              <IconButton label={state.local.mic ? 'Mute' : 'Unmute'} selected={!state.local.mic} tone={state.local.mic ? 'night' : 'nightOff'} onPress={() => m.toggleMic()}>
+                {state.local.mic ? <Mic size={19} color="#FCFAFB" /> : <MicOff size={19} color="#241933" />}
+              </IconButton>
+              <IconButton label="End call" tone="end" onPress={() => void m.hangup()}>
+                <PhoneOff size={19} color="#fff" />
+              </IconButton>
+            </View>
+            <View className="flex-1 rounded-t-[26px] bg-paper-sunken">
+              <LiveBoard variant="call" onClose={() => setDrawing(false)} />
+            </View>
+          </View>
+        </GestureHandlerRootView>
+      ) : null}
 
       {routePicker && (
         <View className="absolute inset-x-4 bottom-56 rounded-sheet bg-paper-raised p-2" accessibilityRole="menu">

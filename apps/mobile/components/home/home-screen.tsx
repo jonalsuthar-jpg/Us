@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bootHome, saveHome } from '@/lib/boot-cache';
 import { ErrorNote } from '../module-screen';
 import { PlantCard } from '../plant/plant-card';
+import { DoodleNote, DrawingBanner } from '@/components/draw/home-draw';
 import { SnapRow } from '../snaps/snap-row';
 import { RankChip } from '../spark/rank-chip';
 import { Avatar } from '../ui/avatar';
@@ -129,6 +130,8 @@ export function HomeScreen() {
         </IconButton>
       </View>
 
+      {has('draw') && <DrawingBanner />}
+
       {announcement ? (
         <Sheet tone="note" accent={announcement.tone === 'warning' ? 'gold' : 'plum'} pad="sm">
           <Text className="text-small">{announcement.body}</Text>
@@ -167,6 +170,8 @@ export function HomeScreen() {
         </View>
       </View>
       {photoError ? <ErrorNote>{photoError}</ErrorNote> : null}
+
+      {has('draw') && <DoodleNote />}
 
       {has('snaps') && <SnapRow />}
 

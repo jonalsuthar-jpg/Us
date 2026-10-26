@@ -5,6 +5,7 @@ import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { CallScreen } from '@/components/call/call-screen';
+import { DrawBridge, drawRoute } from '@/components/draw/draw-bridge';
 import { TapHeart } from '@/components/tap-heart';
 import { readAccess, readBoot, saveAccess, saveContext } from '@/lib/boot-cache';
 import { env } from '@/lib/env';
@@ -93,8 +94,14 @@ export default function AppLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="questions" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="draw/index" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="draw/gallery" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="draw/guess" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="draw/daily" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="draw/[id]" options={{ animation: 'fade_from_bottom' }} />
         </Stack>
         <TapHeart />
+        <DrawBridge />
         <CallScreen />
       </CallProvider>
     </CoupleProvider>
@@ -118,7 +125,7 @@ function Bridge() {
     return onPush({
       click: (d, actionId) => {
         if (d?.callId && (actionId === 'answer' || actionId === 'decline')) setCallAction({ callId: d.callId, action: actionId });
-        if (d?.url) router.push(d.url as never);
+        if (d?.url) router.push(drawRoute(d.url) as never);
       },
     });
   }, [me.id]);

@@ -11,6 +11,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bubble, CallEntry, type ReplyQuote } from '@/components/chat/bubble';
 import { Composer } from '@/components/chat/composer';
+import { DoodleSheet } from '@/components/draw/doodle-sheet';
 import { FeatureOff } from '@/components/feature-off';
 import { GifPicker } from '@/components/chat/gif-picker';
 import { clearMessageNotifications } from '@/modules/us-call';
@@ -105,6 +106,9 @@ function Thread() {
     send(text, { ...extras, replyTo: replyTo?.id ?? null });
     setReplyTo(null);
   }
+
+  const draw = useFeature('draw');
+  const [doodle, setDoodle] = useState(false);
 
   async function sendPhoto(caption: string) {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
@@ -331,7 +335,18 @@ function Thread() {
           onPhoto={(caption) => void sendPhoto(caption).catch(fail)}
           onVoice={(uri, ms) => void sendVoice(uri, ms).catch(fail)}
           onGif={env.giphyKey ? () => setGifs(true) : undefined}
+          onDoodle={draw ? () => setDoodle(true) : undefined}
         />
+        {draw ? (
+          <DoodleSheet
+            open={doodle}
+            onClose={() => setDoodle(false)}
+            mode="chat"
+            onChatPicture={({ bytes, dataUrl }) =>
+              sendWithReply('', { media: { kind: 'image', meta: { width: 1200, height: 1600 }, localUri: dataUrl, upload: { body: bytes, contentType: 'image/png' } } })
+            }
+          />
+        ) : null}
       </View>
 
       <MessageActions

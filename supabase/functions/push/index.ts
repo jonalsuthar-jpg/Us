@@ -342,7 +342,8 @@ Deno.serve(async (req) => {
     ...(buttons ? { buttons, web_buttons: buttons.map((b) => ({ id: b.id, text: b.text })) } : {}),
     ...(avatar ? { large_icon: avatar, chrome_web_icon: avatar, ios_attachments: { avatar } } : {}),
     ...(appUrl ? { web_url: `${appUrl}${data.url}` } : {}),
-    app_url: `us://${String(data.url).replace(/^\//, '')}`,
+    // The app's screens for Draw together live at /draw… (the web's at /connect/draw…).
+    app_url: `us://${String(data.url).replace(/^\/connect\/draw/, '/draw').replace(/^\//, '')}`,
   };
 
   const res = await fetch('https://api.onesignal.com/notifications', {

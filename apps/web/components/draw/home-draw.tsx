@@ -44,22 +44,7 @@ export function DoodleNote() {
     if (doodle && !urls[doodle.png_path]) reloadUrls();
   }, [doodle, urls, reloadUrls]);
 
-  if (!doodle) {
-    return (
-      <>
-        <button type="button" onClick={() => setBack(true)} className="flex w-full items-center gap-3 rounded-[20px] bg-paper-sunken px-4 py-3.5 text-left hover:bg-paper-edge/60">
-          <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-rose-100 text-rose-600">
-            <PenLine className="h-5 w-5" aria-hidden />
-          </span>
-          <span className="flex flex-1 flex-col">
-            <span className="text-body font-semibold text-ink">Leave a doodle</span>
-            <span className="text-micro text-ink-soft">It waits on {partner.display_name}’s Home</span>
-          </span>
-        </button>
-        <DoodleDialog open={back} onOpenChange={setBack} />
-      </>
-    );
-  }
+  if (!doodle) return <DoodleDialog open={back} onOpenChange={setBack} />;
 
   const url = urls[doodle.png_path];
   return (
@@ -89,6 +74,15 @@ export function DoodleNote() {
           </span>
         </button>
       </div>
+      <button type="button" onClick={() => setBack(true)} className="flex w-full items-center gap-3 rounded-[20px] bg-paper-sunken px-4 py-3.5 text-left hover:bg-paper-edge/60">
+        <span className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-rose-100 text-rose-600">
+          <PenLine className="h-5 w-5" aria-hidden />
+        </span>
+        <span className="flex flex-1 flex-col">
+          <span className="text-body font-semibold text-ink">Doodle back</span>
+          <span className="text-micro text-ink-soft">Leave {partner.display_name} one in return</span>
+        </span>
+      </button>
       <Dialog
         open={!!open}
         onOpenChange={(o) => {

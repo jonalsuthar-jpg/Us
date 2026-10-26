@@ -6,6 +6,7 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnswersCard, DailyQuestion, useDaily } from '@/components/connect/daily-question';
 import { TogetherCards } from '@/components/connect/together-cards';
+import { DailyDoodleCard, DrawingsStrip, DrawTiles } from '@/components/draw/connect-draw';
 import { FeatureOff } from '@/components/feature-off';
 import { IconButton } from '@/components/ui/button';
 import { cn } from '@/components/ui/cn';
@@ -26,6 +27,7 @@ export default function Connect() {
   const soon = moduleById('connect').features.filter((f) => f.soon);
   const on = useFeature('daily_question');
   const calls = useFeature('calls');
+  const draw = useFeature('draw');
 
   return (
     <ScrollView
@@ -54,12 +56,20 @@ export default function Connect() {
 
       {calls ? <TogetherCards /> : null}
 
+      {draw ? (
+        <>
+          <DrawTiles />
+          <DrawingsStrip />
+          <DailyDoodleCard />
+        </>
+      ) : null}
+
       {on ? (
         <View className="gap-3">
           <DailyQuestion daily={daily} />
           <AnswersCard daily={daily} />
         </View>
-      ) : calls ? null : (
+      ) : calls || draw ? null : (
         <FeatureOff />
       )}
 
