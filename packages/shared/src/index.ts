@@ -29,6 +29,9 @@ export * from './spark-art';
 export * from './realtime/couple-channel';
 export * from './realtime/typing';
 
+export * from './draw';
+export * from './api/draw';
+
 export * from './webrtc/signals';
 export * from './webrtc/call-manager';
 

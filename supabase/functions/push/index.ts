@@ -5,6 +5,7 @@
  *     | { category: 'wellbeing_nudge', checkinId } | { category: 'daily_question', questionId }
  *     | { category: 'thinking_of_you', tapId } | { category: 'location_shared' } | { category: 'arrival', checkId }
  *     | { category: 'new_snap' | 'snap_reaction', snapId } | { category: 'spark_rank' }
+ *     | { category: 'draw_invite', game? } | { category: 'doodle' | 'guess_turn', drawingId }
  *
  * The record is re-read with the service role and the caller must be its
  * sender/caller, so a client can't push arbitrary content. Each category maps
@@ -29,7 +30,10 @@ type Category =
   | 'arrival'
   | 'new_snap'
   | 'snap_reaction'
-  | 'spark_rank';
+  | 'spark_rank'
+  | 'draw_invite'
+  | 'doodle'
+  | 'guess_turn';
 
 /** The feature our couple needs for each push (see public.features). */
 const FEATURE: Record<Category, string> = {
@@ -46,6 +50,9 @@ const FEATURE: Record<Category, string> = {
   new_snap: 'snaps',
   snap_reaction: 'snaps',
   spark_rank: 'spark',
+  draw_invite: 'draw',
+  doodle: 'draw',
+  guess_turn: 'draw',
 };
 
 interface Style {
@@ -87,6 +94,10 @@ const CATEGORIES: Record<Category, Style> = {
   new_snap: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'snaps' },
   snap_reaction: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'snaps' },
   spark_rank: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'spark' },
+  // "Come draw with me" is only useful right now.
+  draw_invite: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', ttl: 300, threadId: 'draw' },
+  doodle: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'draw' },
+  guess_turn: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'draw' },
 };
 
 Deno.serve(async (req) => {
@@ -280,6 +291,31 @@ Deno.serve(async (req) => {
     content = `You two just reached ${rank} together ✨`;
     collapseId = `spark-${coupleId}`;
     data = { category, url: '/home' };
+  } else if (body.category === 'draw_invite') {
+    category = 'draw_invite';
+    content = body.game ? 'wants to play Draw & Guess with you ✏️' : 'is drawing. Come and draw together ✏️';
+    collapseId = `draw-${userId}`;
+    data = { category, url: body.game ? '/connect/draw/guess' : '/connect/draw' };
+  } else if (body.category === 'doodle' || body.category === 'guess_turn') {
+    const { data: d } = await admin
+      .from('drawings')
+      .select('id, couple_id, created_by, kind, for_user, note, created_at')
+      .eq('id', body.drawingId)
+      .maybeSingle();
+    if (!d || d.couple_id !== coupleId || d.created_by !== userId) return json({ error: 'forbidden' }, 403);
+    if (Date.now() - Date.parse(d.created_at) > 10 * 60_000) return json({ skipped: 'stale' });
+    category = body.category;
+    if (category === 'doodle') {
+      if (d.kind !== 'doodle' || d.for_user !== partnerId) return json({ error: 'forbidden' }, 403);
+      content = d.note ? `left you a doodle: “${truncate(d.note, 100)}”` : 'left you a doodle ✏️';
+      collapseId = `doodle-${d.id}`;
+      data = { category, url: '/home', drawingId: d.id };
+    } else {
+      if (d.kind !== 'guess') return json({ error: 'forbidden' }, 403);
+      content = 'drew your Draw & Guess turn. Can you guess it?';
+      collapseId = `guess-${d.id}`;
+      data = { category, url: '/connect/draw/guess', drawingId: d.id };
+    }
   } else {
     return json({ error: 'unknown_category' }, 400);
   }

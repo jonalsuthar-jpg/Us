@@ -499,6 +499,91 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      // ------------------------------------------------------- Draw together
+      drawings: {
+        Row: {
+          id: string;
+          couple_id: string;
+          created_by: string;
+          kind: 'canvas' | 'doodle' | 'guess' | 'daily';
+          title: string | null;
+          note: string | null;
+          strokes_path: string;
+          png_path: string;
+          width: number;
+          height: number;
+          stroke_count: number;
+          artists: string[];
+          for_user: string | null;
+          seen_at: string | null;
+          memory_id: string | null;
+          day: string | null;
+          prompt: string | null;
+          game_id: string | null;
+          round: number | null;
+          meta: Json;
+          answered_at: string | null;
+          solved: boolean | null;
+          answer_ms: number | null;
+          points: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          couple_id: string;
+          created_by: string;
+          kind?: 'canvas' | 'doodle' | 'guess' | 'daily';
+          title?: string | null;
+          note?: string | null;
+          strokes_path: string;
+          png_path: string;
+          width?: number;
+          height?: number;
+          stroke_count?: number;
+          artists?: string[];
+          for_user?: string | null;
+          day?: string | null;
+          prompt?: string | null;
+          game_id?: string | null;
+          round?: number | null;
+          meta?: Json;
+        };
+        Update: { title?: string | null; memory_id?: string | null };
+        Relationships: [];
+      };
+      draw_words: {
+        Row: { id: string; couple_id: string; word: string; added_by: string; created_at: string };
+        Insert: { id?: string; couple_id: string; word: string; added_by: string };
+        Update: never;
+        Relationships: [];
+      };
+      draw_secrets: {
+        Row: { drawing_id: string; couple_id: string; word: string };
+        Insert: { drawing_id: string; couple_id: string; word: string };
+        Update: never;
+        Relationships: [];
+      };
+      draw_games: {
+        Row: {
+          id: string;
+          couple_id: string;
+          started_by: string;
+          mode: 'live' | 'turns';
+          packs: string[];
+          rounds: number;
+          played: number;
+          score: number;
+          solved: number;
+          best_word: string | null;
+          best_ms: number | null;
+          finished_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: { id?: string; couple_id: string; started_by: string; mode?: 'live' | 'turns'; packs?: string[]; rounds?: number };
+        Update: never;
+        Relationships: [];
+      };
       announcements: {
         Row: { id: string; body: string; tone: 'note' | 'warning'; starts_at: string; ends_at: string | null; created_by: string | null; created_at: string };
         Insert: never;
@@ -572,6 +657,17 @@ export type Database = {
       };
       admin_end_announcement: { Args: { p_id: string }; Returns: undefined };
       admin_audit_log: { Args: { p_limit?: number }; Returns: Json[] };
+      mark_doodle_seen: { Args: { p_id: string }; Returns: Database['public']['Tables']['drawings']['Row'] };
+      drew_daily: { Args: { p_day: string }; Returns: boolean };
+      daily_doodle_status: { Args: { p_day: string }; Returns: { mine: boolean; partner: boolean }[] };
+      finish_draw_game: {
+        Args: { p_id: string; p_played: number; p_score: number; p_solved: number; p_best_word: string | null; p_best_ms: number | null };
+        Returns: Database['public']['Tables']['draw_games']['Row'];
+      };
+      answer_guess: {
+        Args: { p_drawing: string; p_solved: boolean; p_ms: number; p_points: number };
+        Returns: Database['public']['Tables']['draw_games']['Row'];
+      };
     };
     Enums: {
       call_media: CallMedia;
@@ -610,6 +706,9 @@ export type SparkEvent = Tables['spark_events']['Row'];
 export type SparkSeason = Tables['spark_seasons']['Row'];
 export type LocationShare = Tables['location_shares']['Row'];
 export type ArrivalCheck = Tables['arrival_checks']['Row'];
+export type Drawing = Tables['drawings']['Row'];
+export type DrawWord = Tables['draw_words']['Row'];
+export type DrawGame = Tables['draw_games']['Row'];
 export type DailyEntry = Database['public']['Functions']['daily_history']['Returns'][number];
 
 /** A message as rendered in the thread: call log entries carry their call. */

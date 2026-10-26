@@ -24,7 +24,6 @@ export interface AppModule {
 
 /** Live things to do together on Connect that are still to come, after Listen and Watch. */
 export const TOGETHER_SOON: { id: 'draw' | 'games' | 'read'; title: string; blurb: string; short: string }[] = [
-  { id: 'draw', title: 'Draw together', blurb: 'One live canvas, two pens. Keep the best ones in Memories.', short: 'One canvas, two pens' },
   {
     id: 'games',
     title: 'Couple games',

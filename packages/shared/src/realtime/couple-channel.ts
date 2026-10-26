@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Call, MessageRow, SparkSeason } from '../database.types';
 import type { UsClient } from '../supabase';
+import type { DrawEvent } from '../draw/session';
 import type { SignalEvent } from '../webrtc/signals';
 
 type Listener<T> = (value: T) => void;
@@ -53,6 +54,8 @@ export class CoupleChannel {
   readonly presence = new Emitter<Set<string>>();
   readonly status = new Emitter<ChannelStatus>();
   readonly changes = new Emitter<ChangedEvent>();
+  /** Draw together: strokes, cursors and Draw & Guess moves (see draw/session.ts). */
+  readonly draw = new Emitter<DrawEvent>();
 
   private live?: RealtimeChannel;
   private db?: RealtimeChannel;
@@ -85,6 +88,7 @@ export class CoupleChannel {
       .on('broadcast', { event: 'typing' }, ({ payload }) => this.typing.emit(payload as TypingEvent))
       .on('broadcast', { event: 'signal' }, ({ payload }) => this.signals.emit(payload as SignalEnvelope))
       .on('broadcast', { event: 'changed' }, ({ payload }) => this.changes.emit(payload as ChangedEvent))
+      .on('broadcast', { event: 'draw' }, ({ payload }) => this.draw.emit(payload as DrawEvent))
       .on('presence', { event: 'sync' }, () => {
         const state = this.live?.presenceState() ?? {};
         this.online = new Set(Object.keys(state));
@@ -128,6 +132,11 @@ export class CoupleChannel {
   /** Tell my partner's open clients that `topic` changed. Carries no data. */
   sendChanged(topic: string) {
     void this.live?.send({ type: 'broadcast', event: 'changed', payload: { from: this.userId, topic } });
+  }
+
+  /** A drawing event for my partner's open canvas. Best effort, like typing. */
+  sendDraw(event: DrawEvent) {
+    void this.live?.send({ type: 'broadcast', event: 'draw', payload: event });
   }
 
   async sendSignal(event: SignalEvent) {

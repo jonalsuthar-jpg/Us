@@ -952,6 +952,98 @@ await test('spark: the ladder matches the app', async () => {
   assert.equal((await one(`select name from public.spark_ladder() where idx = 21`)).name, 'Eternal');
 });
 
+console.log('\nDraw together');
+
+await test('draw: feature granted to the full plan and to people already on it', async () => {
+  const plan = await one(`select features from public.plans where id = 'full'`);
+  assert.ok(plan.features.includes('draw'));
+  const founders = await q(`select features from public.user_access where plan_id = 'full'`);
+  assert.ok(founders.length > 0 && founders.every((r) => r.features.includes('draw')));
+  assert.equal((await one(`select module from public.features where key = 'draw'`)).module, 'connect');
+});
+
+const drawRow = (kind, by, extra = {}) => {
+  const cols = {
+    couple_id: couple.id,
+    created_by: by,
+    kind,
+    strokes_path: `${couple.id}/${kind}-${Math.random()}.json`,
+    png_path: `${couple.id}/${kind}-${Math.random()}.png`,
+    ...extra,
+  };
+  const keys = Object.keys(cols);
+  return [`insert into public.drawings (${keys.join(', ')}) values (${keys.map((_, i) => `$${i + 1}`).join(', ')}) returning *`, Object.values(cols)];
+};
+
+await test('drawings: couple-only, inserted as yourself, files in our folder, creator deletes', async () => {
+  const d = await as(alice, () => one(...drawRow('canvas', alice, { artists: [alice, bob] })));
+  assert.equal((await as(bob, () => q(`select id from public.drawings`))).length, 1);
+  assert.equal((await as(carol, () => q(`select id from public.drawings`))).length, 0, 'outsider');
+  await rejects(as(bob, () => q(...drawRow('canvas', alice))), /row-level security/, 'spoof creator');
+  await rejects(as(alice, () => q(...drawRow('canvas', alice, { png_path: `${otherCouple.id}/x.png` }))), /files_in_couple_folder/, 'foreign folder');
+  await as(bob, () => q(`delete from public.drawings where id = $1`, [d.id]));
+  assert.equal((await as(alice, () => q(`select id from public.drawings where id = $1`, [d.id]))).length, 1, 'partner cannot delete');
+  await as(bob, () => q(`update public.drawings set title = 'mine now' where id = $1`, [d.id]));
+  assert.equal((await one(`select title from public.drawings where id = $1`, [d.id])).title, null, 'partner cannot rename');
+  await as(alice, () => q(`update public.drawings set title = 'Under the sun' where id = $1`, [d.id]));
+  await rejects(as(alice, () => q(`update public.drawings set seen_at = now() where id = $1`, [d.id])), /permission denied/, 'seen via update');
+  await as(alice, () => q(`delete from public.drawings where id = $1`, [d.id]));
+  assert.equal((await q(`select id from public.drawings where id = $1`, [d.id])).length, 0);
+});
+
+await test('doodles: for my partner only; only they mark it seen', async () => {
+  await rejects(as(alice, () => q(...drawRow('doodle', alice, { for_user: carol }))), /row-level security/, 'outsider recipient');
+  await rejects(as(alice, () => q(...drawRow('doodle', alice))), /doodle_has_recipient/, 'no recipient');
+  const d = await as(alice, () => one(...drawRow('doodle', alice, { for_user: bob, note: 'chai date tonight?' })));
+  await rejects(as(alice, () => q(`select public.mark_doodle_seen($1)`, [d.id])), /only the person/, 'sender');
+  await rejects(as(carol, () => q(`select public.mark_doodle_seen($1)`, [d.id])), /drawing_not_found/, 'outsider');
+  const seen = await as(bob, () => one(`select (public.mark_doodle_seen($1)).seen_at`, [d.id]));
+  assert.ok(seen.seen_at);
+});
+
+await test('daily doodle: hidden until I draw mine that day', async () => {
+  await as(alice, () => q(...drawRow('daily', alice, { day: '2026-10-26', prompt: 'Our first trip' })));
+  let status = await as(bob, () => one(`select * from public.daily_doodle_status('2026-10-26')`));
+  assert.deepEqual([status.mine, status.partner], [false, true]);
+  assert.equal((await as(bob, () => q(`select id from public.drawings where kind = 'daily'`))).length, 0, 'hidden');
+  await as(bob, () => q(...drawRow('daily', bob, { day: '2026-10-26', prompt: 'Our first trip' })));
+  assert.equal((await as(bob, () => q(`select id from public.drawings where kind = 'daily'`))).length, 2, 'both now');
+  await rejects(as(bob, () => q(...drawRow('daily', bob, { day: '2026-10-26' }))), /duplicate key/, 'one a day');
+  status = await as(alice, () => one(`select * from public.daily_doodle_status('2026-10-26')`));
+  assert.deepEqual([status.mine, status.partner], [true, true]);
+});
+
+await test('words and games: couple-scoped; scores only through functions', async () => {
+  await as(alice, () => q(`insert into public.draw_words (couple_id, word, added_by) values ($1, 'Our Goa trip', $2)`, [couple.id, alice]));
+  await rejects(as(bob, () => q(`insert into public.draw_words (couple_id, word, added_by) values ($1, ' our goa trip ', $2)`, [couple.id, bob])), /duplicate key/, 'dupe');
+  assert.equal((await as(bob, () => q(`select word from public.draw_words`))).length, 1);
+  assert.equal((await as(carol, () => q(`select word from public.draw_words`))).length, 0);
+  const g = await as(alice, () => one(`insert into public.draw_games (couple_id, started_by, mode) values ($1, $2, 'live') returning *`, [couple.id, alice]));
+  await rejects(as(alice, () => q(`insert into public.draw_games (couple_id, started_by, score) values ($1, $2, 900)`, [couple.id, alice])), /row-level security/, 'preset score');
+  await rejects(as(alice, () => q(`update public.draw_games set score = 9999 where id = $1`, [g.id])), /permission denied/, 'direct score');
+  await rejects(as(bob, () => q(`select public.finish_draw_game($1, 6, 5000, 6, 'x', 1)`, [g.id])), /bad_result/, 'impossible score');
+  await rejects(as(carol, () => q(`select public.finish_draw_game($1, 6, 400, 5, 'x', 1)`, [g.id])), /game_not_found/, 'outsider');
+  const done = await as(bob, () => one(`select * from public.finish_draw_game($1, 6, 412, 5, 'Haathi', 3000)`, [g.id]));
+  assert.equal(done.score, 412);
+  const again = await as(alice, () => one(`select * from public.finish_draw_game($1, 6, 10, 1, 'x', 1)`, [g.id]));
+  assert.equal(again.score, 412, 'written once');
+});
+
+await test('turns: the word stays hidden from the guesser until they answer', async () => {
+  const g = await as(alice, () => one(`insert into public.draw_games (couple_id, started_by, mode, rounds) values ($1, $2, 'turns', 2) returning *`, [couple.id, alice]));
+  const d = await as(alice, () => one(...drawRow('guess', alice, { game_id: g.id, round: 0, meta: JSON.stringify({ level: 'medium' }) })));
+  await as(alice, () => q(`insert into public.draw_secrets (drawing_id, couple_id, word) values ($1, $2, 'Golgappa')`, [d.id, couple.id]));
+  await rejects(as(bob, () => q(`insert into public.draw_secrets (drawing_id, couple_id, word) values ($1, $2, 'x')`, [d.id, couple.id])), /row-level security|duplicate key/, 'guesser writes word');
+  assert.equal((await as(bob, () => q(`select word from public.draw_secrets`))).length, 0, 'hidden before answering');
+  assert.equal((await as(alice, () => q(`select word from public.draw_secrets`))).length, 1, 'drawer sees it');
+  await rejects(as(alice, () => q(`select public.answer_guess($1, true, 1000, 100)`, [d.id])), /drawer cannot answer/, 'drawer');
+  await rejects(as(bob, () => q(`select public.answer_guess($1, true, 1000, 999)`, [d.id])), /bad_answer/, 'too many points');
+  const game = await as(bob, () => one(`select * from public.answer_guess($1, true, 12000, 120)`, [d.id]));
+  assert.deepEqual([game.played, game.score, game.solved, game.best_word], [1, 120, 1, 'Golgappa']);
+  assert.equal((await as(bob, () => one(`select word from public.draw_secrets`))).word, 'Golgappa', 'open after answering');
+  await rejects(as(bob, () => q(`select public.answer_guess($1, true, 1000, 100)`, [d.id])), /already_answered/, 'twice');
+});
+
 console.log('\nLeaving');
 
 await test('unpair: removes everything we shared, keeps private data, frees both of us', async () => {

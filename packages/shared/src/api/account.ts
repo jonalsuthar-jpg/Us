@@ -2,9 +2,10 @@ import type { UsClient } from '../supabase';
 import { MEMORY_BUCKET } from './memory';
 import { CHAT_BUCKET } from './messages';
 import { SNAPS_BUCKET } from './snaps';
+import { DRAW_BUCKET } from './draw';
 
 /** Buckets that keep files under "<couple_id>/". */
-export const COUPLE_BUCKETS = [MEMORY_BUCKET, CHAT_BUCKET, SNAPS_BUCKET];
+export const COUPLE_BUCKETS = [MEMORY_BUCKET, CHAT_BUCKET, SNAPS_BUCKET, DRAW_BUCKET];
 
 /**
  * Delete every file in the couple's Storage folders (memories, the photo of

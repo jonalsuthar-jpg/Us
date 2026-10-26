@@ -17,6 +17,7 @@ export type FeatureKey =
   | 'fight_translator'
   | 'letters'
   | 'jokes'
+  | 'draw'
   | 'calendar'
   | 'lists'
   | 'decide'
@@ -50,6 +51,7 @@ export const FEATURES: FeatureInfo[] = [
   { key: 'fight_translator', label: 'Fight translator', group: 'connect' },
   { key: 'letters', label: 'Future letters', group: 'connect' },
   { key: 'jokes', label: 'Inside jokes', group: 'connect' },
+  { key: 'draw', label: 'Draw together', group: 'connect' },
   { key: 'calendar', label: 'Calendar', group: 'plan' },
   { key: 'lists', label: 'Lists', group: 'plan' },
   { key: 'decide', label: 'Decision picker', group: 'plan' },
@@ -80,7 +82,7 @@ export const featureLabel = (key: string) => FEATURES.find((f) => f.key === key)
 /** The app tabs, and the features that make each one worth showing. */
 export const TAB_FEATURES: Record<'talk' | 'connect' | 'plan' | 'memory' | 'growth', FeatureKey[]> = {
   talk: ['chat', 'calls'],
-  connect: ['daily_question', 'calls'],
+  connect: ['daily_question', 'calls', 'draw'],
   plan: ['calendar', 'lists', 'decide', 'labour', 'costs'],
   memory: ['memories'],
   growth: ['goals', 'mood', 'worries', 'love_languages'],
