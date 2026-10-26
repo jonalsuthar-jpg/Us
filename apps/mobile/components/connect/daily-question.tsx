@@ -113,16 +113,15 @@ export function AnswersCard({ daily }: { daily: ReturnType<typeof useDaily> }) {
       onPress={() => router.push('/questions')}
       className="flex-row items-center gap-4 rounded-[24px] bg-gold-50 p-4 active:opacity-80"
     >
-      <View className="h-[60px] w-[60px] items-center justify-center rounded-[18px] bg-paper-raised">
-        <Display className="text-[24px] leading-[26px]">{String(together)}</Display>
-        <Text className="text-[10px] leading-[12px] text-ink-muted">answered</Text>
+      <View className="h-14 w-14 items-center justify-center rounded-[18px] bg-paper-raised">
+        <Display className="text-[26px] leading-[30px]">{String(together)}</Display>
       </View>
-      <View className="flex-1 gap-1">
+      <View className="flex-1 gap-0.5">
         <Text className="font-sans-semibold text-lead">Our answers</Text>
         <View className="flex-row items-center gap-1.5">
           {streak > 1 ? <Flame size={13} color={c.gold} /> : null}
           <Text className="flex-1 text-micro text-gold-700" numberOfLines={1}>
-            {streak > 1 ? `${streak} days in a row · every question` : 'Every question, both answers'}
+            {streak > 1 ? `${together} together · ${streak} days in a row` : `${together} answered together`}
           </Text>
         </View>
       </View>

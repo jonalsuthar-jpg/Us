@@ -1,7 +1,7 @@
 import { addDays, fromDateKey, toDateKey } from '@us/shared';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { Modal, View } from 'react-native';
+import { Modal, Platform, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconButton } from './button';
@@ -31,7 +31,8 @@ export function FormSheet({
   return (
     <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View className="flex-1 bg-paper">
-        <View className="flex-row items-center justify-between px-5 pb-2 pt-5">
+        {/* Android draws the sheet full screen, under the status bar: keep the title below it. */}
+        <View className="flex-row items-center justify-between px-5 pb-2" style={{ paddingTop: Platform.OS === 'android' ? insets.top + 12 : 20 }}>
           <Display className="text-heading">{title}</Display>
           <IconButton label="Close" size="sm" onPress={onClose}>
             <X size={20} color={c.inkSoft} />

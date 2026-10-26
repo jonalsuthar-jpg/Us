@@ -35,10 +35,10 @@ export default function Connect() {
       refreshControl={<RefreshControl refreshing={daily.loading && !!daily.data} onRefresh={() => void daily.reload()} />}
     >
       {/* Same shape as Home's header: a small line, then the big one. */}
-      <View className="flex-row items-center gap-2.5">
+      <View className="flex-row items-end gap-3">
         <View className="flex-1">
           <Text className="font-sans-semibold text-micro uppercase tracking-[1.2px] text-teal-700">Connect</Text>
-          <Display className="text-title">Do something together</Display>
+          <Display className="mt-0.5 text-[27px] leading-[32px]">Do something together</Display>
         </View>
         <IconButton label="Settings" size="sm" tone="raised" onPress={() => router.push('/settings')}>
           <Settings size={19} color={c.inkSoft} />

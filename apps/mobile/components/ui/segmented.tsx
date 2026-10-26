@@ -35,11 +35,16 @@ export function Segmented<T extends string>({
             }}
             className={cn(
               'flex-1 items-center justify-center rounded-[9px]',
-              size === 'sm' ? 'px-2 py-1.5' : 'px-3 py-2',
+              size === 'sm' ? 'px-1.5 py-1.5' : options.length > 3 ? 'px-1 py-2.5' : 'px-3 py-2.5',
               selected && 'bg-paper-raised shadow-sm shadow-plum-800/10',
             )}
           >
-            <Text numberOfLines={1} className={cn('font-sans-medium text-small', selected ? 'text-ink' : 'text-ink-soft')}>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              className={cn('text-small', selected ? 'font-sans-semibold text-ink' : 'font-sans-medium text-ink-soft')}
+            >
               {o.label}
             </Text>
           </Pressable>

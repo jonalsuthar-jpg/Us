@@ -2,7 +2,7 @@ import { searchGifs, type Gif, type GifKind } from '@us/shared';
 import { Image } from 'expo-image';
 import { Search, X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Platform, Pressable, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { env } from '@/lib/env';
 import { IconButton } from '../ui/button';
@@ -50,7 +50,8 @@ export function GifPicker({ open, onClose, onPick }: { open: boolean; onClose: (
   return (
     <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View className="flex-1 bg-paper" style={{ paddingBottom: insets.bottom }}>
-        <View className="flex-row items-center gap-2 px-4 pb-2 pt-4">
+        {/* Android draws the sheet full screen, under the status bar: keep the header below it. */}
+        <View className="flex-row items-center gap-2 px-4 pb-2" style={{ paddingTop: Platform.OS === 'android' ? insets.top + 10 : 16 }}>
           <View className="flex-1 flex-row gap-2">
             <Chip selected={kind === 'gif'} onPress={() => setKind('gif')}>
               GIFs

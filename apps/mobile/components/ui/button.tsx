@@ -47,7 +47,9 @@ export function Button({ variant = 'primary', size = 'md', loading, icon, childr
       }}
       className={cn(
         'flex-row items-center justify-center gap-2 rounded-control',
-        size === 'sm' ? 'h-10 px-4' : size === 'lg' ? 'h-14 px-7' : 'h-12 px-5',
+        // Quiet buttons read as links, so they line up with the text around them.
+        // (NativeWind settles padding by stylesheet order, so a later px-0 can't undo px-5.)
+        variant === 'quiet' ? (size === 'sm' ? 'h-10 px-0.5' : 'h-11 px-0.5') : size === 'sm' ? 'h-10 px-4' : size === 'lg' ? 'h-14 px-7' : 'h-12 px-5',
         SURFACE[variant],
         (disabled || loading) && 'opacity-50',
         className,

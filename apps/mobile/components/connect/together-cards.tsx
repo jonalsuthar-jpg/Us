@@ -40,15 +40,17 @@ export function TogetherCards() {
           <View pointerEvents="none" className="absolute -right-3 top-3">
             <Record playing size={104} />
           </View>
-          <View className="flex-row items-center gap-2">
+          <View className="flex-row items-center gap-2.5">
             <View className="h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
               <Headphones size={19} color="#FCFAFB" />
             </View>
+            <SoundBars playing count={4} height={14} />
           </View>
           <View className="gap-1">
-            <SoundBars playing count={4} height={14} className="mb-1" />
-            <Display className="text-[20px] leading-[23px] text-paper">Listen together</Display>
-            <Text className="text-micro leading-[17px] text-plum-200">{`Hear what ${name} is playing`}</Text>
+            <Display className="text-[20px] leading-[24px] text-paper" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              Listen together
+            </Display>
+            <Text className="text-micro leading-[17px] text-plum-200" numberOfLines={1}>{`${name}’s music`}</Text>
           </View>
         </Pressable>
         <Pressable
@@ -71,8 +73,10 @@ export function TogetherCards() {
             <Tv size={19} color="#FCFAFB" />
           </View>
           <View className="gap-1">
-            <Display className="text-[20px] leading-[23px] text-paper">Watch together</Display>
-            <Text className="text-micro leading-[17px] text-teal-200">{`Watch ${name}’s screen`}</Text>
+            <Display className="text-[20px] leading-[24px] text-paper" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              Watch together
+            </Display>
+            <Text className="text-micro leading-[17px] text-teal-200" numberOfLines={1}>{`${name}’s screen`}</Text>
           </View>
         </Pressable>
       </View>

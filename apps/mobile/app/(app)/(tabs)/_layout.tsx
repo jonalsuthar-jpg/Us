@@ -7,6 +7,7 @@ import { Animated, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePalette } from '@/components/ui/palette';
 import { cn } from '@/components/ui/cn';
+import { StatusScrim } from '@/components/ui/status-scrim';
 import { Text } from '@/components/ui/text';
 
 const ICONS: Record<'home' | ModuleId, typeof MessageCircleHeart> = {
@@ -28,6 +29,7 @@ export default function AppTabs() {
   // Only the areas this couple has something in.
   const modules = MODULES.filter((m) => TAB_FEATURES[m.id].some(has));
   return (
+    <View style={{ flex: 1, backgroundColor: c.paper }}>
     <TopTabs
       tabBarPosition="bottom"
       tabBar={(props) => <TabBar {...props} />}
@@ -46,6 +48,8 @@ export default function AppTabs() {
         <TopTabs.Screen key={m.id} name={m.id} options={{ title: m.title }} />
       ))}
     </TopTabs>
+    <StatusScrim />
+    </View>
   );
 }
 

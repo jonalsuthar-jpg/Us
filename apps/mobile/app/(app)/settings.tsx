@@ -17,6 +17,7 @@ import { logoutPush, requestPushPermission } from '@/lib/push';
 import { playChime } from '@/lib/sounds';
 import { usePalette, useThemePref } from '@/components/ui/palette';
 import { Segmented } from '@/components/ui/segmented';
+import { StatusScrim } from '@/components/ui/status-scrim';
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
@@ -65,6 +66,7 @@ export default function Settings() {
   }
 
   return (
+    <View className="flex-1 bg-paper">
     <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 40 }} contentContainerClassName="gap-10 px-5">
       <View className="flex-row items-center gap-2">
         <IconButton label="Back" size="sm" onPress={() => router.back()}>
@@ -266,5 +268,7 @@ export default function Settings() {
         Sign out
       </Button>
     </ScrollView>
+    <StatusScrim />
+    </View>
   );
 }

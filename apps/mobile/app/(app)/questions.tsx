@@ -14,6 +14,7 @@ import { Chip } from '@/components/ui/segmented';
 import { cn } from '@/components/ui/cn';
 import { FormSheet } from '@/components/ui/form-sheet';
 import { usePalette } from '@/components/ui/palette';
+import { StatusScrim } from '@/components/ui/status-scrim';
 import { Display, Text } from '@/components/ui/text';
 
 /** Our answers: every day we've answered, by month, searchable; tap one to read both answers. */
@@ -170,6 +171,7 @@ export default function Questions() {
           </>
         ) : null}
       </FormSheet>
+      <StatusScrim />
     </View>
   );
 }
