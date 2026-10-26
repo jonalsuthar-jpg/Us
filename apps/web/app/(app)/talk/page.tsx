@@ -9,6 +9,7 @@ import { FeatureOff } from '@/components/app/feature-off';
 import { Bubble, type ReplyQuote } from '@/components/chat/bubble';
 import { CallEntry } from '@/components/chat/call-entry';
 import { Composer } from '@/components/chat/composer';
+import { DoodleDialog } from '@/components/draw/doodle-dialog';
 import { env } from '@/lib/env';
 import { GifPicker } from '@/components/chat/gif-picker';
 import { TypingBubble } from '@/components/chat/typing-bubble';
@@ -45,6 +46,8 @@ function Thread() {
   const [highlight, setHighlight] = useState<string | null>(null);
   const [panel, setPanel] = useState<'search' | 'pins' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const draw = useFeature('draw');
+  const [doodle, setDoodle] = useState(false);
 
   // Pinned messages (any age). Refreshes on a partner's pin ping and when a loaded message's pin changes.
   const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id), [sb, couple.id]);
@@ -344,7 +347,9 @@ function Thread() {
             onPhoto={(f, caption) => void sendPhoto(f, caption).catch(fail)}
             onVoice={sendVoice}
             onGif={env.giphyKey ? () => setGifs(true) : undefined}
+            onDoodle={draw ? () => setDoodle(true) : undefined}
           />
+          {draw ? <DoodleDialog open={doodle} onOpenChange={setDoodle} mode="chat" onChatPhoto={(f) => void sendPhoto(f, '').catch(fail)} /> : null}
           <GifPicker
             open={gifs}
             onOpenChange={setGifs}

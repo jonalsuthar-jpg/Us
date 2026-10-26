@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
 import { ErrorNote } from '@/components/app/module-header';
+import { DoodleNote, DrawingBanner } from '@/components/draw/home-draw';
 import { PlantCard } from '@/components/plant/plant-card';
 import { SnapRow } from '@/components/snaps/snap-row';
 import { RankChip } from '@/components/spark/rank-chip';
@@ -125,6 +126,8 @@ export function Home() {
         </Sheet>
       ) : null}
 
+      {has('draw') && <DrawingBanner />}
+
       <input
         ref={fileInput}
         type="file"
@@ -181,6 +184,8 @@ export function Home() {
           {photoError ? <ErrorNote>{photoError}</ErrorNote> : null}
 
           {has('snaps') && <SnapRow />}
+
+          {has('draw') && <DoodleNote />}
 
           {/* How you both are */}
           <div className="grid grid-cols-2 gap-3">

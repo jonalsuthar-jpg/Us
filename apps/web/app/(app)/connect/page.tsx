@@ -7,6 +7,7 @@ import { FeatureOff } from '@/components/app/feature-off';
 import { MobileSettingsLink } from '@/components/app/app-shell';
 import { DailyQuestion } from '@/components/connect/daily-question';
 import { TogetherCards } from '@/components/connect/together-cards';
+import { DailyDoodleCard, DrawingsStrip, DrawTiles } from '@/components/draw/connect-draw';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/cn';
 
@@ -24,6 +25,7 @@ export default function ConnectPage() {
   const soon = mod.features.filter((f) => f.soon);
   const daily = useFeature('daily_question');
   const calls = useFeature('calls');
+  const draw = useFeature('draw');
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-5 py-8 sm:space-y-8 sm:px-10 sm:py-12">
@@ -45,7 +47,14 @@ export default function ConnectPage() {
       </header>
 
       {calls ? <TogetherCards /> : null}
-      {daily ? <DailyQuestion /> : calls ? null : <FeatureOff />}
+      {draw ? (
+        <>
+          <DrawTiles />
+          <DrawingsStrip />
+          <DailyDoodleCard />
+        </>
+      ) : null}
+      {daily ? <DailyQuestion /> : calls || draw ? null : <FeatureOff />}
 
       <section aria-labelledby="more" className="space-y-3.5">
         <h2 id="more" className="font-display text-heading text-ink">

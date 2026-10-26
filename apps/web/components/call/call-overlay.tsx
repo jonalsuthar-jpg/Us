@@ -1,7 +1,7 @@
 'use client';
 
 import { formatDuration, type CallState, type ScreenStats, type ShareMode } from '@us/shared';
-import { useCallManager, useCallState, useCouple } from '@us/shared/react';
+import { useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronDown,
@@ -13,6 +13,7 @@ import {
   MonitorUp,
   MonitorX,
   Phone,
+  PenLine,
   PhoneOff,
   Radio,
   SwitchCamera,
@@ -27,6 +28,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
 import { useElapsed } from '@/lib/hooks';
+import { LiveCanvas } from '@/components/draw/live-canvas';
 import { ListenScreen } from './listen-screen';
 import { StreamAudio, StreamVideo, useAudioDevices, type AudioDevice } from './media';
 
@@ -115,6 +117,8 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
   const m = useCallManager();
   const { partner, partnerSlot, me } = useCouple();
   const [shareNudge, setShareNudge] = useState(false);
+  const canDraw = useFeature('draw');
+  const [drawing, setDrawing] = useState(false);
   const [audioPicker, setAudioPicker] = useState(false);
   // undefined = the browser's default output.
   const [sinkId, setSinkId] = useState<string | undefined>(undefined);
@@ -449,12 +453,24 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
                 {state.local.screen ? <MonitorX className="h-6 w-6" /> : <MonitorUp className="h-6 w-6" />}
               </IconButton>
             )}
+            {live && canDraw && (
+              <IconButton label="Draw together" pressed={drawing} tone={drawing ? 'nightOff' : 'night'} size="lg" onClick={() => setDrawing((d) => !d)}>
+                <PenLine className="h-6 w-6" />
+              </IconButton>
+            )}
             <IconButton ref={primary} label="End call" tone="end" size="lg" className="w-20" onClick={() => void m.hangup()}>
               <PhoneOff className="h-6 w-6" />
             </IconButton>
           </>
         )}
       </footer>
+
+      {/* Draw together over the call: a panel on the right (a sheet from the bottom on phones). Audio carries on. */}
+      {drawing && live ? (
+        <div className="absolute inset-x-0 bottom-0 top-[72px] z-20 overflow-y-auto rounded-t-[26px] md:inset-y-0 md:left-auto md:right-0 md:top-0 md:w-[min(520px,48vw)] md:rounded-none md:rounded-l-[26px]">
+          <LiveCanvas variant="call" onClose={() => setDrawing(false)} />
+        </div>
+      ) : null}
 
       <Dialog open={audioPicker} onOpenChange={setAudioPicker} title="Microphone and speaker">
         <div className="space-y-5">
