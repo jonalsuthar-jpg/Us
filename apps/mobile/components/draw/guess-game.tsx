@@ -419,7 +419,7 @@ function Stat({ value, label, night }: { value: string | number; label: string; 
   return (
     <View className={cn('flex-1 gap-0.5 rounded-[16px] p-3', night ? 'bg-plum-700' : 'bg-paper-sunken')}>
       <Text className={cn('font-sans-bold text-[21px] leading-[26px]', night ? 'text-paper' : 'text-ink')}>{String(value)}</Text>
-      <Text className={cn('text-[12px] leading-[15px]', night ? 'text-plum-200' : 'text-ink-soft')} numberOfLines={2}>
+      <Text className={cn('text-[12px]', night ? 'text-plum-200' : 'text-ink-soft')} numberOfLines={2}>
         {label}
       </Text>
     </View>
