@@ -188,10 +188,12 @@ function Action({ label, icon, busy, onPress }: { label: string; icon: React.Rea
       accessibilityRole="button"
       disabled={busy}
       onPress={onPress}
-      className="h-16 min-w-[31%] flex-1 items-center justify-center gap-1 rounded-[14px] bg-plum-700 px-2 active:opacity-80"
+      className="min-h-16 min-w-[31%] flex-1 items-center justify-center gap-1 rounded-[14px] bg-plum-700 px-2 py-2.5 active:opacity-80"
     >
       {busy ? <ActivityIndicator color="#FCFAFB" /> : icon}
-      <Text className="font-sans-semibold text-micro text-paper">{label}</Text>
+      <Text className="text-center font-sans-semibold text-micro text-paper" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

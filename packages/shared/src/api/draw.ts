@@ -89,10 +89,21 @@ export async function getDrawing(sb: UsClient, id: string): Promise<Drawing | nu
   return unwrap(await sb.from('drawings').select('*').eq('id', id).maybeSingle());
 }
 
+/**
+ * A file from our drawings folder, fetched through a short-lived link. (The
+ * Storage download hands back a Blob, and a phone's Blob can't be read as
+ * text or bytes, so both apps fetch instead.)
+ */
+async function fetchDrawingFile(sb: UsClient, path: string): Promise<Response> {
+  const { data, error } = await sb.storage.from(DRAW_BUCKET).createSignedUrl(path, 120);
+  if (error || !data?.signedUrl) throw error ?? new Error('Drawing not found');
+  const res = await fetch(data.signedUrl);
+  if (!res.ok) throw new Error('Drawing not found');
+  return res;
+}
+
 export async function loadStrokes(sb: UsClient, path: string): Promise<DrawingFile> {
-  const { data, error } = await sb.storage.from(DRAW_BUCKET).download(path);
-  if (error || !data) throw error ?? new Error('Drawing not found');
-  return decodeDrawing(JSON.parse(await data.text()));
+  return decodeDrawing(await (await fetchDrawingFile(sb, path)).json());
 }
 
 /** Short-lived links to drawing pictures, keyed by path. */
@@ -106,10 +117,9 @@ export async function drawingUrls(sb: UsClient, paths: string[], expiresIn = 360
   return out;
 }
 
-export async function drawingPng(sb: UsClient, d: Pick<Drawing, 'png_path'>): Promise<Blob> {
-  const { data, error } = await sb.storage.from(DRAW_BUCKET).download(d.png_path);
-  if (error || !data) throw error ?? new Error('Picture not found');
-  return data;
+/** A drawing's picture as bytes (to keep in Memories or use as our photo). */
+export async function drawingPng(sb: UsClient, d: Pick<Drawing, 'png_path'>): Promise<ArrayBuffer> {
+  return (await fetchDrawingFile(sb, d.png_path)).arrayBuffer();
 }
 
 export async function renameDrawing(sb: UsClient, id: string, title: string | null): Promise<void> {
