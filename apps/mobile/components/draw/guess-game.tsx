@@ -275,7 +275,7 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
         <View className="gap-1.5">
           <Display className="text-[34px] leading-[40px]">Draw & Guess</Display>
           <Display light italic className="text-lead text-ink-soft">
-            Six rounds, one team. One of you draws, the other guesses, then you swap.
+            One team, as many rounds as you like. One of you draws, the other guesses, then you swap.
           </Display>
         </View>
         {left ? <Text className="rounded-[16px] bg-paper-sunken px-4 py-3 text-small text-ink-soft">{left === me.id ? 'You left the game.' : `${name} left the game.`}</Text> : null}
@@ -419,7 +419,7 @@ function Stat({ value, label, night }: { value: string | number; label: string; 
   return (
     <View className={cn('flex-1 gap-0.5 rounded-[16px] p-3', night ? 'bg-plum-700' : 'bg-paper-sunken')}>
       <Text className={cn('font-sans-bold text-[21px] leading-[26px]', night ? 'text-paper' : 'text-ink')}>{String(value)}</Text>
-      <Text className={cn('text-[12px] leading-[15px]', night ? 'text-plum-200' : 'text-ink-soft')} numberOfLines={1}>
+      <Text className={cn('text-[12px] leading-[15px]', night ? 'text-plum-200' : 'text-ink-soft')} numberOfLines={2}>
         {label}
       </Text>
     </View>

@@ -36,7 +36,13 @@ const square = (x0: number, y0: number, x1: number, y1: number): Stroke => ({
   tool: 'pen',
   c: 0,
   w: 40,
-  p: [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0],
+  // Points along each side, like a finger drawing it.
+  p: [
+    [x0, y0, x1, y0],
+    [x1, y0, x1, y1],
+    [x1, y1, x0, y1],
+    [x0, y1, x0, y0],
+  ].flatMap(([ax, ay, bx, by]) => Array.from({ length: 10 }, (_, i) => [ax! + ((bx! - ax!) * i) / 10, ay! + ((by! - ay!) * i) / 10]).flat()).concat([x0, y0]),
   n: 1,
   t0: 0,
   d: 0,

@@ -17,20 +17,55 @@ const GH = BOARD_H / FILL_CELL;
 /** Longest fill path we'll send. */
 export const FILL_MAX_CHARS = 48_000;
 
+/**
+ * The points of the line as it's actually drawn: centerPath smooths corners
+ * with quadratic curves through the midpoints, so walls follow those curves
+ * too (else the fill would poke out where a corner was rounded off).
+ */
+function drawnPoints(p: number[], ws: number[] | null): { p: number[]; ws: number[] | null } {
+  const n = p.length / 2;
+  if (n < 3) return { p, ws };
+  const out: number[] = [p[0]!, p[1]!];
+  const outW: number[] | null = ws ? [ws[0]!] : null;
+  let sx = p[0]!;
+  let sy = p[1]!;
+  for (let i = 1; i < n - 1; i++) {
+    const cx = p[i * 2]!;
+    const cy = p[i * 2 + 1]!;
+    const ex = (cx + p[i * 2 + 2]!) / 2;
+    const ey = (cy + p[i * 2 + 3]!) / 2;
+    for (let k = 1; k <= 4; k++) {
+      const t = k / 4;
+      const u = 1 - t;
+      out.push(u * u * sx + 2 * u * t * cx + t * t * ex, u * u * sy + 2 * u * t * cy + t * t * ey);
+      outW?.push(ws![i]!);
+    }
+    sx = ex;
+    sy = ey;
+  }
+  out.push(p[n * 2 - 2]!, p[n * 2 - 1]!);
+  outW?.push(ws![n - 1]!);
+  return { p: out, ws: outW };
+}
+
 /** Lines as walls: every cell within a stroke's radius of its centre line. */
 function walls(strokes: Stroke[]): Uint8Array {
   const g = new Uint8Array(GW * GH);
   for (const s of strokes) {
     if (s.tool === 'fill' || s.p.length < 2) continue;
     const value = s.tool === 'eraser' ? 0 : 1;
-    const widths = s.tool === 'calligraphy' && s.p.length >= 4 ? calligraphyWidths(s.p, s.w) : s.ws && s.ws.length === s.p.length / 2 ? s.ws : null;
-    const n = s.p.length / 2;
+    const rawWidths = s.tool === 'calligraphy' && s.p.length >= 4 ? calligraphyWidths(s.p, s.w) : s.ws && s.ws.length === s.p.length / 2 ? s.ws : null;
+    // Calligraphy and pressure lines are outlines drawn through the raw points; the rest are smoothed.
+    const line = rawWidths ? { p: s.p, ws: rawWidths } : drawnPoints(s.p, null);
+    const pts = line.p;
+    const widths = line.ws;
+    const n = pts.length / 2;
     for (let i = 0; i < n; i++) {
       const j = Math.min(n - 1, i + 1);
-      const ax = s.p[i * 2]! / FILL_CELL;
-      const ay = s.p[i * 2 + 1]! / FILL_CELL;
-      const bx = s.p[j * 2]! / FILL_CELL;
-      const by = s.p[j * 2 + 1]! / FILL_CELL;
+      const ax = pts[i * 2]! / FILL_CELL;
+      const ay = pts[i * 2 + 1]! / FILL_CELL;
+      const bx = pts[j * 2]! / FILL_CELL;
+      const by = pts[j * 2 + 1]! / FILL_CELL;
       const r = Math.max(0.6, ((widths ? Math.max(widths[i]!, widths[j]!) : s.w) / 2) / FILL_CELL);
       const x0 = Math.max(0, Math.floor(Math.min(ax, bx) - r));
       const x1 = Math.min(GW - 1, Math.ceil(Math.max(ax, bx) + r));

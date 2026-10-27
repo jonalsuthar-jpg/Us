@@ -254,7 +254,7 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
           <ArrowLeft className="h-4 w-4" aria-hidden /> Connect
         </Link>
         <h1 className="font-display text-[34px] leading-[40px] text-ink">Draw &amp; Guess</h1>
-        <p className="font-serif text-lead font-light italic text-ink-soft">Six rounds, one team. One of you draws, the other guesses, then you swap.</p>
+        <p className="font-serif text-lead font-light italic text-ink-soft">One team, as many rounds as you like. One of you draws, the other guesses, then you swap.</p>
       </header>
 
       {left ? <p className="rounded-[16px] bg-paper-sunken px-4 py-3 text-small text-ink-soft">{left === me.id ? 'You left the game.' : `${name} left the game.`}</p> : null}
@@ -392,7 +392,7 @@ function Stat({ value, label, night }: { value: string | number; label: string; 
   return (
     <div className={cn('flex flex-col gap-0.5 rounded-[16px] p-3', night ? 'bg-plum-700' : 'bg-paper-sunken')}>
       <span className={cn('font-display text-heading', night ? 'text-paper' : 'text-ink')}>{value}</span>
-      <span className={cn('truncate text-[12px]', night ? 'text-plum-200' : 'text-ink-soft')}>{label}</span>
+      <span className={cn('text-[12px] leading-[15px]', night ? 'text-plum-200' : 'text-ink-soft')}>{label}</span>
     </div>
   );
 }
