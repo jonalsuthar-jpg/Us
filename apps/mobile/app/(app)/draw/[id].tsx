@@ -88,7 +88,7 @@ export default function DrawingScreen() {
           <Text className="font-sans-bold text-lead text-paper" numberOfLines={1}>
             {title}
           </Text>
-          {d ? <Text className="text-micro text-plum-200">{`${timeAgo(d.created_at)} · ${who} · ${d.stroke_count} strokes`}</Text> : null}
+          {d ? <Text className="text-micro text-plum-200">{`${timeAgo(d.created_at)} · ${who} · ${d.stroke_count} ${d.stroke_count === 1 ? 'stroke' : 'strokes'}`}</Text> : null}
         </View>
       </View>
       <ScrollView contentContainerClassName="gap-3 px-4" contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
@@ -98,11 +98,11 @@ export default function DrawingScreen() {
           <View className="flex-row gap-3.5">
             <View className="flex-row items-center gap-1.5">
               <View className={mySlot === 'a' ? 'h-2 w-2 rounded-full bg-rose-400' : 'h-2 w-2 rounded-full bg-teal-300'} />
-              <Text className="text-micro text-plum-300">{`${me.display_name} ${counts.mine} strokes`}</Text>
+              <Text className="text-micro text-plum-300">{`${me.display_name} ${counts.mine} ${counts.mine === 1 ? 'stroke' : 'strokes'}`}</Text>
             </View>
             <View className="flex-row items-center gap-1.5">
               <View className={mySlot === 'a' ? 'h-2 w-2 rounded-full bg-teal-300' : 'h-2 w-2 rounded-full bg-rose-400'} />
-              <Text className="text-micro text-plum-300">{`${partner.display_name} ${counts.theirs} strokes`}</Text>
+              <Text className="text-micro text-plum-300">{`${partner.display_name} ${counts.theirs} ${counts.theirs === 1 ? 'stroke' : 'strokes'}`}</Text>
             </View>
           </View>
         ) : null}
@@ -188,7 +188,7 @@ function Action({ label, icon, busy, onPress }: { label: string; icon: React.Rea
       accessibilityRole="button"
       disabled={busy}
       onPress={onPress}
-      className="min-h-16 min-w-[31%] flex-1 items-center justify-center gap-1 rounded-[14px] bg-plum-700 px-2 py-2.5 active:opacity-80"
+      className="h-16 min-w-[31%] flex-1 items-center justify-center gap-1 rounded-[14px] bg-plum-700 px-2 active:opacity-80"
     >
       {busy ? <ActivityIndicator color="#FCFAFB" /> : icon}
       <Text className="text-center font-sans-semibold text-micro text-paper" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
