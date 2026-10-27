@@ -1,6 +1,6 @@
 'use client';
 
-import { BRUSH_MAX, BRUSH_MIN, BOARD_W, LIVE_CANVAS, notifyPartner, type DrawTool } from '@us/shared';
+import { BRUSH_MAX, BRUSH_MIN, LIVE_CANVAS, notifyPartner } from '@us/shared';
 import { useCouple, useDrawings, useDrawSession } from '@us/shared/react';
 import { ArrowLeft, Download, Send, X } from 'lucide-react';
 import Link from 'next/link';
@@ -11,13 +11,12 @@ import { BackgroundPicker } from './background-picker';
 import { Board } from './board';
 import { useBgPhotoUrl, useSaveDrawing } from './hooks';
 import { SaveDialog } from './save-dialog';
-import { Toolbar } from './toolbar';
+import { SizePicker, Toolbar, TOOL_KEYS, useBrush } from './toolbar';
 
 /** Tool, colour and size, plus the keyboard shortcuts for them. */
 export function useDrawTools(onUndo: () => void) {
-  const [tool, setTool] = useState<DrawTool>('pen');
-  const [color, setColor] = useState(1);
-  const [size, setSize] = useState(50);
+  const brush = useBrush();
+  const { setTool, setSize } = brush;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -29,16 +28,14 @@ export function useDrawTools(onUndo: () => void) {
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
-      if (k === 'p') setTool('pen');
-      else if (k === 'm') setTool('marker');
-      else if (k === 'e') setTool('eraser');
+      if (TOOL_KEYS[k]) setTool(TOOL_KEYS[k]);
       else if (k === '[') setSize((s) => Math.max(BRUSH_MIN, s - 10));
       else if (k === ']') setSize((s) => Math.min(BRUSH_MAX, s + 10));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onUndo]);
-  return { tool, setTool, color, setColor, size, setSize };
+  }, [onUndo, setTool, setSize]);
+  return brush;
 }
 
 /**
@@ -96,21 +93,10 @@ export function LiveCanvas({ variant = 'page', onClose }: { variant?: 'page' | '
     </button>
   );
 
-  const brush = (
-    <div className="mt-3 flex flex-wrap items-center gap-3 text-micro text-ink-muted">
-      <label htmlFor="brush">Brush</label>
-      <input
-        id="brush"
-        type="range"
-        min={BRUSH_MIN}
-        max={BRUSH_MAX}
-        step={2}
-        value={tools.size}
-        onChange={(e) => tools.setSize(Number(e.target.value))}
-        className="w-[min(200px,40vw)] accent-rose-600"
-      />
-      <span>{((tools.size / BOARD_W) * 100).toFixed(1)}% of width</span>
-      <span className="ml-auto">{connection === 'live' ? `Synced · ${state.strokes.length} strokes` : 'Offline · drawing here only'}</span>
+  const sizeRow = (
+    <div className="mt-3 space-y-2">
+      <SizePicker size={tools.size} onSize={tools.setSize} />
+      <p className="text-right text-micro text-ink-muted">{connection === 'live' ? `Synced · ${state.strokes.length} strokes` : 'Offline · drawing here only'}</p>
     </div>
   );
 
@@ -161,7 +147,7 @@ export function LiveCanvas({ variant = 'page', onClose }: { variant?: 'page' | '
           </button>
         </div>
         <div className="mx-auto w-full max-w-[min(100%,calc((100dvh-260px)*0.75))]">{board}</div>
-        <Toolbar {...toolbarProps} orientation="horizontal" className="mx-auto justify-center" colors={[0, 1, 2, 4, 5, 6]} />
+        <Toolbar {...toolbarProps} orientation="horizontal" className="mx-auto w-full max-w-[520px]" />
         {saved ? <p className="text-center text-small text-sage-700">Saved to Our drawings</p> : null}
         {dialogs}
       </section>
@@ -187,7 +173,7 @@ export function LiveCanvas({ variant = 'page', onClose }: { variant?: 'page' | '
         <Toolbar {...toolbarProps} className="hidden md:flex" />
         <div className="min-w-0 flex-[0_1_540px]">
           {board}
-          {brush}
+          {sizeRow}
           <Toolbar {...toolbarProps} orientation="horizontal" className="mt-3 md:hidden" />
         </div>
         <aside className="flex w-full flex-col gap-3 md:max-w-[300px] md:flex-[1_1_260px]">
@@ -207,7 +193,7 @@ export function LiveCanvas({ variant = 'page', onClose }: { variant?: 'page' | '
             </Link>
           </section>
           <p className="text-micro leading-[19px] text-ink-muted">
-            Keys: P pen · M marker · E eraser · [ ] size · Ctrl+Z undo. Works with a pen tablet: pressure changes the line width.
+            Keys: P pen · N pencil · M marker · C calligraphy · F fill · E eraser · [ ] size · Ctrl+Z undo. Works with a pen tablet: pressure changes the line width.
           </p>
         </aside>
       </main>

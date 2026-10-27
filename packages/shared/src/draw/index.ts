@@ -1,5 +1,6 @@
 export * from './strokes';
 export * from './session';
+export * from './fill';
 export * from './guess';
 export * from './words';
 export * from './pages';

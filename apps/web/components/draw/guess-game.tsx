@@ -5,7 +5,12 @@ import {
   answerGuess,
   checkSecret,
   DRAW_TOPIC,
-  hintsShown,
+  clampSettings,
+  gameSettings,
+  hintTimes,
+  settingsSummary,
+  SETTING_LIMITS,
+  turnClock,
   LEVEL_MULT,
   LEVEL_NAME,
   listDrawWords,
@@ -19,12 +24,11 @@ import {
   pointsFor,
   removeDrawWord,
   roundCanvas,
-  ROUNDS,
   saveGuessTurn,
   startDrawGame,
   turnMeta,
   turnWord,
-  TURN_MS,
+  type GameSettings,
   type Difficulty,
   type DrawingFile,
   type DrawWord,
@@ -35,7 +39,7 @@ import {
 import { useCouple, useDrawGame, useDrawGames, useDrawHub, useDrawSession } from '@us/shared/react';
 import { ArrowLeft, Clock, Send, X } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Spinner } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { Board } from './board';
@@ -43,7 +47,7 @@ import { useLocalSession } from './doodle-dialog';
 import { useSaveDrawing } from './hooks';
 import { renderPng } from './render';
 import { Replay } from './replay';
-import { Toolbar } from './toolbar';
+import { SizePicker, Toolbar, useBrush } from './toolbar';
 
 const LEVEL_CHIP: Record<Difficulty, string> = {
   easy: 'bg-sage-100 text-sage-700',
@@ -114,6 +118,87 @@ function RoundBar({ round, rounds }: { round: number; rounds: number }) {
   );
 }
 
+const SETTINGS_KEY = 'us.draw.game-settings';
+
+/** The game settings I used last, kept in this browser. */
+function useGameSettings(): [GameSettings, (s: GameSettings) => void] {
+  const [settings, setSettings] = useState<GameSettings>(clampSettings(null));
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) setSettings(clampSettings(JSON.parse(raw) as Partial<GameSettings>));
+    } catch {
+      /* private window */
+    }
+  }, []);
+  const save = (next: GameSettings) => {
+    setSettings(next);
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    } catch {
+      /* private window */
+    }
+  };
+  return [settings, save];
+}
+
+function Stepper({ label, hint, value, shown, onChange, min, max, step }: { label: string; hint: string; value: number; shown: string; onChange: (v: number) => void; min: number; max: number; step: number }) {
+  const btn = 'flex h-[38px] w-[38px] items-center justify-center rounded-xl bg-paper-raised text-[20px] font-semibold text-gold-700 disabled:opacity-40';
+  return (
+    <div className="flex items-center gap-2.5 border-b border-gold-100 py-2.5">
+      <span className="flex flex-1 flex-col">
+        <span className="text-body font-semibold text-ink">{label}</span>
+        <span className="text-[12px] text-ink-muted">{hint}</span>
+      </span>
+      <button type="button" aria-label={`Less: ${label}`} disabled={value <= min} onClick={() => onChange(value - step)} className={btn}>
+        –
+      </button>
+      <output aria-label={label} className="w-14 text-center text-[20px] font-bold text-ink">
+        {shown}
+      </output>
+      <button type="button" aria-label={`More: ${label}`} disabled={value >= max} onClick={() => onChange(value + step)} className={btn}>
+        +
+      </button>
+    </div>
+  );
+}
+
+function Choice({ label, values, value, onChange, show, last }: { label: string; values: number[]; value: number; onChange: (v: number) => void; show: (v: number) => string; last?: boolean }) {
+  return (
+    <div className={cn('space-y-2 py-2.5', !last && 'border-b border-gold-100')}>
+      <span className="text-body font-semibold text-ink">{label}</span>
+      <div role="radiogroup" aria-label={label} className="flex gap-1.5">
+        {values.map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={v === value}
+            onClick={() => onChange(v)}
+            className={cn('h-[38px] flex-1 rounded-xl text-[15px] font-bold', v === value ? 'bg-plum-800 text-paper' : 'bg-paper-raised text-ink-soft hover:text-ink')}
+          >
+            {show(v)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Rounds, draw time, hint letters and word choices, like Scribble's lobby. */
+function SettingsCard({ value, onChange }: { value: GameSettings; onChange: (s: GameSettings) => void }) {
+  const set = (patch: Partial<GameSettings>) => onChange(clampSettings({ ...value, ...patch }));
+  const L = SETTING_LIMITS;
+  return (
+    <section aria-label="Game settings" className="rounded-[22px] bg-gold-50 px-4 py-1.5">
+      <Stepper label="Rounds" hint={`${L.rounds.min} to ${L.rounds.max}`} value={value.rounds} shown={String(value.rounds)} onChange={(v) => set({ rounds: v })} {...L.rounds} />
+      <Stepper label="Draw time" hint="30 s to 3 min" value={value.drawMs} shown={`${value.drawMs / 1000} s`} onChange={(v) => set({ drawMs: v })} {...L.drawMs} />
+      <Choice label="Hint letters" values={[0, 1, 2, 3, 4, 5]} value={value.hints} onChange={(v) => set({ hints: v })} show={(v) => (v ? String(v) : 'Off')} />
+      <Choice label="Words to pick from" values={[1, 2, 3, 4, 5]} value={value.choices} onChange={(v) => set({ choices: v })} show={String} last />
+    </section>
+  );
+}
+
 // ------------------------------------------------------------------ page ---
 
 export function GuessGame() {
@@ -122,7 +207,7 @@ export function GuessGame() {
   const turns = useDrawGames();
   const [turnMode, setTurnMode] = useState<null | 'draw' | 'guess'>(null);
 
-  if (turnMode === 'draw' && turns.open) return <TurnDraw gameId={turns.open.id} round={turns.open.played} packs={turns.open.packs as PackId[]} onDone={() => setTurnMode(null)} />;
+  if (turnMode === 'draw' && turns.open) return <TurnDraw gameId={turns.open.id} round={turns.open.played} packs={turns.open.packs as PackId[]} settings={gameSettings(turns.open)} onDone={() => setTurnMode(null)} />;
   if (turnMode === 'guess' && turns.toGuess) return <TurnGuess drawingId={turns.toGuess.id} strokesPath={turns.toGuess.strokes_path} onDone={() => setTurnMode(null)} />;
   if (s && s.phase !== 'left' && !(s.phase === 'done' && s.results.length === 0)) {
     if (s.phase === 'invited') return <Invited state={s} />;
@@ -142,6 +227,7 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
   const [words, setWords] = useState<DrawWord[]>([]);
   const [newWord, setNewWord] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [settings, setSettings] = useGameSettings();
   const name = partner.display_name;
 
   useEffect(() => {
@@ -151,7 +237,7 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
   async function startTurns() {
     setBusy('turns');
     try {
-      await startDrawGame(sb, { coupleId: couple.id, me: me.id, mode: 'turns', packs, rounds: ROUNDS });
+      await startDrawGame(sb, { coupleId: couple.id, me: me.id, mode: 'turns', packs, settings });
       turns.reload();
       onTurn('draw');
     } finally {
@@ -188,6 +274,8 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
           Game in turns: waiting for {name} ({turns.open.played} of {turns.open.rounds} rounds played, {turns.open.score} points so far).
         </p>
       ) : null}
+
+      <SettingsCard value={settings} onChange={setSettings} />
 
       <section className="space-y-3 rounded-[24px] bg-gold-50 p-5">
         <h2 className="font-display text-lead text-ink">Word packs</h2>
@@ -264,19 +352,20 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
         ) : null}
       </section>
 
+      <p className="text-small text-ink-muted">{settingsSummary(settings)}</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <button
           type="button"
           disabled={!partnerOnline || !!busy}
           onClick={async () => {
             setBusy('live');
-            await game.invite(packs);
+            await game.invite(packs, settings);
             setBusy(null);
           }}
           className="flex flex-col gap-1 rounded-[24px] bg-gold-400 p-5 text-left text-gold-900 transition-transform active:scale-[0.99] disabled:opacity-60"
         >
           <span className="font-display text-heading">{busy === 'live' ? 'Starting…' : 'Play live'}</span>
-          <span className="text-small">{partnerOnline ? `${name} is in Us now. Play together, ${ROUNDS} rounds.` : `${name} isn’t in Us right now.`}</span>
+          <span className="text-small">{partnerOnline ? `${name} is in Us now. Play together.` : `${name} isn’t in Us right now.`}</span>
         </button>
         <button
           type="button"
@@ -328,7 +417,9 @@ function Invited({ state }: { state: GameState }) {
         ))}
       </span>
       <h1 className="font-display text-title text-ink">{mine ? `Waiting for ${partner.display_name}…` : `${partner.display_name} wants to play Draw & Guess`}</h1>
-      <p className="text-body text-ink-soft">{state.packs.map((p) => PACKS.find((x) => x.id === p)?.name).join(' · ')} · {state.rounds} rounds</p>
+      <p className="text-body text-ink-soft">{state.packs.map((p) => PACKS.find((x) => x.id === p)?.name).join(' · ')}
+        <br />
+        {settingsSummary(state.settings)}</p>
       {mine ? (
         <div className="flex gap-2">
           <Button
@@ -367,14 +458,14 @@ function LiveRound({ state: s }: { state: GameState }) {
   const { session, state, cursor } = useDrawSession(roundCanvas(s.id, s.round));
   const drawer = s.drawer === me.id;
   const now = useNow();
-  const [tool, setTool] = useState<'pen' | 'marker' | 'eraser'>('pen');
-  const [color, setColor] = useState(0);
+  const { tool, setTool, color, setColor, size, setSize } = useBrush({ color: 0 });
   const [text, setText] = useState('');
   const [flash, setFlash] = useState<null | 'close' | 'wrong'>(null);
   const name = partner.display_name;
   const left = s.until - now;
   const cells = s.secret ? maskWith(s.secret.mask, s.revealed) : [];
-  const nextHint = s.phase === 'drawing' ? 20_000 - ((now - s.startedAt) % 20_000) : 0;
+  const nextHintAt = hintTimes(s.settings.drawMs, s.settings.hints).find((t) => t > now - s.startedAt);
+  const nextHint = nextHintAt !== undefined && Object.keys(s.revealed).length < s.settings.hints ? nextHintAt - (now - s.startedAt) : null;
   const myGuesses = s.guesses.filter((g) => g.by === me.id);
 
   const header = (
@@ -440,8 +531,8 @@ function LiveRound({ state: s }: { state: GameState }) {
             </div>
           )}
           <div className="flex items-center gap-3.5 rounded-[20px] bg-paper-raised p-4">
-            <Timer ms={revealing ? 0 : left} total={TURN_MS} label={`${Math.ceil(left / 1000)} seconds left`} />
-            <span className="text-micro leading-[19px] text-ink-soft">{hintsShown(now - s.startedAt) < 3 && !revealing ? `Next letter shows in ${Math.ceil(nextHint / 1000)} s` : 'No more hints'}</span>
+            <Timer ms={revealing ? 0 : left} total={s.settings.drawMs} label={`${Math.ceil(left / 1000)} seconds left`} />
+            <span className="text-micro leading-[19px] text-ink-soft">{nextHint !== null && !revealing ? `Next letter shows in ${Math.ceil(nextHint / 1000)} s` : s.settings.hints ? 'No more hints' : 'No hints this game'}</span>
           </div>
           {drawer ? (
             <div className="flex flex-col gap-2 rounded-[20px] bg-paper-raised p-4">
@@ -457,7 +548,7 @@ function LiveRound({ state: s }: { state: GameState }) {
             state={state}
             tool={tool}
             color={color}
-            size="m"
+            size={size}
             cursor={drawer ? null : cursor}
             partnerName={name}
             partnerSlot={partnerSlot}
@@ -482,10 +573,10 @@ function LiveRound({ state: s }: { state: GameState }) {
               onUndo={() => session.undo()}
               canUndo={session.canUndo}
               orientation="horizontal"
-              colors={[0, 1, 2, 4, 5, 7]}
               className="mt-3 bg-transparent p-0 shadow-none"
             />
           ) : null}
+          {drawer ? <SizePicker size={size} onSize={setSize} className="mt-2" /> : null}
           {drawer ? <p className="mt-2 text-right text-micro text-ink-muted">No letters or numbers, please.</p> : null}
         </div>
 
@@ -541,7 +632,7 @@ function LiveRound({ state: s }: { state: GameState }) {
             </form>
           ) : (
             <p className="mt-1.5 text-micro leading-[19px] text-ink-muted">
-              {s.level ? `Guessed in the next ${Math.max(0, Math.ceil(left / 1000))} s: +${pointsFor(Math.max(0, now - s.startedAt), s.level)} each. ` : ''}Faster scores more for both of you.
+              {s.level ? `Guessed in the next ${Math.max(0, Math.ceil(left / 1000))} s: +${pointsFor(Math.max(0, now - s.startedAt), s.level, s.settings.drawMs)} each. ` : ''}Faster scores more for both of you.
             </p>
           )}
         </aside>
@@ -605,7 +696,7 @@ function Results({ state: s }: { state: GameState }) {
           <Stat night value={fastest != null ? `${Math.max(1, Math.round(fastest / 1000))} s` : '–'} label="fastest guess" />
         </div>
         <div className="flex flex-col gap-2 pt-4">
-          <Button size="lg" className="bg-gold-400 text-gold-900 hover:bg-gold-300" onClick={() => void game.invite(s.packs)}>
+          <Button size="lg" className="bg-gold-400 text-gold-900 hover:bg-gold-300" onClick={() => void game.invite(s.packs, s.settings)}>
             Play again
           </Button>
           <Button
@@ -635,7 +726,7 @@ function Results({ state: s }: { state: GameState }) {
 // ------------------------------------------------------------ turn mode ---
 
 /** My turn in a game played in turns: pick a word, draw it in 80 s, send it. */
-function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: number; packs: PackId[]; onDone: () => void }) {
+function TurnDraw({ gameId, round, packs, settings, onDone }: { gameId: string; round: number; packs: PackId[]; settings: GameSettings; onDone: () => void }) {
   const { sb, couple, me, partner, channel } = useCouple();
   const { session, state } = useLocalSession();
   const turns = useDrawGames();
@@ -643,17 +734,16 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
   const [word, setWord] = useState<Word | null>(null);
   const [started, setStarted] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [tool, setTool] = useState<'pen' | 'marker' | 'eraser'>('pen');
-  const [color, setColor] = useState(0);
+  const { tool, setTool, color, setColor, size, setSize } = useBrush({ color: 0 });
   const now = useNow(!!word);
   const sent = useRef(false);
 
   useEffect(() => {
     void (async () => {
       const ours = packs.includes('ours') ? ourWords(await ourWordTexts(sb, couple.id).catch(() => [])) : [];
-      setChoices(pickChoices(packs, ours, []));
+      setChoices(pickChoices(packs, ours, [], Math.random, settings.choices));
     })();
-  }, [sb, couple.id, packs]);
+  }, [sb, couple.id, packs, settings.choices]);
 
   async function send() {
     if (!word || sent.current) return;
@@ -663,7 +753,7 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
     try {
       const strokes = session.snapshot.strokes;
       const png = await renderPng(strokes, null);
-      const d = await saveGuessTurn(sb, { coupleId: couple.id, me: me.id, gameId, round, word: word.text, level: word.level, pack: word.pack, strokes, png, ms: Date.now() - started });
+      const d = await saveGuessTurn(sb, { coupleId: couple.id, me: me.id, gameId, round, word: word.text, level: word.level, pack: word.pack, strokes, png, ms: Date.now() - started, settings });
       channel.sendChanged(DRAW_TOPIC);
       void notifyPartner(sb, { category: 'guess_turn', drawingId: d.id });
       turns.reload();
@@ -674,7 +764,7 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
     }
   }
 
-  const left = word ? started + TURN_MS - now : TURN_MS;
+  const left = word ? started + settings.drawMs - now : settings.drawMs;
   useEffect(() => {
     if (word && left <= 0) void send();
   }); // eslint-disable-line react-hooks/exhaustive-deps
@@ -715,7 +805,7 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
             <span className="font-display text-[30px] leading-[34px]">{word.text}</span>
           </div>
           <div className="flex items-center gap-3.5 rounded-[20px] bg-paper-raised p-4">
-            <Timer ms={left} total={TURN_MS} label={`${Math.ceil(left / 1000)} seconds left`} />
+            <Timer ms={left} total={settings.drawMs} label={`${Math.ceil(left / 1000)} seconds left`} />
             <span className="text-micro text-ink-soft">It sends itself when time’s up.</span>
           </div>
           <Button size="lg" loading={busy} onClick={() => void send()}>
@@ -723,8 +813,9 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
           </Button>
         </section>
         <div className="min-w-0 flex-[0_1_500px]">
-          <Board session={session} state={state} tool={tool} color={color} size="m" disabled={busy} label={`Your drawing of ${word.text}`} />
-          <Toolbar tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => session.undo()} canUndo={session.canUndo} orientation="horizontal" colors={[0, 1, 2, 4, 5, 7]} className="mt-3 bg-transparent p-0 shadow-none" />
+          <Board session={session} state={state} tool={tool} color={color} size={size} disabled={busy} label={`Your drawing of ${word.text}`} />
+          <Toolbar tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => session.undo()} canUndo={session.canUndo} orientation="horizontal" className="mt-3 bg-transparent p-0 shadow-none" />
+          <SizePicker size={size} onSize={setSize} className="mt-2" />
         </div>
       </main>
     </div>
@@ -755,8 +846,9 @@ function TurnGuess({ drawingId, strokesPath, onDone }: { drawingId: string; stro
   async function finish(solved: boolean) {
     if (answered.current || !meta) return;
     answered.current = true;
-    const ms = Math.min(TURN_MS, Date.now() - started);
-    const points = solved ? pointsFor(ms, meta.level) : 0;
+    const { drawMs } = turnClock(meta, 0);
+    const ms = Math.min(drawMs, Date.now() - started);
+    const points = solved ? pointsFor(ms, meta.level, drawMs) : 0;
     await answerGuess(sb, drawingId, solved, ms, points).catch(() => {});
     const word = await turnWord(sb, drawingId).catch(() => null);
     setResult({ solved, points, ms, word });
@@ -764,16 +856,12 @@ function TurnGuess({ drawingId, strokesPath, onDone }: { drawingId: string; stro
   }
 
   const elapsed = started ? now - started : 0;
-  const left = TURN_MS - elapsed;
+  const { drawMs, revealed } = meta ? turnClock(meta, elapsed) : { drawMs: 80_000, revealed: {} as Record<number, string> };
+  const left = drawMs - elapsed;
   useEffect(() => {
     if (started && !result && left <= 0) void finish(false);
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const revealed = useMemo(() => {
-    const out: Record<number, string> = {};
-    meta?.hints.slice(0, hintsShown(elapsed)).forEach((h) => (out[h.i] = h.ch));
-    return out;
-  }, [meta, elapsed]);
 
   if (!meta || !file) {
     return (
@@ -792,9 +880,9 @@ function TurnGuess({ drawingId, strokesPath, onDone }: { drawingId: string; stro
             <Blanks cells={maskWith(meta.secret.mask, result?.word ? Object.fromEntries([...result.word].map((c, i) => [i, c])) : revealed)} />
           </div>
           <div className="flex items-center gap-3.5 rounded-[20px] bg-paper-raised p-4">
-            <Timer ms={result ? 0 : left} total={TURN_MS} label={`${Math.ceil(left / 1000)} seconds left`} />
+            <Timer ms={result ? 0 : left} total={drawMs} label={`${Math.ceil(left / 1000)} seconds left`} />
             <span className="flex items-center gap-1.5 text-micro text-ink-soft">
-              <Clock className="h-3.5 w-3.5" aria-hidden /> A letter shows every 20 s
+              <Clock className="h-3.5 w-3.5" aria-hidden /> {meta.hints.length ? 'Letters show as time goes on' : 'No hints this game'}
             </span>
           </div>
         </section>

@@ -1,6 +1,6 @@
 'use client';
 
-import { strokeWidth, toBoard, tokens, BOARD_H, BOARD_W, type DrawSession, type DrawSize, type DrawState, type DrawTool, type PartnerCursor, type PartnerSlot } from '@us/shared';
+import { strokeWidth, toBoard, tokens, BOARD_H, BOARD_W, type DrawColor, type DrawSession, type DrawSize, type DrawState, type DrawTool, type PartnerCursor, type PartnerSlot } from '@us/shared';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { compose, loadImage } from './render';
@@ -9,7 +9,7 @@ interface BoardProps {
   session: DrawSession;
   state: DrawState;
   tool: DrawTool;
-  color: number;
+  color: DrawColor;
   /** A preset or a width in board units. */
   size: DrawSize | number;
   /** My partner's pen, shown as a dot with their initial. */

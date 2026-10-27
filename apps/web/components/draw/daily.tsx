@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Board } from './board';
 import { useLocalSession } from './doodle-dialog';
 import { useSaveDrawing } from './hooks';
-import { Toolbar } from './toolbar';
+import { SizePicker, Toolbar, useBrush } from './toolbar';
 
 /** Today's doodle: draw yours, then see your partner's beside it. */
 export function DailyDoodle() {
@@ -16,8 +16,7 @@ export function DailyDoodle() {
   const daily = useDailyDoodle();
   const { session, state } = useLocalSession();
   const save = useSaveDrawing();
-  const [tool, setTool] = useState<'pen' | 'marker' | 'eraser'>('pen');
-  const [color, setColor] = useState(1);
+  const { tool, setTool, color, setColor, size, setSize } = useBrush();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const name = partner.display_name;
@@ -60,7 +59,8 @@ export function DailyDoodle() {
         <div className="flex flex-wrap items-start justify-center gap-6">
           <Toolbar tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => session.undo()} canUndo={session.canUndo} className="hidden md:flex" />
           <div className="min-w-0 flex-[0_1_480px] space-y-3">
-            <Board session={session} state={state} tool={tool} color={color} size="m" label={`Your doodle of ${daily.prompt}`} />
+            <Board session={session} state={state} tool={tool} color={color} size={size} label={`Your doodle of ${daily.prompt}`} />
+            <SizePicker size={size} onSize={setSize} />
             <Toolbar tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => session.undo()} canUndo={session.canUndo} orientation="horizontal" className="md:hidden" />
             {error ? <p role="alert" className="text-small text-rose-700">{error}</p> : null}
             <Button

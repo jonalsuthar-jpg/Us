@@ -1,4 +1,4 @@
-import { BOARD_H, BOARD_W, inkLayers, PAGE_INK, PAGE_LINE, pageById, strokeLook, type DrawBackground, type InkLayer, type Stroke } from '@us/shared';
+import { BOARD_H, BOARD_W, fillsAndInk, inkLayers, PAGE_INK, PAGE_LINE, pageById, strokeLook, type DrawBackground, type InkLayer, type Stroke } from '@us/shared';
 import { memo } from 'react';
 import { Defs, G, Image as SvgImage, Mask, Path, Rect } from 'react-native-svg';
 
@@ -12,7 +12,7 @@ export const InkPath = memo(function InkPath({ s }: { s: Stroke }) {
   const look = strokeLook(s);
   if (!look.d) return null;
   return look.fill ? (
-    <Path d={look.d} fill={look.color} fillOpacity={look.alpha} />
+    <Path d={look.d} fill={look.color} fillOpacity={look.alpha} fillRule={look.evenOdd ? 'evenodd' : 'nonzero'} />
   ) : (
     <Path
       d={look.d}
@@ -56,9 +56,20 @@ function Layer({ layer, depth, id }: { layer: InkLayer; depth: number; id: strin
   );
 }
 
-/** All finished ink, layered. Re-renders only when the finished strokes change. */
+/**
+ * All finished ink: bucket fills first (they sit under the lines), then the
+ * lines, layered for the eraser. Re-renders only when the strokes change.
+ */
 export const InkLayers = memo(function InkLayers({ strokes, id }: { strokes: Stroke[]; id: string }) {
-  return <Layer layer={inkLayers(strokes)} depth={0} id={id} />;
+  const { fills, ink } = fillsAndInk(strokes);
+  return (
+    <G>
+      {fills.map((s) => (
+        <InkPath key={s.id} s={s} />
+      ))}
+      <Layer layer={inkLayers(ink)} depth={0} id={id} />
+    </G>
+  );
 });
 
 export function PageLines({ bg }: { bg?: DrawBackground | null }) {

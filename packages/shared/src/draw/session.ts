@@ -10,7 +10,8 @@
  *     while I clear survives on both screens
  *   - removed ids are remembered, so a late message can't bring one back
  */
-import { BOARD_H, BOARD_W, clampX, clampY, pressureWidth, shouldAdd, type DrawBackground, type DrawTool, type Stroke } from './strokes';
+import { fillRegion } from './fill';
+import { BOARD_H, BOARD_W, clampX, clampY, DRAW_TOOLS, isDrawColor, isFillPath, normalizeColor, pressureWidth, shouldAdd, type DrawBackground, type DrawColor, type DrawTool, type Stroke } from './strokes';
 
 export type DrawOp =
   | { op: 'start'; s: Omit<Stroke, 'live' | 'd'> }
@@ -73,6 +74,7 @@ export function applyDraw(state: DrawState, e: DrawOp): DrawState {
     case 'start': {
       const s = e.s;
       if (!s || typeof s.id !== 'string' || state.gone[s.id] || !validPoints(s.p)) return state;
+      if (!DRAW_TOOLS.includes(s.tool) || !isDrawColor(s.c) || (s.tool === 'fill' && !isFillPath(s.f))) return state;
       if (state.strokes.some((x) => x.id === s.id)) return state;
       const stroke: Stroke = { ...s, d: 0, live: true };
       return { ...state, strokes: insert(state.strokes, stroke), top: Math.max(state.top, s.n) };
@@ -242,7 +244,9 @@ export class DrawSession {
 
   // ---- my pen ----
 
-  begin(x: number, y: number, tool: DrawTool, c: number, w: number, pressure?: number) {
+  begin(x: number, y: number, tool: DrawTool, c: DrawColor, w: number, pressure?: number) {
+    if (tool === 'fill') return void this.fill(x, y, c);
+    c = normalizeColor(c);
     if (this.current) this.finish();
     const id = newId(this.me);
     const s: Omit<Stroke, 'live' | 'd'> = {
@@ -307,6 +311,22 @@ export class DrawSession {
     const d = this.now() - cur.start;
     this.set(applyDraw(this.state, { op: 'end', id: cur.id, d }));
     this.send({ op: 'end', id: cur.id, d });
+  }
+
+  /** Paint bucket: fill the region around (x, y). False when there's nothing to fill there. */
+  fill(x: number, y: number, c: DrawColor): boolean {
+    this.finish();
+    const bx = clampX(x);
+    const by = clampY(y);
+    const f = fillRegion(this.state.strokes, bx, by);
+    if (!f) return false;
+    const id = newId(this.me);
+    const s: Omit<Stroke, 'live' | 'd'> = { id, by: this.me, tool: 'fill', c: normalizeColor(c), w: 0, p: [bx, by], f, n: this.state.top + 1, t0: this.now() };
+    this.mine.push(id);
+    this.set(applyDraw(applyDraw(this.state, { op: 'start', s }), { op: 'end', id, d: 0 }));
+    this.send({ op: 'start', s });
+    this.send({ op: 'end', id, d: 0 });
+    return true;
   }
 
   /** Pointer position for my partner's cursor dot, at most ~12 times a second. */

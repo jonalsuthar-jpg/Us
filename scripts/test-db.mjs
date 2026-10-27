@@ -1044,6 +1044,16 @@ await test('turns: the word stays hidden from the guesser until they answer', as
   await rejects(as(bob, () => q(`select public.answer_guess($1, true, 1000, 100)`, [d.id])), /already_answered/, 'twice');
 });
 
+await test('game settings: chosen draw time, hints and word choices, within limits; old games keep the old rules', async () => {
+  const g = await as(alice, () => one(`insert into public.draw_games (couple_id, started_by, mode, rounds, draw_ms, hints, choices) values ($1, $2, 'live', 4, 60000, 2, 5) returning *`, [couple.id, alice]));
+  assert.deepEqual([g.rounds, g.draw_ms, g.hints, g.choices], [4, 60000, 2, 5]);
+  const plain = await as(alice, () => one(`insert into public.draw_games (couple_id, started_by) values ($1, $2) returning *`, [couple.id, alice]));
+  assert.deepEqual([plain.draw_ms, plain.hints, plain.choices], [80000, 3, 3]);
+  for (const [col, bad] of [['draw_ms', 5000], ['hints', 9], ['choices', 0]]) {
+    await rejects(as(alice, () => q(`insert into public.draw_games (couple_id, started_by, ${col}) values ($1, $2, $3)`, [couple.id, alice, bad])), /check constraint/, col);
+  }
+});
+
 console.log('\nLeaving');
 
 await test('unpair: removes everything we shared, keeps private data, frees both of us', async () => {

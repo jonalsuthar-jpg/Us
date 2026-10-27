@@ -1,4 +1,4 @@
-import { LIVE_CANVAS, notifyPartner, type DrawSize, type DrawTool } from '@us/shared';
+import { LIVE_CANVAS, notifyPartner } from '@us/shared';
 import { useCouple, useDrawSession } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -12,7 +12,7 @@ import { Text } from '../ui/text';
 import { Board, type BoardHandle } from './board';
 import { useBgPhotoUrl, useSaveDrawing } from './hooks';
 import { BackgroundSheet, SaveSheet } from './sheets';
-import { Toolbar } from './toolbar';
+import { Toolbar, useBrush } from './toolbar';
 
 /**
  * Draw together on a phone. As a screen: header, the board, the tools and
@@ -28,9 +28,7 @@ export function LiveBoard({ variant = 'screen', onClose }: { variant?: 'screen' 
   const board = useRef<BoardHandle>(null);
   const photoUrl = useBgPhotoUrl(state.bg);
   const save = useSaveDrawing();
-  const [tool, setTool] = useState<DrawTool>('pen');
-  const [color, setColor] = useState(1);
-  const [size, setSize] = useState<DrawSize>('m');
+  const { tool, setTool, color, setColor, size, setSize } = useBrush();
   const [saveOpen, setSaveOpen] = useState(false);
   const [bgOpen, setBgOpen] = useState(false);
   const [invited, setInvited] = useState(false);
@@ -108,7 +106,7 @@ export function LiveBoard({ variant = 'screen', onClose }: { variant?: 'screen' 
           </Pressable>
         </View>
         <View className="items-center">{theBoard}</View>
-        <Toolbar layout="compact" tools={['pen', 'eraser']} tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => session.undo()} canUndo={session.canUndo} colors={[1, 0, 5]} />
+        <Toolbar dense tool={tool} onTool={setTool} color={color} onColor={setColor} size={size} onSize={setSize} onUndo={() => session.undo()} canUndo={session.canUndo} />
         {sheets}
       </View>
     );

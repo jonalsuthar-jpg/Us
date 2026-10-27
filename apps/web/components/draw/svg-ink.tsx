@@ -1,4 +1,4 @@
-import { BOARD_H, BOARD_W, inkLayers, PAGE_INK, PAGE_LINE, pageById, strokeLook, type DrawBackground, type InkLayer, type Stroke } from '@us/shared';
+import { BOARD_H, BOARD_W, fillsAndInk, inkLayers, PAGE_INK, PAGE_LINE, pageById, strokeLook, type DrawBackground, type InkLayer, type Stroke } from '@us/shared';
 import { Fragment } from 'react';
 
 /**
@@ -10,7 +10,7 @@ function Ink({ s }: { s: Stroke }) {
   const look = strokeLook(s);
   if (!look.d) return null;
   return look.fill ? (
-    <path d={look.d} fill={look.color} fillOpacity={look.alpha} />
+    <path d={look.d} fill={look.color} fillOpacity={look.alpha} fillRule={look.evenOdd ? 'evenodd' : 'nonzero'} />
   ) : (
     <path d={look.d} fill="none" stroke={look.erase ? '#000' : look.color} strokeOpacity={look.alpha} strokeWidth={look.width} strokeLinecap="round" strokeLinejoin="round" />
   );
@@ -48,7 +48,10 @@ export function SvgInk({ strokes, bg, id = 'ink', className }: { strokes: Stroke
   const page = bg?.kind === 'page' ? pageById(bg.id) : null;
   return (
     <svg viewBox={`0 0 ${BOARD_W} ${BOARD_H}`} className={className} style={{ background: '#fff' }}>
-      <Layer layer={inkLayers(strokes)} depth={0} id={id} />
+      {fillsAndInk(strokes).fills.map((s) => (
+        <Ink key={s.id} s={s} />
+      ))}
+      <Layer layer={inkLayers(fillsAndInk(strokes).ink)} depth={0} id={id} />
       {page ? (
         <g fill="none" stroke={PAGE_INK} strokeWidth={PAGE_LINE} strokeLinecap="round" strokeLinejoin="round">
           {page.paths.map((d, i) => (

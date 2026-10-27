@@ -1,4 +1,3 @@
-import type { DrawTool } from '@us/shared';
 import { useCouple, useDailyDoodle, useFeature } from '@us/shared/react';
 import { router } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
@@ -7,7 +6,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, useWindowDimensions, V
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Board, type BoardHandle } from '@/components/draw/board';
 import { useLocalSession, useSaveDrawing } from '@/components/draw/hooks';
-import { Toolbar } from '@/components/draw/toolbar';
+import { Toolbar, useBrush } from '@/components/draw/toolbar';
 import { FeatureOff } from '@/components/feature-off';
 import { cn } from '@/components/ui/cn';
 import { usePalette } from '@/components/ui/palette';
@@ -24,8 +23,7 @@ export default function DailyDoodle() {
   const { session, state } = useLocalSession();
   const save = useSaveDrawing();
   const board = useRef<BoardHandle>(null);
-  const [tool, setTool] = useState<DrawTool>('pen');
-  const [color, setColor] = useState(1);
+  const { tool, setTool, color, setColor, size, setSize } = useBrush();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const name = partner.display_name;
@@ -74,9 +72,9 @@ export default function DailyDoodle() {
         ) : (
           <>
             <View className="items-center">
-              <Board ref={board} session={session} state={state} tool={tool} color={color} size="m" width={boardW} label={`Your doodle of ${daily.prompt}`} />
+              <Board ref={board} session={session} state={state} tool={tool} color={color} size={size} width={boardW} label={`Your doodle of ${daily.prompt}`} />
             </View>
-            <Toolbar layout="compact" tools={['pen', 'marker', 'eraser']} tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => session.undo()} canUndo={session.canUndo} colors={[0, 1, 2, 5, 6]} />
+            <Toolbar dense tool={tool} onTool={setTool} color={color} onColor={setColor} size={size} onSize={setSize} onUndo={() => session.undo()} canUndo={session.canUndo} />
             {error ? <Text className="text-small text-rose-700">{error}</Text> : null}
             <Pressable
               accessibilityRole="button"

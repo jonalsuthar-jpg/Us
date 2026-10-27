@@ -335,7 +335,7 @@ describe('Draw & Guess: words', () => {
   });
 
   it('hints: a letter at 20, 40 and 60 seconds, never the whole word', () => {
-    expect([0, 19_999, 20_000, 45_000, 79_000].map(hintsShown)).toEqual([0, 0, 1, 2, 3]);
+    expect([0, 19_999, 20_000, 45_000, 79_000].map((t) => hintsShown(t))).toEqual([0, 0, 1, 2, 3]);
     const order = hintOrder('Golgappa', 7);
     expect(order).toHaveLength(2);
     expect(new Set(order).size).toBe(2);

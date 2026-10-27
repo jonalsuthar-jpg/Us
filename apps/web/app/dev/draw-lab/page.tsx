@@ -6,12 +6,12 @@
  * SVG renderer drawing the phone's copy. Draw on either board and the others
  * follow. window.__lab exposes the hubs for automated checks.
  */
-import { DrawHub, type DrawEvent, type DrawTool } from '@us/shared';
+import { DrawHub, type DrawEvent } from '@us/shared';
 import { notFound } from 'next/navigation';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Board } from '@/components/draw/board';
 import { SvgInk } from '@/components/draw/svg-ink';
-import { Toolbar } from '@/components/draw/toolbar';
+import { SizePicker, Toolbar, useBrush } from '@/components/draw/toolbar';
 
 function link() {
   const ends: ((e: DrawEvent) => void)[][] = [[], []];
@@ -46,8 +46,7 @@ function Lab() {
   const [laptop, phone] = useMemo(link, []);
   const a = useSession(laptop);
   const b = useSession(phone);
-  const [tool, setTool] = useState<DrawTool>('pen');
-  const [color, setColor] = useState(1);
+  const { tool, setTool, color, setColor, size, setSize } = useBrush();
 
   useEffect(() => {
     (window as unknown as { __lab: unknown }).__lab = { laptop: a.session, phone: b.session };
@@ -60,11 +59,12 @@ function Lab() {
       <div className="flex flex-wrap items-start gap-6">
         <Toolbar tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => a.session.undo()} canUndo={a.session.canUndo} onClear={() => a.session.clear()} />
         <div data-testid="laptop" className="w-[540px]">
-          <Board session={a.session} state={a.state} tool={tool} color={color} size={50} cursor={a.cursor} partnerName="Phone" partnerSlot="b" label="Laptop board" />
+          <Board session={a.session} state={a.state} tool={tool} color={color} size={size} cursor={a.cursor} partnerName="Phone" partnerSlot="b" label="Laptop board" />
+          <SizePicker size={size} onSize={setSize} className="mt-2" />
           <p className="mt-2 text-micro text-ink-muted" data-testid="laptop-count">{a.state.strokes.length}</p>
         </div>
         <div data-testid="phone" className="w-[358px]">
-          <Board session={b.session} state={b.state} tool={tool} color={(color + 4) % 8} size="m" cursor={b.cursor} partnerName="Laptop" partnerSlot="a" label="Phone board" />
+          <Board session={b.session} state={b.state} tool={tool} color={color} size={size} cursor={b.cursor} partnerName="Laptop" partnerSlot="a" label="Phone board" />
           <p className="mt-2 text-micro text-ink-muted" data-testid="phone-count">{b.state.strokes.length}</p>
         </div>
         <div data-testid="svg" className="w-[358px]">

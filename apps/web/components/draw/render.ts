@@ -1,4 +1,4 @@
-import { BOARD_H, BOARD_W, EXPORT_H, EXPORT_W, PAGE_INK, PAGE_LINE, pageById, strokeLook, type DrawBackground, type Stroke } from '@us/shared';
+import { BOARD_H, BOARD_W, EXPORT_H, EXPORT_W, fillsAndInk, PAGE_INK, PAGE_LINE, pageById, strokeLook, type DrawBackground, type Stroke } from '@us/shared';
 
 /**
  * Drawing on an HTML canvas, by the shared rules (strokeLook): the same path
@@ -26,7 +26,7 @@ export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke) {
   ctx.globalAlpha = look.alpha;
   if (look.fill) {
     ctx.fillStyle = look.color;
-    ctx.fill(path);
+    ctx.fill(path, look.evenOdd ? 'evenodd' : 'nonzero');
   } else {
     ctx.strokeStyle = look.erase ? '#000' : look.color;
     ctx.lineWidth = look.width;
@@ -99,12 +99,15 @@ export function compose(
     ink.width = width;
     ink.height = height;
   }
+  const { fills, ink: lines } = fillsAndInk(strokes);
   ictx.clearRect(0, 0, width, height);
-  drawInk(ictx, strokes, width);
+  drawInk(ictx, lines, width);
   out.setTransform(1, 0, 0, 1, 0, 0);
   out.fillStyle = '#FFFFFF';
   out.fillRect(0, 0, width, height);
   if (bg?.kind === 'photo') drawPhoto(out, photo, width, height);
+  // Bucket fills sit under the lines, and the eraser only cuts lines.
+  drawInk(out, fills, width);
   out.drawImage(ink, 0, 0);
   drawPageLines(out, bg, width);
 }

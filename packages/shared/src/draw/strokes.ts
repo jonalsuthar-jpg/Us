@@ -6,20 +6,25 @@
  *    that space, never screen pixels; each app scales the board to fit.
  *  - Widths are in the same units, so a line is as bold on a phone as on a
  *    monitor.
- *  - Colours travel as an index into DRAW_COLORS.
+ *  - Colours travel as an index into DRAW_COLORS, or '#RRGGBB' when custom.
  *  - Both apps draw the same SVG path strings: the web with Path2D, the phone
  *    with react-native-svg.
  */
 
-export const DRAW_FORMAT = 1;
+export const DRAW_FORMAT = 2;
 export const BOARD_W = 3000;
 export const BOARD_H = 4000;
 /** Saved PNGs are always this size, whichever device saves them. */
 export const EXPORT_W = 1200;
 export const EXPORT_H = 1600;
 
-export type DrawTool = 'pen' | 'marker' | 'eraser';
+export type DrawTool = 'pen' | 'pencil' | 'marker' | 'calligraphy' | 'fill' | 'eraser';
+export const DRAW_TOOLS: DrawTool[] = ['pen', 'pencil', 'marker', 'calligraphy', 'fill', 'eraser'];
 
+/**
+ * The palette. The first eight are the original colours and keep their
+ * places, so drawings saved before the palette grew look the same.
+ */
 export const DRAW_COLORS = [
   { hex: '#15121A', name: 'Ink' },
   { hex: '#F5547C', name: 'Rose' },
@@ -29,32 +34,57 @@ export const DRAW_COLORS = [
   { hex: '#0C8F82', name: 'Teal' },
   { hex: '#2F6FDB', name: 'Blue' },
   { hex: '#634882', name: 'Plum' },
+  { hex: '#FFFFFF', name: 'White' },
+  { hex: '#C1BCC6', name: 'Light grey' },
+  { hex: '#6B6573', name: 'Grey' },
+  { hex: '#D7263D', name: 'Red' },
+  { hex: '#8E1F2F', name: 'Maroon' },
+  { hex: '#FFB8C9', name: 'Pink' },
+  { hex: '#FFE14D', name: 'Yellow' },
+  { hex: '#B6E36B', name: 'Lime' },
+  { hex: '#1F6B3A', name: 'Forest' },
+  { hex: '#7FD6F0', name: 'Sky' },
+  { hex: '#1B3A8C', name: 'Navy' },
+  { hex: '#B07BE0', name: 'Lilac' },
+  { hex: '#8B5A2B', name: 'Brown' },
+  { hex: '#4A2A14', name: 'Dark brown' },
+  { hex: '#F6D3B3', name: 'Peach' },
+  { hex: '#C68B5E', name: 'Tan' },
+  { hex: '#7A4A2E', name: 'Cocoa' },
 ] as const;
 
+/** A colour on a stroke: an index into DRAW_COLORS, or a custom '#RRGGBB'. */
+export type DrawColor = number | string;
+
 export const DRAW_SIZES = [
+  { id: 'xs', name: 'Fine', w: 12 },
   { id: 's', name: 'Thin', w: 24 },
   { id: 'm', name: 'Medium', w: 50 },
-  { id: 'l', name: 'Thick', w: 110 },
+  { id: 'l', name: 'Thick', w: 90 },
+  { id: 'xl', name: 'Huge', w: 150 },
 ] as const;
 export type DrawSize = (typeof DRAW_SIZES)[number]['id'];
 
-/** A marker is wider and see-through; an eraser is wider still. */
-const TOOL_WIDTH: Record<DrawTool, number> = { pen: 1, marker: 2.4, eraser: 3 };
+/** Width and see-through-ness per tool. */
+const TOOL_WIDTH: Record<DrawTool, number> = { pen: 1, pencil: 0.6, marker: 2.4, calligraphy: 1.5, fill: 1, eraser: 3 };
 export const MARKER_ALPHA = 0.45;
+export const PENCIL_ALPHA = 0.85;
 
 export interface Stroke {
   id: string;
   /** Who drew it (user id). */
   by: string;
   tool: DrawTool;
-  /** Index into DRAW_COLORS. */
-  c: number;
+  /** Index into DRAW_COLORS, or a custom '#RRGGBB'. */
+  c: DrawColor;
   /** Width in board units. */
   w: number;
-  /** Flat [x0, y0, x1, y1, …] in board units. */
+  /** Flat [x0, y0, x1, y1, …] in board units. A fill keeps the point that was tapped. */
   p: number[];
   /** Per-point widths from a pressure-sensitive pen, if any. */
   ws?: number[];
+  /** A fill's region, as an SVG path in board units (even-odd). */
+  f?: string;
   /** Ordering number: both sides sort by (n, by, id), so the layers agree. */
   n: number;
   /** When it started and how long it took (ms), for replay. */
@@ -64,18 +94,56 @@ export interface Stroke {
   live?: boolean;
 }
 
-/** Line width for a tool at a size: a preset ('s' | 'm' | 'l') or a width in board units. */
+/** Line width for a tool at a size: a preset or a width in board units. */
 export function strokeWidth(tool: DrawTool, size: DrawSize | number): number {
-  const base = typeof size === 'number' ? size : (DRAW_SIZES.find((s) => s.id === size)?.w ?? DRAW_SIZES[1].w);
+  const base = typeof size === 'number' ? size : (DRAW_SIZES.find((s) => s.id === size)?.w ?? DRAW_SIZES[2].w);
   return Math.max(2, Math.round(base * TOOL_WIDTH[tool]));
 }
 
-/** Brush sizes the web slider allows, in board units. */
-export const BRUSH_MIN = 10;
-export const BRUSH_MAX = 160;
+/** Brush sizes the slider allows, in board units. */
+export const BRUSH_MIN = 8;
+export const BRUSH_MAX = 180;
 
-export function colorOf(c: number): string {
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+export function isDrawColor(c: unknown): c is DrawColor {
+  return (typeof c === 'number' && Number.isInteger(c) && c >= 0 && c < DRAW_COLORS.length) || (typeof c === 'string' && HEX.test(c));
+}
+
+export function colorOf(c: DrawColor): string {
+  if (typeof c === 'string') return HEX.test(c) ? c.toUpperCase() : DRAW_COLORS[0].hex;
   return DRAW_COLORS[c]?.hex ?? DRAW_COLORS[0].hex;
+}
+
+/** The same colour in palette form when it's one of ours (keeps messages short). */
+export function normalizeColor(c: DrawColor): DrawColor {
+  if (typeof c === 'number') return c;
+  const i = DRAW_COLORS.findIndex((x) => x.hex.toLowerCase() === c.toLowerCase());
+  return i >= 0 ? i : colorOf(c);
+}
+
+/** A bucket fill's path: path commands and numbers only, and not too big. */
+export function isFillPath(f: unknown): f is string {
+  return typeof f === 'string' && f.length <= 60_000 && /^[MLHVZmlhvz0-9 .,-]*$/.test(f);
+}
+
+// ------------------------------------------------------------- colours ---
+
+export function hslToHex(h: number, s: number, l: number): string {
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const hex = (x: number) => Math.round(x * 255).toString(16).padStart(2, '0');
+  return `#${hex(f(0))}${hex(f(8))}${hex(f(4))}`.toUpperCase();
+}
+
+/** Light colours need dark marks on them (the chosen-colour ring, a tick). */
+export function isLight(hex: string): boolean {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b > 186;
 }
 
 export const clampX = (x: number) => Math.max(0, Math.min(BOARD_W, Math.round(x)));
@@ -230,8 +298,10 @@ export function outlinePath(p: number[], ws: number[]): string {
 export interface StrokeLook {
   /** The SVG path string, in board units. */
   d: string;
-  /** Fill the path (pressure outline) instead of stroking it. */
+  /** Fill the path (pressure, calligraphy, a paint-bucket fill) instead of stroking it. */
   fill: boolean;
+  /** Fill with the even-odd rule (a bucket fill's holes). */
+  evenOdd: boolean;
   color: string;
   alpha: number;
   width: number;
@@ -239,14 +309,41 @@ export interface StrokeLook {
   erase: boolean;
 }
 
+/**
+ * A 45° nib: thin when the pen moves along the nib, thick across it. Widths
+ * come from the points alone, so both apps get the same outline.
+ */
+export function calligraphyWidths(p: number[], w: number): number[] {
+  const n = p.length / 2;
+  const raw: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - 1);
+    const b = Math.min(n - 1, i + 1);
+    const dx = p[b * 2]! - p[a * 2]!;
+    const dy = p[b * 2 + 1]! - p[a * 2 + 1]!;
+    const k = dx || dy ? Math.abs(Math.sin(Math.atan2(dy, dx) - Math.PI / 4)) : 1;
+    raw.push(w * (0.18 + 0.82 * k));
+  }
+  // A little smoothing so the width flows rather than jumps.
+  return raw.map((v, i) => Math.round(((raw[i - 1] ?? v) + v * 2 + (raw[i + 1] ?? v)) / 4));
+}
+
 /** How to draw a stroke. Both apps follow this to the letter. */
-export function strokeLook(s: Pick<Stroke, 'tool' | 'c' | 'w' | 'p' | 'ws'>): StrokeLook {
-  const pressure = !!s.ws && s.ws.length === s.p.length / 2 && s.tool !== 'eraser';
+export function strokeLook(s: Pick<Stroke, 'tool' | 'c' | 'w' | 'p' | 'ws' | 'f'>): StrokeLook {
+  const color = colorOf(s.c);
+  if (s.tool === 'fill') return { d: s.f ?? '', fill: true, evenOdd: true, color, alpha: 1, width: 0, erase: false };
+  const widths =
+    s.tool === 'calligraphy' && s.p.length >= 4
+      ? calligraphyWidths(s.p, s.w)
+      : !!s.ws && s.ws.length === s.p.length / 2 && s.tool !== 'eraser'
+        ? s.ws
+        : null;
   return {
-    d: pressure ? outlinePath(s.p, s.ws!) : centerPath(s.p),
-    fill: pressure,
-    color: colorOf(s.c),
-    alpha: s.tool === 'marker' ? MARKER_ALPHA : 1,
+    d: widths ? outlinePath(s.p, widths) : centerPath(s.p),
+    fill: !!widths,
+    evenOdd: false,
+    color,
+    alpha: s.tool === 'marker' ? MARKER_ALPHA : s.tool === 'pencil' ? PENCIL_ALPHA : 1,
     width: s.w,
     erase: s.tool === 'eraser',
   };
@@ -329,11 +426,12 @@ export function decodeDrawing(raw: unknown): DrawingFile {
     .map((s, i) => ({
       id: String(s.id ?? i),
       by: String(s.by ?? ''),
-      tool: (['pen', 'marker', 'eraser'] as const).includes(s.tool) ? s.tool : 'pen',
-      c: Number.isInteger(s.c) ? s.c : 0,
+      tool: DRAW_TOOLS.includes(s.tool) ? s.tool : 'pen',
+      c: isDrawColor(s.c) ? s.c : 0,
       w: Math.max(1, Number(s.w) || 50),
       p: s.p.map((v, j) => Math.round(Number(v) * (j % 2 ? sy : sx))),
       ...(Array.isArray(s.ws) ? { ws: s.ws.map(Number) } : {}),
+      ...(typeof s.f === 'string' && isFillPath(s.f) && sx === 1 && sy === 1 ? { f: s.f } : {}),
       n: Number(s.n) || i + 1,
       t0: Number(s.t0) || 0,
       d: Number(s.d) || 0,

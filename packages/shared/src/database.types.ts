@@ -571,6 +571,9 @@ export type Database = {
           mode: 'live' | 'turns';
           packs: string[];
           rounds: number;
+          draw_ms: number;
+          hints: number;
+          choices: number;
           played: number;
           score: number;
           solved: number;
@@ -580,7 +583,7 @@ export type Database = {
           created_at: string;
           updated_at: string;
         };
-        Insert: { id?: string; couple_id: string; started_by: string; mode?: 'live' | 'turns'; packs?: string[]; rounds?: number };
+        Insert: { id?: string; couple_id: string; started_by: string; mode?: 'live' | 'turns'; packs?: string[]; rounds?: number; draw_ms?: number; hints?: number; choices?: number };
         Update: never;
         Relationships: [];
       };

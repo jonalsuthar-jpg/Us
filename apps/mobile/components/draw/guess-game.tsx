@@ -3,7 +3,11 @@ import {
   answerGuess,
   checkSecret,
   DRAW_TOPIC,
-  hintsShown,
+  clampSettings,
+  gameSettings,
+  settingsSummary,
+  SETTING_LIMITS,
+  turnClock,
   LEVEL_MULT,
   LEVEL_NAME,
   listDrawWords,
@@ -17,15 +21,13 @@ import {
   pointsFor,
   removeDrawWord,
   roundCanvas,
-  ROUNDS,
   saveGuessTurn,
   startDrawGame,
   turnMeta,
   turnWord,
-  TURN_MS,
   type Difficulty,
   type DrawingFile,
-  type DrawTool,
+  type GameSettings,
   type DrawWord,
   type GameState,
   type PackId,
@@ -34,7 +36,8 @@ import {
 import { useCouple, useDrawGame, useDrawGames, useDrawHub, useDrawSession } from '@us/shared/react';
 import { router } from 'expo-router';
 import { Clock, Send, X } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
@@ -44,7 +47,7 @@ import { Display, Text } from '../ui/text';
 import { Board, type BoardHandle } from './board';
 import { useLocalSession, useSaveDrawing } from './hooks';
 import { Replay } from './replay';
-import { Toolbar } from './toolbar';
+import { Toolbar, useBrush } from './toolbar';
 
 const LEVEL_CHIP: Record<Difficulty, { bg: string; fg: string }> = {
   easy: { bg: 'bg-sage-100', fg: 'text-sage-700' },
@@ -145,6 +148,84 @@ function Header({ title, score, onClose, left }: { title: string; score?: number
   );
 }
 
+const SETTINGS_KEY = 'us.draw.game-settings';
+
+/** The game settings I used last, kept on this phone. */
+function useGameSettings(): [GameSettings, (s: GameSettings) => void] {
+  const [settings, setSettings] = useState<GameSettings>(clampSettings(null));
+  useEffect(() => {
+    void AsyncStorage.getItem(SETTINGS_KEY)
+      .then((raw) => raw && setSettings(clampSettings(JSON.parse(raw) as Partial<GameSettings>)))
+      .catch(() => {});
+  }, []);
+  const save = (next: GameSettings) => {
+    setSettings(next);
+    void AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next)).catch(() => {});
+  };
+  return [settings, save];
+}
+
+const clock = (ms: number) => {
+  const sec = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+};
+
+function Stepper({ label, hint, value, shown, onChange, min, max, step }: { label: string; hint: string; value: number; shown: string; onChange: (v: number) => void; min: number; max: number; step: number }) {
+  const btn = 'h-[38px] w-[38px] items-center justify-center rounded-xl bg-paper-raised';
+  return (
+    <View className="flex-row items-center gap-2.5 border-b border-gold-100 py-2.5">
+      <View className="flex-1">
+        <Text className="font-sans-semibold text-body">{label}</Text>
+        <Text className="text-[12px] text-ink-muted">{hint}</Text>
+      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Less: ${label}`} disabled={value <= min} onPress={() => onChange(value - step)} className={cn(btn, value <= min && 'opacity-40')}>
+        <Text className="font-sans-semibold text-[20px] leading-[24px] text-gold-700">–</Text>
+      </Pressable>
+      <Text accessibilityLabel={`${label}: ${shown}`} className="w-14 text-center font-sans-bold text-[20px]">
+        {shown}
+      </Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`More: ${label}`} disabled={value >= max} onPress={() => onChange(value + step)} className={cn(btn, value >= max && 'opacity-40')}>
+        <Text className="font-sans-semibold text-[20px] leading-[24px] text-gold-700">+</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function Choice({ label, values, value, onChange, show, last }: { label: string; values: number[]; value: number; onChange: (v: number) => void; show: (v: number) => string; last?: boolean }) {
+  return (
+    <View className={cn('gap-2 py-2.5', !last && 'border-b border-gold-100')}>
+      <Text className="font-sans-semibold text-body">{label}</Text>
+      <View accessibilityRole="radiogroup" accessibilityLabel={label} className="flex-row gap-1.5">
+        {values.map((v) => (
+          <Pressable
+            key={v}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: v === value }}
+            onPress={() => onChange(v)}
+            className={cn('h-[38px] flex-1 items-center justify-center rounded-xl', v === value ? 'bg-plum-800' : 'bg-paper-raised')}
+          >
+            <Text className={cn('font-sans-bold text-[15px]', v === value ? 'text-paper' : 'text-ink-soft')}>{show(v)}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Rounds, draw time, hint letters and word choices, like Scribble's lobby. */
+function SettingsCard({ value, onChange }: { value: GameSettings; onChange: (s: GameSettings) => void }) {
+  const set = (patch: Partial<GameSettings>) => onChange(clampSettings({ ...value, ...patch }));
+  const L = SETTING_LIMITS;
+  return (
+    <View accessibilityLabel="Game settings" className="rounded-[22px] bg-gold-50 px-3.5 py-1.5">
+      <Stepper label="Rounds" hint={`${L.rounds.min} to ${L.rounds.max}`} value={value.rounds} shown={String(value.rounds)} onChange={(v) => set({ rounds: v })} {...L.rounds} />
+      <Stepper label="Draw time" hint="30 s to 3 min" value={value.drawMs} shown={`${value.drawMs / 1000} s`} onChange={(v) => set({ drawMs: v })} {...L.drawMs} />
+      <Choice label="Hint letters" values={[0, 1, 2, 3, 4, 5]} value={value.hints} onChange={(v) => set({ hints: v })} show={(v) => (v ? String(v) : 'Off')} />
+      <Choice label="Words to pick from" values={[1, 2, 3, 4, 5]} value={value.choices} onChange={(v) => set({ choices: v })} show={String} last />
+    </View>
+  );
+}
+
 // ------------------------------------------------------------------ root ---
 
 export function GuessGame() {
@@ -154,7 +235,7 @@ export function GuessGame() {
   const [turnMode, setTurnMode] = useState<null | 'draw' | 'guess'>(null);
 
   if (turnMode === 'draw' && turns.open)
-    return <TurnDraw gameId={turns.open.id} round={turns.open.played} packs={turns.open.packs as PackId[]} onDone={() => setTurnMode(null)} />;
+    return <TurnDraw gameId={turns.open.id} round={turns.open.played} packs={turns.open.packs as PackId[]} settings={gameSettings(turns.open)} onDone={() => setTurnMode(null)} />;
   if (turnMode === 'guess' && turns.toGuess) return <TurnGuess onDone={() => setTurnMode(null)} />;
   if (s && s.phase !== 'left' && !(s.phase === 'done' && s.results.length === 0)) {
     if (s.phase === 'invited') return <Invited state={s} />;
@@ -177,6 +258,7 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
   const [words, setWords] = useState<DrawWord[]>([]);
   const [newWord, setNewWord] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [settings, setSettings] = useGameSettings();
   const name = partner.display_name;
 
   useEffect(() => {
@@ -211,6 +293,8 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
             {`Game in turns: waiting for ${name} (${turns.open.played} of ${turns.open.rounds} rounds, ${turns.open.score} points so far).`}
           </Text>
         ) : null}
+
+        <SettingsCard value={settings} onChange={setSettings} />
 
         <View className="gap-3 rounded-[24px] bg-gold-50 p-4">
           <Display className="text-lead">Word packs</Display>
@@ -284,6 +368,7 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
           ) : null}
         </View>
 
+        <Text className="text-small text-ink-muted">{settingsSummary(settings)}</Text>
         <View className="flex-row gap-3">
           <Pressable
             accessibilityRole="button"
@@ -291,7 +376,7 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
             disabled={!partnerOnline || !!busy}
             onPress={async () => {
               setBusy('live');
-              await game.invite(packs);
+              await game.invite(packs, settings);
               setBusy(null);
             }}
             className={cn('flex-1 gap-1 rounded-[24px] bg-gold-400 p-4', (!partnerOnline || busy) && 'opacity-60')}
@@ -305,7 +390,7 @@ function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: 
             onPress={async () => {
               setBusy('turns');
               try {
-                await startDrawGame(sb, { coupleId: couple.id, me: me.id, mode: 'turns', packs, rounds: ROUNDS });
+                await startDrawGame(sb, { coupleId: couple.id, me: me.id, mode: 'turns', packs, settings });
                 turns.reload();
                 onTurn('draw');
               } finally {
@@ -356,7 +441,7 @@ function Invited({ state }: { state: GameState }) {
     <View className="flex-1 items-center justify-center gap-4 bg-gold-50 px-6" style={{ paddingTop: insets.top }}>
       <Blanks cells={['_', 'a', '_', '_']} />
       <Display className="text-center text-title">{mine ? `Waiting for ${partner.display_name}…` : `${partner.display_name} wants to play Draw & Guess`}</Display>
-      <Text className="text-center text-body text-ink-soft">{`${state.packs.map((p) => PACKS.find((x) => x.id === p)?.name).join(' · ')} · ${state.rounds} rounds`}</Text>
+      <Text className="text-center text-body text-ink-soft">{`${state.packs.map((p) => PACKS.find((x) => x.id === p)?.name).join(' · ')}\n${settingsSummary(state.settings)}`}</Text>
       {mine ? (
         <View className="w-full gap-2">
           <Pressable
@@ -435,8 +520,7 @@ function LiveRound({ state: s }: { state: GameState }) {
   const game = useDrawGame();
   const { session, state, cursor } = useDrawSession(roundCanvas(s.id, s.round));
   const now = useNow();
-  const [tool, setTool] = useState<DrawTool>('pen');
-  const [color, setColor] = useState(0);
+  const { tool, setTool, color, setColor, size, setSize } = useBrush({ color: 0 });
   const [text, setText] = useState('');
   const drawer = s.drawer === me.id;
   const name = partner.display_name;
@@ -467,7 +551,7 @@ function LiveRound({ state: s }: { state: GameState }) {
       <View className="absolute right-4" style={{ top: insets.top + 10 }}>
         <View accessibilityRole="timer" className="h-10 flex-row items-center gap-1.5 rounded-full bg-plum-800 px-3">
           <Clock size={16} color="#FCC24F" />
-          <Text className="font-sans-bold text-body text-paper">{`0:${String(Math.max(0, Math.ceil((revealing ? 0 : left) / 1000))).padStart(2, '0')}`}</Text>
+          <Text className="font-sans-bold text-body text-paper">{clock(revealing ? 0 : left)}</Text>
         </View>
       </View>
       <View className="px-4 pb-3 pt-2.5">
@@ -505,7 +589,7 @@ function LiveRound({ state: s }: { state: GameState }) {
       </View>
       {drawer ? (
         <View className="gap-2 px-4 pt-3">
-          <Toolbar layout="compact" tools={['pen', 'eraser']} tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => session.undo()} canUndo={session.canUndo} colors={[0, 1, 2, 4, 5]} />
+          <Toolbar dense tool={tool} onTool={setTool} color={color} onColor={setColor} size={size} onSize={setSize} onUndo={() => session.undo()} canUndo={session.canUndo} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
             {s.guesses.map((g, i) => (
               <View key={i} className={cn('rounded-full px-3 py-1', g.result === 'close' ? 'bg-gold-200' : g.result === 'right' ? 'bg-sage-100' : 'bg-paper-raised')}>
@@ -636,7 +720,7 @@ function Results({ state: s }: { state: GameState }) {
           <Stat night value={fastest != null ? `${Math.max(1, Math.round(fastest / 1000))} s` : '–'} label="fastest guess" />
         </View>
         <View className="gap-2 pt-6">
-          <Pressable accessibilityRole="button" onPress={() => void game.invite(s.packs)} className="h-[52px] items-center justify-center rounded-control bg-gold-400">
+          <Pressable accessibilityRole="button" onPress={() => void game.invite(s.packs, s.settings)} className="h-[52px] items-center justify-center rounded-control bg-gold-400">
             <Text className="font-sans-bold text-body text-gold-900">Play again</Text>
           </Pressable>
           <Pressable accessibilityRole="button" disabled={saved !== 'idle'} onPress={() => void saveAll()} className="h-12 items-center justify-center rounded-control bg-white/10">
@@ -661,7 +745,7 @@ function Results({ state: s }: { state: GameState }) {
 
 // ------------------------------------------------------------- turn mode ---
 
-function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: number; packs: PackId[]; onDone: () => void }) {
+function TurnDraw({ gameId, round, packs, settings, onDone }: { gameId: string; round: number; packs: PackId[]; settings: GameSettings; onDone: () => void }) {
   const { sb, couple, me, partner, channel } = useCouple();
   const insets = useSafeAreaInsets();
   const { width, height: screenH } = useWindowDimensions();
@@ -672,8 +756,7 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
   const [word, setWord] = useState<Word | null>(null);
   const [started, setStarted] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [tool, setTool] = useState<DrawTool>('pen');
-  const [color, setColor] = useState(0);
+  const { tool, setTool, color, setColor, size, setSize } = useBrush({ color: 0 });
   const now = useNow(!!word);
   const sent = useRef(false);
   const boardW = Math.min(width - 32, Math.floor(((screenH - insets.top - 300) * 3) / 4));
@@ -681,9 +764,9 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
   useEffect(() => {
     void (async () => {
       const ours = packs.includes('ours') ? ourWords(await ourWordTexts(sb, couple.id).catch(() => [])) : [];
-      setChoices(pickChoices(packs, ours, []));
+      setChoices(pickChoices(packs, ours, [], Math.random, settings.choices));
     })();
-  }, [sb, couple.id, packs]);
+  }, [sb, couple.id, packs, settings.choices]);
 
   async function send() {
     if (!word || sent.current) return;
@@ -692,7 +775,7 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
     session.finish();
     try {
       const png = await board.current!.toPng();
-      const d = await saveGuessTurn(sb, { coupleId: couple.id, me: me.id, gameId, round, word: word.text, level: word.level, pack: word.pack, strokes: session.snapshot.strokes, png, ms: Date.now() - started });
+      const d = await saveGuessTurn(sb, { coupleId: couple.id, me: me.id, gameId, round, word: word.text, level: word.level, pack: word.pack, strokes: session.snapshot.strokes, png, ms: Date.now() - started, settings });
       channel.sendChanged(DRAW_TOPIC);
       void notifyPartner(sb, { category: 'guess_turn', drawingId: d.id });
       turns.reload();
@@ -703,7 +786,7 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
     }
   }
 
-  const left = word ? started + TURN_MS - now : TURN_MS;
+  const left = word ? started + settings.drawMs - now : settings.drawMs;
   useEffect(() => {
     if (word && left <= 0) void send();
   }); // eslint-disable-line react-hooks/exhaustive-deps
@@ -740,13 +823,13 @@ function TurnDraw({ gameId, round, packs, onDone }: { gameId: string; round: num
       <Header title={`Draw: ${word.text}`} onClose={onDone} />
       <View className="flex-row items-center justify-between px-5 pb-3">
         <Text className="text-small text-ink-soft">It sends itself when time’s up.</Text>
-        <Ring ms={left} total={TURN_MS} size={52} />
+        <Ring ms={left} total={settings.drawMs} size={52} />
       </View>
       <View className="items-center">
-        <Board ref={board} session={session} state={state} tool={tool} color={color} size="m" width={boardW} disabled={busy} label={`Your drawing of ${word.text}`} />
+        <Board ref={board} session={session} state={state} tool={tool} color={color} size={size} width={boardW} disabled={busy} label={`Your drawing of ${word.text}`} />
       </View>
       <View className="gap-3 px-4 pt-3">
-        <Toolbar layout="compact" tools={['pen', 'eraser']} tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => session.undo()} canUndo={session.canUndo} colors={[0, 1, 2, 4, 5]} />
+        <Toolbar dense tool={tool} onTool={setTool} color={color} onColor={setColor} size={size} onSize={setSize} onUndo={() => session.undo()} canUndo={session.canUndo} />
         <Pressable accessibilityRole="button" disabled={busy} onPress={() => void send()} className={cn('h-[52px] items-center justify-center rounded-control bg-rose-600', busy && 'opacity-60')}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text className="font-sans-semibold text-body text-white">Done, send it</Text>}
         </Pressable>
@@ -783,8 +866,9 @@ function TurnGuess({ onDone }: { onDone: () => void }) {
   async function finish(solved: boolean) {
     if (answered.current || !meta || !d) return;
     answered.current = true;
-    const ms = Math.min(TURN_MS, Date.now() - started);
-    const points = solved ? pointsFor(ms, meta.level) : 0;
+    const { drawMs } = turnClock(meta, 0);
+    const ms = Math.min(drawMs, Date.now() - started);
+    const points = solved ? pointsFor(ms, meta.level, drawMs) : 0;
     await answerGuess(sb, d.id, solved, ms, points).catch(() => {});
     const word = await turnWord(sb, d.id).catch(() => null);
     setResult({ solved, points, ms, word });
@@ -792,15 +876,11 @@ function TurnGuess({ onDone }: { onDone: () => void }) {
   }
 
   const elapsed = started ? now - started : 0;
-  const left = TURN_MS - elapsed;
+  const { drawMs, revealed } = meta ? turnClock(meta, elapsed) : { drawMs: 80_000, revealed: {} as Record<number, string> };
+  const left = drawMs - elapsed;
   useEffect(() => {
     if (started && !result && left <= 0) void finish(false);
   }); // eslint-disable-line react-hooks/exhaustive-deps
-  const revealed = useMemo(() => {
-    const out: Record<number, string> = {};
-    meta?.hints.slice(0, hintsShown(elapsed)).forEach((h) => (out[h.i] = h.ch));
-    return out;
-  }, [meta, elapsed]);
 
   if (!meta || !file) {
     return (
@@ -815,7 +895,7 @@ function TurnGuess({ onDone }: { onDone: () => void }) {
       <Header title={`${partner.display_name} drew this`} onClose={onDone} />
       <View className="flex-row items-center justify-between px-5 pb-3">
         <Blanks cells={maskWith(meta.secret.mask, result?.word ? Object.fromEntries([...result.word].map((ch, i) => [i, ch])) : revealed)} />
-        <Ring ms={result ? 0 : left} total={TURN_MS} size={52} />
+        <Ring ms={result ? 0 : left} total={drawMs} size={52} />
       </View>
       <View className="items-center">
         <Replay file={file} width={boardW} tone="paper" speed={1} controls={false} />

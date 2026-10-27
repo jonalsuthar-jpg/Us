@@ -106,24 +106,37 @@ export function seeded(seed: number) {
   };
 }
 
+/** The levels offered for each number of choices. */
+const LEVELS_FOR: Record<number, Difficulty[]> = {
+  1: ['medium'],
+  2: ['easy', 'hard'],
+  3: ['easy', 'medium', 'hard'],
+  4: ['easy', 'medium', 'medium', 'hard'],
+  5: ['easy', 'easy', 'medium', 'hard', 'hard'],
+};
+
 /**
- * Three words to choose from: an easy, a medium and a hard one from the
- * chosen packs, never one we've already had this game. When our own pack is
- * on and has words, the hard choice comes from it.
+ * Words to choose from (three by default: an easy, a medium and a hard one)
+ * from the chosen packs, never one we've already had this game. When our own
+ * pack is on and has words, the last hard choice comes from it.
  */
-export function pickChoices(packs: PackId[], ours: Word[], used: string[], rand: () => number = Math.random): Word[] {
+export function pickChoices(packs: PackId[], ours: Word[], used: string[], rand: () => number = Math.random, count = 3): Word[] {
   const usedSet = new Set(used.map((u) => u.toLowerCase()));
   const pool = [...ALL_WORDS.filter((w) => packs.includes(w.pack)), ...(packs.includes('ours') ? ours : [])].filter(
     (w) => !usedSet.has(w.text.toLowerCase()),
   );
   const fallback = ALL_WORDS.filter((w) => !usedSet.has(w.text.toLowerCase()));
-  const pick = (list: Word[]) => list[Math.floor(rand() * list.length)];
+  const levels = LEVELS_FOR[Math.max(1, Math.min(5, Math.round(count)))]!;
   const out: Word[] = [];
-  for (const level of ['easy', 'medium', 'hard'] as Difficulty[]) {
-    const fromOurs = level === 'hard' && packs.includes('ours') ? pool.filter((w) => w.pack === 'ours') : [];
-    const list = fromOurs.length ? fromOurs : pool.filter((w) => w.level === level);
-    const w = pick(list.length ? list : fallback.filter((x) => x.level === level));
-    if (w && !out.some((o) => o.text === w.text)) out.push(w);
-  }
+  levels.forEach((level, i) => {
+    const last = i === levels.length - 1;
+    const fromOurs = last && packs.includes('ours') ? pool.filter((w) => w.pack === 'ours') : [];
+    const fresh = (list: Word[]) => list.filter((w) => !out.some((o) => o.text === w.text));
+    let list = fresh(fromOurs.length ? fromOurs : pool.filter((w) => w.level === level));
+    if (!list.length) list = fresh(fallback.filter((x) => x.level === level));
+    if (!list.length) list = fresh(fallback);
+    const w = list[Math.floor(rand() * list.length)];
+    if (w) out.push(w);
+  });
   return out;
 }

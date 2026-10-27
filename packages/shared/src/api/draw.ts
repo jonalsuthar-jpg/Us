@@ -1,6 +1,6 @@
 import type { Database, DrawGame, DrawWord, Drawing } from '../database.types';
 import { encodeDrawing, decodeDrawing, EXPORT_H, EXPORT_W, type DrawBackground, type DrawingFile, type Stroke } from '../draw/strokes';
-import { secretFor, hintOrder, type WordSecret } from '../draw/guess';
+import { clampSettings, hintOrder, hintTimes, secretFor, TURN_MS, type GameSettings, type WordSecret } from '../draw/guess';
 import type { Difficulty, PackId } from '../draw/words';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
@@ -234,14 +234,21 @@ export async function ourWordTexts(sb: UsClient, coupleId: string): Promise<stri
 
 // ----------------------------------------------------------------- games ---
 
+const settingsColumns = (s: GameSettings) => ({ rounds: s.rounds, draw_ms: s.drawMs, hints: s.hints, choices: s.choices });
+
+/** A saved game's settings (games from before settings existed get the old rules). */
+export function gameSettings(g: Pick<DrawGame, 'rounds' | 'draw_ms' | 'hints' | 'choices'>): GameSettings {
+  return clampSettings({ rounds: g.rounds, drawMs: g.draw_ms, hints: g.hints, choices: g.choices });
+}
+
 export async function startDrawGame(
   sb: UsClient,
-  g: { coupleId: string; me: string; mode: 'live' | 'turns'; packs: PackId[]; rounds: number },
+  g: { coupleId: string; me: string; mode: 'live' | 'turns'; packs: PackId[]; settings: Partial<GameSettings> },
 ): Promise<DrawGame> {
   return unwrap(
     await sb
       .from('draw_games')
-      .insert({ couple_id: g.coupleId, started_by: g.me, mode: g.mode, packs: g.packs, rounds: g.rounds })
+      .insert({ couple_id: g.coupleId, started_by: g.me, mode: g.mode, packs: g.packs, ...settingsColumns(clampSettings(g.settings)) })
       .select('*')
       .single(),
   );
@@ -297,27 +304,53 @@ export interface TurnMeta {
   salt: string;
   level: Difficulty;
   pack: PackId;
-  /** Letters revealed at 20 s, 40 s, 60 s of the replay. */
-  hints: { i: number; ch: string }[];
+  /** Letters revealed during the replay, each at its time (`at`, ms; older turns: every 20 s). */
+  hints: { i: number; ch: string; at?: number }[];
   /** How long the drawer took. */
   ms: number;
+  /** The guessing time for this turn (older turns: 80 s). */
+  drawMs?: number;
+}
+
+/** How long the guesser has, and which hints have shown `elapsed` ms in. */
+export function turnClock(meta: TurnMeta, elapsed: number): { drawMs: number; revealed: Record<number, string> } {
+  const drawMs = meta.drawMs ?? TURN_MS;
+  const revealed: Record<number, string> = {};
+  meta.hints.forEach((h, n) => {
+    if (elapsed >= (h.at ?? 20_000 * (n + 1))) revealed[h.i] = h.ch;
+  });
+  return { drawMs, revealed };
 }
 
 /** Save my turn: the drawing, the hashed word for my partner's app, the word itself kept apart. */
 export async function saveGuessTurn(
   sb: UsClient,
-  t: { coupleId: string; me: string; gameId: string; round: number; word: string; level: Difficulty; pack: PackId; strokes: Stroke[]; png: Blob | ArrayBuffer | Uint8Array; ms: number },
+  t: {
+    coupleId: string;
+    me: string;
+    gameId: string;
+    round: number;
+    word: string;
+    level: Difficulty;
+    pack: PackId;
+    strokes: Stroke[];
+    png: Blob | ArrayBuffer | Uint8Array;
+    ms: number;
+    settings: GameSettings;
+  },
 ): Promise<Drawing> {
   const salt = `${t.gameId}:${t.round}`;
-  const order = hintOrder(t.word, t.round + t.word.length * 7);
+  const order = hintOrder(t.word, t.round + t.word.length * 7, t.settings.hints);
+  const times = hintTimes(t.settings.drawMs, t.settings.hints);
   const chars = [...t.word.trim()];
   const meta: TurnMeta = {
     secret: secretFor(t.word, salt),
     salt,
     level: t.level,
     pack: t.pack,
-    hints: order.map((i) => ({ i, ch: chars[i]! })),
+    hints: order.map((i, n) => ({ i, ch: chars[i]!, at: times[n]! })),
     ms: t.ms,
+    drawMs: t.settings.drawMs,
   };
   const d = await saveDrawing(sb, {
     coupleId: t.coupleId,

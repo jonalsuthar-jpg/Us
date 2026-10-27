@@ -51,11 +51,11 @@ describe('live Draw & Guess between two devices', () => {
       await vi.advanceTimersByTimeAsync(1);
       expect(guesser.state?.phase).toBe('drawing');
       expect(guesser.state?.word).toBeNull();
-      await vi.advanceTimersByTimeAsync(21_000);
+      await vi.advanceTimersByTimeAsync(27_000);
       expect(Object.keys(guesser.state!.revealed).length).toBeGreaterThanOrEqual(word.text.replace(/\W/g, '').length >= 3 ? 1 : 0);
       if (round === 3) {
         // Nobody gets this one: time runs out.
-        await vi.advanceTimersByTimeAsync(60_000);
+        await vi.advanceTimersByTimeAsync(54_000);
       } else {
         expect(guesser.guess('definitely not it')).toBe('wrong');
         expect(guesser.guess(word.text)).toBe('right');

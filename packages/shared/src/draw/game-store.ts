@@ -14,13 +14,13 @@ import {
   gameReducer,
   guesserOf,
   hintOrder,
-  HINT_EVERY_MS,
+  hintTimes,
   pointsFor,
   REVEAL_MS,
-  ROUNDS,
+  clampSettings,
   secretFor,
-  TURN_MS,
   type GameMsg,
+  type GameSettings,
   type GameState,
 } from './guess';
 import type { DrawHub } from './session';
@@ -113,7 +113,7 @@ export class GameStore {
 
     if (s.phase === 'choosing' && s.drawer === this.me) {
       const used = s.results.map((r) => r.word);
-      const choices = pickChoices(s.packs, this.ours, used);
+      const choices = pickChoices(s.packs, this.ours, used, Math.random, s.settings.choices);
       this.apply({ k: 'choices', choices }, false);
       // Picks one for me when time's up.
       this.at(s.until, () => {
@@ -125,9 +125,10 @@ export class GameStore {
 
     if (s.phase === 'drawing' && s.drawer === this.me && s.word) {
       const chars = [...s.word.trim()];
-      const order = hintOrder(s.word, s.round * 31 + s.word.length);
+      const order = hintOrder(s.word, s.round * 31 + s.word.length, s.settings.hints);
+      const times = hintTimes(s.settings.drawMs, s.settings.hints);
       order.forEach((i, n) => {
-        this.at(s.startedAt + HINT_EVERY_MS * (n + 1), () => {
+        this.at(s.startedAt + times[n]!, () => {
           if (this.state?.phase === 'drawing' && this.state.round === s.round) {
             this.apply({ k: 'hint', id: s.id, round: s.round, i, ch: chars[i]! }, true);
           }
@@ -157,14 +158,16 @@ export class GameStore {
   // ---------------------------------------------------------- actions ---
 
   /** Ask my partner to play. */
-  async invite(packs: PackId[], rounds = ROUNDS) {
+  async invite(packs: PackId[], wanted?: Partial<GameSettings>) {
+    const settings = clampSettings(wanted);
+    const rounds = settings.rounds;
     this.error = null;
     this.clearTimers();
     try {
       this.ours = packs.includes('ours') ? ourWords(await ourWordTexts(this.sb, this.coupleId)) : [];
-      const row = await startDrawGame(this.sb, { coupleId: this.coupleId, me: this.me, mode: 'live', packs, rounds });
+      const row = await startDrawGame(this.sb, { coupleId: this.coupleId, me: this.me, mode: 'live', packs, settings });
       this.state = null;
-      this.apply({ k: 'invite', id: row.id, players: [this.me, this.partner], packs, rounds, at: this.now() }, true);
+      this.apply({ k: 'invite', id: row.id, players: [this.me, this.partner], packs, rounds, at: this.now(), settings }, true);
     } catch (e) {
       this.error = e instanceof Error ? e.message : 'Couldn’t start a game';
       this.emit();
@@ -175,7 +178,7 @@ export class GameStore {
   resendInvite() {
     const s = this.state;
     if (s?.phase === 'invited' && s.players[0] === this.me) {
-      this.send({ k: 'invite', id: s.id, players: s.players, packs: s.packs, rounds: s.rounds, at: s.startedAt });
+      this.send({ k: 'invite', id: s.id, players: s.players, packs: s.packs, rounds: s.rounds, at: s.startedAt, settings: s.settings });
     }
   }
 
@@ -201,7 +204,7 @@ export class GameStore {
         level: word.level,
         pack: word.pack,
         at,
-        until: at + TURN_MS,
+        until: at + s.settings.drawMs,
       },
       true,
     );
@@ -221,8 +224,8 @@ export class GameStore {
     const s = this.state;
     if (!s || s.phase !== 'drawing' || s.drawer !== this.me || !s.word) return;
     const ms = Math.max(0, at - s.startedAt);
-    const points = solved ? pointsFor(ms, s.level ?? 'easy') : 0;
-    this.apply({ k: 'reveal', id: s.id, round: s.round, word: s.word, solved, ms: solved ? ms : TURN_MS, points, at: this.now() }, true);
+    const points = solved ? pointsFor(ms, s.level ?? 'easy', s.settings.drawMs) : 0;
+    this.apply({ k: 'reveal', id: s.id, round: s.round, word: s.word, solved, ms: solved ? ms : s.settings.drawMs, points, at: this.now() }, true);
   }
 
   /** The drawer's device hears a right answer and closes the round. */

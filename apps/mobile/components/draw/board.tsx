@@ -7,6 +7,7 @@ import {
   strokeWidth,
   toBoard,
   tokens,
+  type DrawColor,
   type DrawSession,
   type DrawSize,
   type DrawState,
@@ -34,7 +35,7 @@ interface BoardProps {
   session: DrawSession;
   state: DrawState;
   tool: DrawTool;
-  color: number;
+  color: DrawColor;
   size: DrawSize | number;
   cursor?: PartnerCursor | null;
   partnerName?: string;

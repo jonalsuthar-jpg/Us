@@ -1,7 +1,7 @@
-import { DRAW_COLORS, notifyPartner, type DrawTool } from '@us/shared';
+import { notifyPartner } from '@us/shared';
 import { useCouple } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
-import { Eraser, Pen, Send, Undo2, X } from 'lucide-react-native';
+import { Send, X } from 'lucide-react-native';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -11,8 +11,8 @@ import { usePalette } from '../ui/palette';
 import { Display, Text } from '../ui/text';
 import { Board, type BoardHandle } from './board';
 import { useLocalSession, useSaveDrawing } from './hooks';
+import { Toolbar, useBrush } from './toolbar';
 
-const COLORS = [0, 1, 2, 5, 7];
 
 interface Props {
   open: boolean;
@@ -30,8 +30,7 @@ export function DoodleSheet({ open, onClose, mode = 'doodle', onChatPicture }: P
   const { session, state } = useLocalSession();
   const save = useSaveDrawing();
   const board = useRef<BoardHandle>(null);
-  const [tool, setTool] = useState<DrawTool>('pen');
-  const [color, setColor] = useState(0);
+  const { tool, setTool, color, setColor, size } = useBrush({ color: 0 });
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +61,6 @@ export function DoodleSheet({ open, onClose, mode = 'doodle', onChatPicture }: P
     }
   }
 
-  const iconBtn = (on: boolean) => cn('h-[46px] w-[46px] items-center justify-center rounded-[14px]', on ? 'bg-plum-800' : 'bg-paper-sunken');
 
   return (
     <Modal visible={open} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
@@ -80,39 +78,10 @@ export function DoodleSheet({ open, onClose, mode = 'doodle', onChatPicture }: P
             <Text className="text-small text-ink-soft">
               {mode === 'chat' ? 'It goes in your chat as a picture.' : 'It waits on their Home as a sticky note until they open it.'}
             </Text>
-            <View className="flex-row gap-3">
-              <Board ref={board} session={session} state={state} tool={tool} color={color} size="m" width={264} raised={false} label="Your doodle" className="rounded-[18px] border border-paper-edge" />
-              <View accessibilityRole="toolbar" className="flex-1 items-center gap-2">
-                <Pressable accessibilityRole="button" accessibilityLabel="Pen" accessibilityState={{ selected: tool === 'pen' }} onPress={() => setTool('pen')} className={iconBtn(tool === 'pen')}>
-                  <Pen size={19} color={tool === 'pen' ? '#FCFAFB' : c.inkSoft} />
-                </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Eraser" accessibilityState={{ selected: tool === 'eraser' }} onPress={() => setTool('eraser')} className={iconBtn(tool === 'eraser')}>
-                  <Eraser size={19} color={tool === 'eraser' ? '#FCFAFB' : c.inkSoft} />
-                </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Undo" disabled={!session.canUndo} onPress={() => session.undo()} className={cn(iconBtn(false), !session.canUndo && 'opacity-40')}>
-                  <Undo2 size={19} color={c.inkSoft} />
-                </Pressable>
-                {COLORS.map((i, n) => {
-                  const on = color === i;
-                  return (
-                    <Pressable
-                      key={i}
-                      accessibilityRole="radio"
-                      accessibilityLabel={DRAW_COLORS[i]!.name}
-                      accessibilityState={{ checked: on }}
-                      onPress={() => {
-                        setColor(i);
-                        setTool('pen');
-                      }}
-                      className={cn('h-[34px] w-[34px] items-center justify-center rounded-full', n === 0 && 'mt-1.5')}
-                      style={on ? { borderWidth: 2, borderColor: DRAW_COLORS[i]!.hex } : null}
-                    >
-                      <View className="rounded-full" style={{ width: on ? 24 : 28, height: on ? 24 : 28, backgroundColor: DRAW_COLORS[i]!.hex }} />
-                    </Pressable>
-                  );
-                })}
-              </View>
+            <View className="items-center">
+              <Board ref={board} session={session} state={state} tool={tool} color={color} size={size} width={264} raised={false} label="Your doodle" className="rounded-[18px] border border-paper-edge" />
             </View>
+            <Toolbar dense tool={tool} onTool={setTool} color={color} onColor={setColor} onUndo={() => session.undo()} canUndo={session.canUndo} />
             {mode === 'doodle' ? (
               <View className="gap-1.5">
                 <Text className="font-sans-semibold text-micro text-ink-soft">A line to go with it (optional)</Text>
