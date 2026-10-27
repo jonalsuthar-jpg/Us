@@ -14,7 +14,9 @@ import {
   type DrawGameStats,
 } from '../api/draw';
 import { toDateKey } from '../api/plan';
-import type { DrawGame, Drawing } from '../database.types';
+import type { DrawGame, Drawing, Sticker } from '../database.types';
+import { chatMediaUrls } from '../api/messages';
+import { listStickers, STICKERS_TOPIC } from '../api/stickers';
 import { gameStoreFor, GameStore } from '../draw/game-store';
 import { DrawHub, HERE_EVERY_MS, HERE_TTL_MS, LIVE_CANVAS, type DrawSession, type DrawState, type PartnerCursor } from '../draw/session';
 import type { CoupleChannel } from '../realtime/couple-channel';
@@ -237,4 +239,28 @@ export function useDrawGames(enabled = true): TurnGameView {
   const starter = open?.started_by;
   const myTurnToDraw = !!open && !waiting && (nextRound % 2 === 0 ? starter === me.id : starter !== me.id);
   return { games, stats: drawGameStats(games), open, turns, toGuess, myTurnToDraw, loading, reload };
+}
+
+/** Our saved stickers, newest first, with links to their pictures. */
+export function useStickers(enabled = true): { stickers: Sticker[]; urls: Record<string, string>; loading: boolean; reload: () => void } {
+  const { sb, couple, channel } = useCouple();
+  const [stickers, setStickers] = useState<Sticker[]>([]);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const reload = useCallback(() => {
+    if (!enabled) return;
+    void (async () => {
+      const list = await listStickers(sb, couple.id);
+      const links = await chatMediaUrls(sb, list.map((s) => s.path));
+      setStickers(list);
+      setUrls(links);
+    })()
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [sb, couple.id, enabled]);
+  useEffect(() => {
+    reload();
+    return channel.changes.on((e) => e.topic === STICKERS_TOPIC && reload());
+  }, [channel, reload]);
+  return { stickers, urls, loading, reload };
 }

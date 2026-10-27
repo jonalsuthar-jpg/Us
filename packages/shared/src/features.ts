@@ -6,6 +6,7 @@
 export type FeatureKey =
   | 'chat'
   | 'calls'
+  | 'stickers'
   | 'snaps'
   | 'taps'
   | 'countdowns'
@@ -40,6 +41,7 @@ export interface FeatureInfo {
 export const FEATURES: FeatureInfo[] = [
   { key: 'chat', label: 'Chat', group: 'talk' },
   { key: 'calls', label: 'Calls', group: 'talk' },
+  { key: 'stickers', label: 'Stickers', group: 'talk' },
   { key: 'snaps', label: 'Snaps', group: 'home' },
   { key: 'taps', label: 'Thinking of you', group: 'home' },
   { key: 'countdowns', label: 'Countdowns', group: 'home' },

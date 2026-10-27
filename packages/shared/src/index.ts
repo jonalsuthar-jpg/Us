@@ -31,6 +31,7 @@ export * from './realtime/typing';
 
 export * from './draw';
 export * from './api/draw';
+export * from './api/stickers';
 
 export * from './webrtc/signals';
 export * from './webrtc/call-manager';

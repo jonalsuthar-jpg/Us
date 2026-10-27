@@ -37,6 +37,8 @@ export interface DraftExtras {
     localUri?: string;
     /** Photos and voice notes; GIFs and stickers are links and upload nothing. */
     upload?: { body: Blob | ArrayBuffer | Uint8Array; contentType: string };
+    /** A file already in our folder (one of our saved stickers): nothing to upload. */
+    path?: string;
   };
 }
 
@@ -54,7 +56,7 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
     read_at: null,
     created_at: new Date().toISOString(),
     reply_to: extras.replyTo ?? null,
-    media_path: null,
+    media_path: extras.media?.path ?? null,
     media_kind: extras.media?.kind ?? null,
     media_meta: extras.media?.meta ?? null,
     reactions: {},

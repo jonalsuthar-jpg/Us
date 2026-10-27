@@ -1,5 +1,5 @@
-import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
-import { Copy, Pin, PinOff, Plus, Reply } from 'lucide-react';
+import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, isOurStickerPath, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
+import { Copy, Pin, PinOff, Plus, Reply, Sticker } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Ticks } from '@/components/ui/ticks';
 import { cn } from '@/lib/cn';
@@ -41,6 +41,8 @@ interface BubbleProps {
   onReact?: (emoji: string | null) => void;
   onReply?: () => void;
   onPin?: (pinned: boolean) => void;
+  /** Keep a sticker we made (sent in chat) in Our stickers. */
+  onKeepSticker?: () => void;
   onOpenPhoto?: (url: string) => void;
   onJumpTo?: (id: string) => void;
 }
@@ -62,6 +64,7 @@ export function Bubble({
   onReact,
   onReply,
   onPin,
+  onKeepSticker,
   onOpenPhoto,
   onJumpTo,
 }: BubbleProps) {
@@ -70,9 +73,12 @@ export function Bubble({
   const url = mediaUrl ?? message.localUri;
   const hasText = !!message.body?.trim();
   const settled = !message.pending && !message.failed;
-  // GIFs and stickers: GIPHY links. Stickers float without a bubble.
-  const linked = isLinkedMedia(message.media_kind) && isGiphyUrl(message.media_meta?.url) ? message.media_meta!.url! : null;
-  const sticker = !!linked && message.media_kind === 'sticker';
+  // GIFs and stickers: GIPHY links, or a sticker we made (a file in our chat
+  // folder). Stickers float without a bubble.
+  const giphy = isLinkedMedia(message.media_kind) && isGiphyUrl(message.media_meta?.url) ? message.media_meta!.url! : null;
+  const ours = message.media_kind === 'sticker' && !!message.media_path ? (url ?? null) : null;
+  const linked = giphy ?? ours;
+  const sticker = message.media_kind === 'sticker' && !!(giphy || message.media_path);
   const [more, setMore] = useState(false);
   useEffect(() => {
     if (!active) setMore(false);
@@ -120,6 +126,11 @@ export function Bubble({
           <ToolButton label={message.pinned_at ? 'Unpin' : 'Pin'} onClick={() => onPin?.(!message.pinned_at)}>
             {message.pinned_at ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
           </ToolButton>
+          {onKeepSticker && message.media_kind === 'sticker' && isOurStickerPath(message.media_path) ? (
+            <ToolButton label="Save sticker" onClick={onKeepSticker}>
+              <Sticker className="h-4 w-4" />
+            </ToolButton>
+          ) : null}
           {hasText ? (
             <ToolButton label="Copy" onClick={() => void navigator.clipboard?.writeText(message.body ?? '')}>
               <Copy className="h-4 w-4" />

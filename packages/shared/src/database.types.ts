@@ -499,6 +499,12 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      stickers: {
+        Row: { id: string; couple_id: string; created_by: string; path: string; width: number; height: number; created_at: string };
+        Insert: { id?: string; couple_id: string; created_by: string; path: string; width?: number; height?: number };
+        Update: never;
+        Relationships: [];
+      };
       // ------------------------------------------------------- Draw together
       drawings: {
         Row: {
@@ -710,6 +716,7 @@ export type SparkSeason = Tables['spark_seasons']['Row'];
 export type LocationShare = Tables['location_shares']['Row'];
 export type ArrivalCheck = Tables['arrival_checks']['Row'];
 export type Drawing = Tables['drawings']['Row'];
+export type Sticker = Tables['stickers']['Row'];
 export type DrawWord = Tables['draw_words']['Row'];
 export type DrawGame = Tables['draw_games']['Row'];
 export type DailyEntry = Database['public']['Functions']['daily_history']['Returns'][number];

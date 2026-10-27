@@ -1,10 +1,10 @@
-import { clusters, formatDay, groupByDay, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, type Message } from '@us/shared';
+import { clusters, formatDay, groupByDay, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, type Message, type Sticker as OurSticker } from '@us/shared';
 import { useCallManager, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { ChevronsDown, Copy, Phone, Pin, PinOff, Plus, Reply, Search, Settings, Video } from 'lucide-react-native';
+import { ChevronsDown, Copy, Phone, Pin, PinOff, Plus, Reply, Search, Settings, Sticker, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, FlatList, Modal, Pressable, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bubble, CallEntry, type ReplyQuote } from '@/components/chat/bubble';
 import { Composer } from '@/components/chat/composer';
 import { DoodleSheet } from '@/components/draw/doodle-sheet';
+import { StickerMaker } from '@/components/stickers/maker';
+import { StickerPicker } from '@/components/stickers/picker';
 import { FeatureOff } from '@/components/feature-off';
 import { GifPicker } from '@/components/chat/gif-picker';
 import { clearMessageNotifications } from '@/modules/us-call';
@@ -61,7 +63,7 @@ export default function Talk() {
 
 function Thread() {
   const insets = useSafeAreaInsets();
-  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf } = useCouple();
+  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf, channel } = useCouple();
   const partnerPhoto = photoOf(partnerSlot);
   const viewing = useViewing();
   // Reading the chat: the gathered "new messages" notification is done with.
@@ -109,6 +111,13 @@ function Thread() {
 
   const draw = useFeature('draw');
   const [doodle, setDoodle] = useState(false);
+  const stickersOn = useFeature('stickers');
+  const [stickerPicker, setStickerPicker] = useState(false);
+  const [stickerMaker, setStickerMaker] = useState(false);
+
+  function sendSticker(st: OurSticker, url?: string) {
+    sendWithReply('', { media: { kind: 'sticker', path: st.path, meta: { width: st.width, height: st.height }, localUri: url } });
+  }
 
   async function sendPhoto(caption: string) {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
@@ -336,6 +345,7 @@ function Thread() {
           onVoice={(uri, ms) => void sendVoice(uri, ms).catch(fail)}
           onGif={env.giphyKey ? () => setGifs(true) : undefined}
           onDoodle={draw ? () => setDoodle(true) : undefined}
+          onSticker={stickersOn ? () => setStickerPicker(true) : undefined}
         />
         {draw ? (
           <DoodleSheet
@@ -356,7 +366,35 @@ function Thread() {
         onReact={(m, emoji) => void react(m.id, emoji).catch(fail)}
         onReply={(m) => setReplyTo(m)}
         onPin={(m, p) => void pin(m.id, p).catch(fail)}
+        onKeepSticker={
+          stickersOn
+            ? (m) =>
+                void keepSticker(sb, couple.id, me.id, m.media_path!, { width: m.media_meta?.width, height: m.media_meta?.height })
+                  .then(() => {
+                    channel.sendChanged(STICKERS_TOPIC);
+                    say('Saved to Our stickers');
+                  })
+                  .catch(fail)
+            : undefined
+        }
       />
+      {stickersOn ? (
+        <>
+          <StickerPicker
+            open={stickerPicker}
+            onClose={() => setStickerPicker(false)}
+            onMake={() => {
+              setStickerPicker(false);
+              setStickerMaker(true);
+            }}
+            onSend={(st, url) => {
+              setStickerPicker(false);
+              sendSticker(st, url);
+            }}
+          />
+          <StickerMaker open={stickerMaker} onClose={() => setStickerMaker(false)} onSaved={(st, send) => send && sendSticker(st)} />
+        </>
+      ) : null}
       <FormSheet open={panel !== null} title={panel === 'pins' ? 'Pinned' : 'Search messages'} onClose={() => setPanel(null)}>
         {panel === 'search' ? <SearchPanel onPick={pick} authorOf={authorOf} /> : null}
         {panel === 'pins' ? <MessageList items={pins.data ?? []} empty="Nothing pinned." onPick={pick} authorOf={authorOf} /> : null}
@@ -382,6 +420,7 @@ function MessageActions({
   onReact,
   onReply,
   onPin,
+  onKeepSticker,
 }: {
   message: Message | null;
   myId: string;
@@ -389,6 +428,8 @@ function MessageActions({
   onReact: (m: Message, emoji: string | null) => void;
   onReply: (m: Message) => void;
   onPin: (m: Message, pinned: boolean) => void;
+  /** Keep a sticker we made (one sent in chat) in Our stickers. */
+  onKeepSticker?: (m: Message) => void;
 }) {
   const c = usePalette();
   const mine = message?.reactions?.[myId] ?? null;
@@ -434,6 +475,9 @@ function MessageActions({
             onPress={act((m) => onPin(m, !m.pinned_at))}
             icon={message?.pinned_at ? <PinOff size={20} color={c.ink} /> : <Pin size={20} color={c.ink} />}
           />
+          {onKeepSticker && message?.media_kind === 'sticker' && isOurStickerPath(message.media_path) ? (
+            <ActionRow label="Save sticker" onPress={act(onKeepSticker)} icon={<Sticker size={20} color={c.ink} />} />
+          ) : null}
           {message?.body?.trim() ? (
             <ActionRow label="Copy text" onPress={act((m) => void Clipboard.setStringAsync(m.body ?? ''))} icon={<Copy size={20} color={c.ink} />} />
           ) : null}

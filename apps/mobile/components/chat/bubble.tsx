@@ -61,9 +61,12 @@ export function Bubble({
   const url = mediaUrl ?? message.localUri;
   const hasText = !!message.body?.trim();
   const photo = message.media_kind === 'image';
-  // GIFs and stickers: GIPHY links, animated. Stickers float without a bubble.
-  const linked = isLinkedMedia(message.media_kind) && isGiphyUrl(message.media_meta?.url) ? message.media_meta!.url! : null;
-  const sticker = !!linked && message.media_kind === 'sticker';
+  // GIFs and stickers: GIPHY links (animated), or a sticker we made (a file in
+  // our chat folder). Stickers float without a bubble.
+  const giphy = isLinkedMedia(message.media_kind) && isGiphyUrl(message.media_meta?.url) ? message.media_meta!.url! : null;
+  const ours = message.media_kind === 'sticker' && !!message.media_path ? (url ?? null) : null;
+  const linked = giphy ?? ours;
+  const sticker = message.media_kind === 'sticker' && !!(giphy || message.media_path);
   const meta = message.media_meta;
   const describe = hasText ? message.body : messagePreview(message);
   const settled = !message.pending && !message.failed;

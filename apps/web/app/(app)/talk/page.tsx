@@ -1,6 +1,6 @@
 'use client';
 
-import { clusters, formatDay, groupByDay, listPinned, messagePreview, searchMessages, snapReplyQuote, type Message } from '@us/shared';
+import { clusters, formatDay, groupByDay, keepSticker, listPinned, messagePreview, searchMessages, snapReplyQuote, STICKERS_TOPIC, type Message, type Sticker } from '@us/shared';
 import { useCallManager, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import { ChevronsDown, Phone, Pin, Search, Video } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -10,6 +10,8 @@ import { Bubble, type ReplyQuote } from '@/components/chat/bubble';
 import { CallEntry } from '@/components/chat/call-entry';
 import { Composer } from '@/components/chat/composer';
 import { DoodleDialog } from '@/components/draw/doodle-dialog';
+import { StickerMaker } from '@/components/stickers/maker';
+import { StickerPicker } from '@/components/stickers/picker';
 import { env } from '@/lib/env';
 import { GifPicker } from '@/components/chat/gif-picker';
 import { TypingBubble } from '@/components/chat/typing-bubble';
@@ -35,7 +37,7 @@ export default function TalkPage() {
 }
 
 function Thread() {
-  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf } = useCouple();
+  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf, channel } = useCouple();
   const partnerPhoto = photoOf(partnerSlot);
   const active = usePageActive();
   const { messages, loading, hasOlder, loadOlder, send, retry, react, pin } = useMessages({ viewing: active });
@@ -48,6 +50,11 @@ function Thread() {
   const [actionError, setActionError] = useState<string | null>(null);
   const draw = useFeature('draw');
   const [doodle, setDoodle] = useState(false);
+  const stickersOn = useFeature('stickers');
+  const [stickerPicker, setStickerPicker] = useState(false);
+  const [stickerMaker, setStickerMaker] = useState(false);
+  const sendSticker = (st: Sticker, url?: string) =>
+    sendWithReply('', { media: { kind: 'sticker', path: st.path, meta: { width: st.width, height: st.height }, localUri: url } });
 
   // Pinned messages (any age). Refreshes on a partner's pin ping and when a loaded message's pin changes.
   const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id), [sb, couple.id]);
@@ -274,6 +281,16 @@ function Thread() {
                               setActiveId(null);
                               void pin(m.id, p).catch(fail);
                             }}
+                            onKeepSticker={
+                              stickersOn
+                                ? () => {
+                                    setActiveId(null);
+                                    void keepSticker(sb, couple.id, me.id, m.media_path!, { width: m.media_meta?.width, height: m.media_meta?.height })
+                                      .then(() => channel.sendChanged(STICKERS_TOPIC))
+                                      .catch(fail);
+                                  }
+                                : undefined
+                            }
                             onOpenPhoto={setPhoto}
                             onJumpTo={(id) => void jumpTo(id)}
                           />
@@ -348,7 +365,25 @@ function Thread() {
             onVoice={sendVoice}
             onGif={env.giphyKey ? () => setGifs(true) : undefined}
             onDoodle={draw ? () => setDoodle(true) : undefined}
+            onSticker={stickersOn ? () => setStickerPicker(true) : undefined}
           />
+          {stickersOn ? (
+            <>
+              <StickerPicker
+                open={stickerPicker}
+                onOpenChange={setStickerPicker}
+                onMake={() => {
+                  setStickerPicker(false);
+                  setStickerMaker(true);
+                }}
+                onSend={(st, url) => {
+                  setStickerPicker(false);
+                  sendSticker(st, url);
+                }}
+              />
+              <StickerMaker open={stickerMaker} onOpenChange={setStickerMaker} onSaved={(st, send) => send && sendSticker(st)} />
+            </>
+          ) : null}
           {draw ? <DoodleDialog open={doodle} onOpenChange={setDoodle} mode="chat" onChatPhoto={(f) => void sendPhoto(f, '').catch(fail)} /> : null}
           <GifPicker
             open={gifs}

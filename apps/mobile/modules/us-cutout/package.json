@@ -1,0 +1,7 @@
+{
+  "name": "us-cutout",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sticker cut-out on Android: lifts the subject out of a photo with Google ML Kit, adds a white outline.",
+  "main": "index.ts"
+}

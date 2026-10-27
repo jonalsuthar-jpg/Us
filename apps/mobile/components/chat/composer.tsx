@@ -1,7 +1,7 @@
 import { formatVoiceLength } from '@us/shared';
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
-import { ArrowUp, ImagePlus, Mic, PenLine, Square, Trash2, X } from 'lucide-react-native';
+import { ArrowUp, ImagePlus, Mic, PenLine, Square, Sticker, Trash2, X } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { cn } from '../ui/cn';
@@ -21,6 +21,7 @@ export function Composer({
   onVoice,
   onGif,
   onDoodle,
+  onSticker,
 }: {
   partnerName: string;
   onSend: (text: string) => void;
@@ -34,6 +35,8 @@ export function Composer({
   onGif?: () => void;
   /** Draw a doodle and send it as a picture. */
   onDoodle?: () => void;
+  /** Our stickers: send one, or make one from a photo. */
+  onSticker?: () => void;
 }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +124,16 @@ export function Composer({
               className="h-10 w-10 items-center justify-center rounded-full active:bg-paper-sunken"
             >
               <ImagePlus size={21} color={c.inkSoft} />
+            </Pressable>
+          ) : null}
+          {onSticker ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Stickers"
+              onPress={onSticker}
+              className="h-10 w-10 items-center justify-center rounded-full active:bg-paper-sunken"
+            >
+              <Sticker size={20} color={c.inkSoft} />
             </Pressable>
           ) : null}
           {onDoodle ? (

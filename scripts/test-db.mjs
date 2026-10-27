@@ -1054,6 +1054,34 @@ await test('game settings: chosen draw time, hints and word choices, within limi
   }
 });
 
+console.log('\nStickers');
+
+await test('stickers: couple-only, saved as yourself, file in our folder, one row per file, creator removes', async () => {
+  const p1 = `${couple.id}/sticker-11111111-1111-4111-8111-111111111111.png`;
+  const s = await as(alice, () => one(`insert into public.stickers (couple_id, created_by, path) values ($1, $2, $3) returning *`, [couple.id, alice, p1]));
+  assert.equal((await as(bob, () => q(`select id from public.stickers`))).length, 1);
+  assert.equal((await as(carol, () => q(`select id from public.stickers`))).length, 0, 'outsider');
+  await rejects(as(bob, () => q(`insert into public.stickers (couple_id, created_by, path) values ($1, $2, $3)`, [couple.id, alice, `${couple.id}/sticker-22222222-2222-4222-8222-222222222222.png`])), /row-level security/, 'spoof');
+  await rejects(as(alice, () => q(`insert into public.stickers (couple_id, created_by, path) values ($1, $2, $3)`, [couple.id, alice, `${otherCouple.id}/sticker-22222222-2222-4222-8222-222222222222.png`])), /file_in_couple_folder/, 'foreign folder');
+  await rejects(as(alice, () => q(`insert into public.stickers (couple_id, created_by, path) values ($1, $2, $3)`, [couple.id, alice, `${couple.id}/../x.png`])), /file_in_couple_folder/, 'traversal');
+  await rejects(as(bob, () => q(`insert into public.stickers (couple_id, created_by, path) values ($1, $2, $3)`, [couple.id, bob, p1])), /duplicate key/, 'saved twice');
+  await as(bob, () => q(`delete from public.stickers where id = $1`, [s.id]));
+  assert.equal((await q(`select id from public.stickers where id = $1`, [s.id])).length, 1, 'partner cannot remove');
+  await as(alice, () => q(`delete from public.stickers where id = $1`, [s.id]));
+  assert.equal((await q(`select id from public.stickers where id = $1`, [s.id])).length, 0);
+  assert.ok((await one(`select features from public.plans where id = 'full'`)).features.includes('stickers'));
+});
+
+await test('sticker messages: a GIPHY link or one of our sticker files, nothing else', async () => {
+  const path = `${couple.id}/sticker-33333333-3333-4333-8333-333333333333.png`;
+  const send = (extra) => as(alice, () => q(`insert into public.messages (couple_id, sender_id, media_kind, media_path, media_meta) values ($1, $2, 'sticker', $3, $4)`, [couple.id, alice, extra.path ?? null, extra.meta ?? null]));
+  await send({ path });
+  await send({ meta: JSON.stringify({ url: 'https://media1.giphy.com/media/x/giphy.gif' }) });
+  await rejects(send({ path: `${couple.id}/photo.png` }), /media_shape/, 'not a sticker file');
+  await rejects(send({ path: `${otherCouple.id}/sticker-33333333-3333-4333-8333-333333333333.png` }), /media_shape|media_in_couple_folder/, 'other couple');
+  await rejects(send({ meta: JSON.stringify({ url: 'https://evil.example.com/x.gif' }) }), /media_shape/, 'other host');
+});
+
 console.log('\nLeaving');
 
 await test('unpair: removes everything we shared, keeps private data, frees both of us', async () => {
