@@ -72,8 +72,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         cameraPermission: 'Us uses your camera for video calls and to take photos you send in chat.',
         microphonePermission: 'Us uses your microphone for calls and voice notes.',
         recordAudioAndroid: false,
+        // We only take photos; no QR codes, so ML Kit's barcode model stays out.
+        barcodeScannerEnabled: false,
       },
     ],
+    ['./plugins/with-mlkit-models', { models: ['subject_segment'] }],
     [
       'expo-media-library',
       {
