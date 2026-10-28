@@ -1,5 +1,5 @@
 import { getCoupleContext, getMyAccess, tokens, type CoupleContext, type MyAccess } from '@us/shared';
-import { AccessProvider, CallProvider, CoupleProvider, useCallManager, useCallState, useCouple } from '@us/shared/react';
+import { AccessProvider, CallProvider, clearDataCache, CoupleProvider, hydrateDataCache, setDataCacheStore, useCallManager, useCallState, useCouple } from '@us/shared/react';
 import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -8,12 +8,16 @@ import { CallScreen } from '@/components/call/call-screen';
 import { DrawBridge, drawRoute } from '@/components/draw/draw-bridge';
 import { TapHeart } from '@/components/tap-heart';
 import { readAccess, readBoot, saveAccess, saveContext } from '@/lib/boot-cache';
+import { dataCacheStore } from '@/lib/data-cache-store';
 import { env } from '@/lib/env';
 import { initPush, onPush } from '@/lib/push';
 import { nativeRtc } from '@/lib/rtc';
 import { playChime, startRing, stopRing } from '@/lib/sounds';
 import { supabase } from '@/lib/supabase';
 import { usePalette } from '@/components/ui/palette';
+
+// Every screen's last-known data survives a cold start.
+setDataCacheStore(dataCacheStore);
 
 /** Resolves access and the couple, then mounts realtime + calls for every screen (tabs and settings). */
 export default function AppLayout() {
@@ -29,7 +33,7 @@ export default function AppLayout() {
       const { data } = await supabase.auth.getSession();
       const userId = data.session?.user.id;
       if (!userId) return router.replace('/sign-in');
-      const [cached, cachedAccess] = await Promise.all([readBoot(userId), readAccess(userId)]);
+      const [cached, cachedAccess] = await Promise.all([readBoot(userId), readAccess(userId), hydrateDataCache()]);
       if (cancelled) return;
       if (cachedAccess.status !== 'approved') return router.replace('/waiting');
       setAccess(cachedAccess);
@@ -56,12 +60,18 @@ export default function AppLayout() {
       }
       if (cancelled) return;
       saveContext(userId, next);
-      if (!next) return router.replace('/pair');
+      if (!next) {
+        clearDataCache();
+        return router.replace('/pair');
+      }
       // Swap in the fresh copy only if something changed, so realtime isn't torn down for nothing.
       if (!cached || JSON.stringify(cached) !== JSON.stringify(next)) setCtx(next);
     })();
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') router.replace('/sign-in');
+      if (event === 'SIGNED_OUT') {
+        clearDataCache();
+        router.replace('/sign-in');
+      }
     });
     return () => {
       cancelled = true;

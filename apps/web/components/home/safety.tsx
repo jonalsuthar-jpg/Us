@@ -42,6 +42,9 @@ export function SafetyCard() {
       return { ...locations, checks };
     },
     [sb, me.id, couple.id],
+    undefined,
+    // Where we are stays off the disk.
+    'memory',
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

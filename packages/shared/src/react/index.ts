@@ -10,3 +10,4 @@ export * from './use-spark';
 export * from './use-foreground-tick';
 export * from './access-provider';
 export * from './use-draw';
+export * from './data-cache';

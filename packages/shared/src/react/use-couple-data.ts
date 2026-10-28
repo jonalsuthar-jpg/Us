@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { friendlyError } from '../errors';
 import { useCouple } from './couple-provider';
+import { cacheKey, readCache, writeCache } from './data-cache';
 
 export interface CoupleData<T> {
   data: T | undefined;
@@ -20,6 +21,9 @@ export interface CoupleData<T> {
  *
  * Private data uses this too (with a topic nobody else pings), so it still
  * reloads after my own writes.
+ *
+ * The last answer is kept (see data-cache), so a screen opened again draws
+ * at once and refreshes behind it.
  */
 export function useCoupleData<T>(
   topic: string,
@@ -27,10 +31,16 @@ export function useCoupleData<T>(
   deps: unknown[] = [],
   /** Last-known data (e.g. saved on the device) to show while the first load runs. */
   initial?: T,
+  /** 'memory' for data that doesn't survive JSON (Sets, Maps) or goes stale fast. */
+  keep: 'persist' | 'memory' = 'persist',
 ): CoupleData<T> {
-  const { channel, me } = useCouple();
-  const [data, setData] = useState<T | undefined>(initial);
-  const [loading, setLoading] = useState(initial === undefined);
+  const { channel, me, couple } = useCouple();
+  // Plain values in deps (dates, ids) tell one slice from another, e.g. a calendar month.
+  const key = cacheKey(couple.id, `${topic}|${deps.filter((d) => ['string', 'number', 'boolean'].includes(typeof d)).join('|')}`);
+  const keyRef = useRef(key);
+  keyRef.current = key;
+  const [data, setData] = useState<T | undefined>(() => initial ?? readCache<T>(key));
+  const [loading, setLoading] = useState(data === undefined);
   const hasData = useRef(false);
   hasData.current = data !== undefined;
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +54,7 @@ export function useCoupleData<T>(
       const next = await loadRef.current();
       if (mine !== seq.current) return; // a newer load superseded this one
       setData(next);
+      writeCache(keyRef.current, next, keep === 'persist');
       setError(null);
     } catch (e) {
       if (mine === seq.current) setError(friendlyError(e));

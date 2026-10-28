@@ -67,6 +67,24 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     [
+      'expo-camera',
+      {
+        cameraPermission: 'Us uses your camera for video calls and to take photos you send in chat.',
+        microphonePermission: 'Us uses your microphone for calls and voice notes.',
+        recordAudioAndroid: false,
+      },
+    ],
+    [
+      'expo-media-library',
+      {
+        photosPermission: 'Us shows your recent photos so you can send one in chat.',
+        savePhotosPermission: 'Us saves photos you choose to keep.',
+        isAccessMediaLocationEnabled: false,
+        // Photos only: the camera strip never needs videos or audio.
+        granularPermissions: ['photo'],
+      },
+    ],
+    [
       'expo-location',
       {
         // Foreground only: sharing updates while Us is open, and "I'm home" is checked when you open it.

@@ -19,6 +19,8 @@ export function useSnaps(): CoupleData<SnapsData> {
       return { ...live, kept };
     },
     [sb, couple.id, me.id],
+    undefined,
+    'memory',
   );
 
   // Drop a snap from the screen when it expires, not on the next reload.

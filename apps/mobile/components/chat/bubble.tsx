@@ -2,8 +2,8 @@ import { describeCall, formatClock, formatVoiceLength, groupReactions, isGiphyUr
 import { Image as AnimatedImage } from 'expo-image';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Headphones, Pause, Phone, PhoneMissed, Pin, Play, Tv, Video } from 'lucide-react-native';
-import { useEffect, useRef } from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { memo, useEffect, useRef, useState } from 'react';
+import { Pressable, View } from 'react-native';
 import { cn } from '../ui/cn';
 import { Text } from '../ui/text';
 import { Ticks } from '../ui/ticks';
@@ -19,7 +19,11 @@ export interface ReplyQuote {
   text: string;
 }
 
-export function Bubble({
+/**
+ * One message. Memoised: callbacks take the message, so the thread can pass
+ * the same functions to every row and only rows whose message changed redraw.
+ */
+export const Bubble = memo(function Bubble({
   message,
   mine,
   slot,
@@ -47,10 +51,10 @@ export function Bubble({
   mediaUrl?: string;
   quote?: ReplyQuote | null;
   highlighted?: boolean;
-  onRetry?: () => void;
+  onRetry?: (id: string) => void;
   /** Opens reactions / reply / pin. */
-  onLongPress?: () => void;
-  onReact?: (emoji: string | null) => void;
+  onLongPress?: (m: Message) => void;
+  onReact?: (m: Message, emoji: string | null) => void;
   onOpenPhoto?: (url: string) => void;
   onJumpTo?: (id: string) => void;
   /** GIFs and stickers play; off while the chat isn't on screen. */
@@ -76,18 +80,21 @@ export function Bubble({
     const now = Date.now();
     if (settled && now - lastTap.current < 300) {
       lastTap.current = 0;
-      onReact?.(message.reactions?.[myId] === '❤️' ? null : '❤️');
+      onReact?.(message, message.reactions?.[myId] === '❤️' ? null : '❤️');
     } else lastTap.current = now;
   };
+  const longPress = onLongPress ? () => onLongPress(message) : undefined;
+  // Our own files are kept on disk by their storage path, so a re-signed link doesn't download them again.
+  const source = (u: string) => (message.media_path && mediaUrl ? { uri: u, cacheKey: message.media_path } : { uri: u });
   return (
     <View className={cn(mine ? 'items-end' : 'items-start', first ? 'mt-3' : 'mt-0.5', reactions.length ? 'mb-3' : '')}>
       <Pressable
         onPress={onPress}
-        onLongPress={onLongPress}
+        onLongPress={longPress}
         delayLongPress={300}
-        accessibilityHint="Double tap for a heart. Long press to react, reply or pin"
+        accessibilityHint="Double tap for a heart. Swipe right to reply. Long press to react, reply or pin"
         accessibilityActions={[{ name: 'longpress', label: 'React, reply or pin' }]}
-        onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && onLongPress?.()}
+        onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && longPress?.()}
         className="max-w-[80%]"
       >
         <View
@@ -120,22 +127,24 @@ export function Bubble({
 
           {photo ? (
             url ? (
-              <Pressable accessibilityRole="imagebutton" accessibilityLabel="Open photo" onPress={() => onOpenPhoto?.(url)} onLongPress={onLongPress}>
-                <Image
-                  source={{ uri: url }}
-                  style={{ width: 240, aspectRatio: meta?.width && meta?.height ? Math.max(meta.width / meta.height, 0.6) : 4 / 3 }}
-                  className="rounded-[14px] bg-black/10"
-                  resizeMode="cover"
+              <Pressable accessibilityRole="imagebutton" accessibilityLabel="Open photo" onPress={() => onOpenPhoto?.(url)} onLongPress={longPress}>
+                <AnimatedImage
+                  source={source(url)}
+                  recyclingKey={message.id}
+                  cachePolicy="memory-disk"
+                  transition={120}
+                  style={{ width: 240, aspectRatio: photoAspect(meta), borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.08)' }}
+                  contentFit="cover"
                 />
               </Pressable>
             ) : (
-              <View style={{ width: 240, height: 180 }} className="rounded-[14px] bg-black/10" />
+              <View style={{ width: 240, aspectRatio: photoAspect(meta) }} className="rounded-[14px] bg-black/10" />
             )
           ) : null}
 
           {linked ? (
             <AnimatedImage
-              source={linked}
+              source={giphy ? linked : source(linked)}
               accessibilityLabel={message.media_kind === 'sticker' ? 'Sticker' : 'GIF'}
               style={{
                 width: sticker ? 150 : 220,
@@ -143,6 +152,8 @@ export function Bubble({
                 borderRadius: sticker ? 0 : 14,
               }}
               contentFit="contain"
+              cachePolicy="memory-disk"
+              recyclingKey={message.id}
               autoplay={animate}
             />
           ) : null}
@@ -163,7 +174,7 @@ export function Bubble({
                 key={r.emoji}
                 accessibilityRole="button"
                 accessibilityLabel={`${r.emoji} ${r.count}${r.mine ? ', yours. Remove' : ''}`}
-                onPress={() => onReact?.(r.mine ? null : r.emoji)}
+                onPress={() => onReact?.(message, r.mine ? null : r.emoji)}
                 className={cn('h-6 flex-row items-center gap-0.5 rounded-full border bg-paper-raised px-1.5', r.mine ? 'border-rose-300' : 'border-paper-edge')}
               >
                 <Text className="text-[13px] leading-[16px]">{r.emoji}</Text>
@@ -174,59 +185,100 @@ export function Bubble({
         ) : null}
       </Pressable>
       {message.failed && onRetry && (
-        <Pressable accessibilityRole="button" onPress={onRetry} className="mt-1 py-1">
+        <Pressable accessibilityRole="button" onPress={() => onRetry(message.id)} className="mt-1 py-1">
           <Text className="font-sans-medium text-micro text-rose-700">Not sent — tap to retry</Text>
         </Pressable>
       )}
     </View>
   );
+});
+
+const photoAspect = (meta: Message['media_meta']) => (meta?.width && meta?.height ? Math.max(meta.width / meta.height, 0.6) : 4 / 3);
+
+/**
+ * A voice note. Nothing native is made until it's first played, so a thread
+ * full of voice notes scrolls as lightly as text.
+ */
+function VoiceNote({ url, durationMs, mine }: { url?: string; durationMs?: number; mine: boolean }) {
+  const [on, setOn] = useState(false);
+  if (on && url) return <VoicePlayer url={url} durationMs={durationMs} mine={mine} />;
+  return (
+    <VoiceRow mine={mine} playing={false} progress={0} disabled={!url} durationMs={durationMs} label={formatVoiceLength(durationMs)} onPress={() => setOn(true)} />
+  );
 }
 
-/** Play / pause, progress and length for a voice note. */
-function VoiceNote({ url, durationMs, mine }: { url?: string; durationMs?: number; mine: boolean }) {
-  const player = useAudioPlayer(url ? { uri: url } : null);
+/** Play / pause, progress and length, once the note has been played. */
+function VoicePlayer({ url, durationMs, mine }: { url: string; durationMs?: number; mine: boolean }) {
+  const player = useAudioPlayer({ uri: url });
   const status = useAudioPlayerStatus(player);
   const total = status.duration ? status.duration * 1000 : (durationMs ?? 0);
   const progress = total ? Math.min(1, (status.currentTime * 1000) / total) : 0;
-  const c = usePalette();
-  const fg = mine ? '#fff' : c.ink;
+  const play = () => {
+    void setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    player.play();
+  };
+  // Made by the first tap: start playing straight away.
+  useEffect(play, [player]);
   useEffect(() => {
     if (status.didJustFinish) void player.seekTo(0);
   }, [status.didJustFinish, player]);
   return (
+    <VoiceRow
+      mine={mine}
+      playing={status.playing}
+      progress={progress}
+      durationMs={durationMs}
+      label={formatVoiceLength(status.playing || status.currentTime ? status.currentTime * 1000 : durationMs)}
+      onPress={() => (status.playing ? player.pause() : play())}
+    />
+  );
+}
+
+function VoiceRow({
+  mine,
+  playing,
+  progress,
+  label,
+  durationMs,
+  disabled,
+  onPress,
+}: {
+  mine: boolean;
+  playing: boolean;
+  progress: number;
+  label: string;
+  durationMs?: number;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const c = usePalette();
+  const fg = mine ? '#fff' : c.ink;
+  return (
     <View className="w-[220px] flex-row items-center gap-3 py-1">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={status.playing ? 'Pause voice note' : `Play voice note, ${formatVoiceLength(durationMs)}`}
-        disabled={!url}
-        onPress={() => {
-          if (status.playing) player.pause();
-          else {
-            void setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
-            player.play();
-          }
-        }}
-        className={cn('h-9 w-9 items-center justify-center rounded-full', mine ? 'bg-rose-600' : 'bg-paper-sunken', !url && 'opacity-50')}
+        accessibilityLabel={playing ? 'Pause voice note' : `Play voice note, ${formatVoiceLength(durationMs)}`}
+        disabled={disabled}
+        onPress={onPress}
+        className={cn('h-9 w-9 items-center justify-center rounded-full', mine ? 'bg-rose-600' : 'bg-paper-sunken', disabled && 'opacity-50')}
       >
-        {status.playing ? <Pause size={16} color={fg} fill={fg} /> : <Play size={16} color={fg} fill={fg} />}
+        {playing ? <Pause size={16} color={fg} fill={fg} /> : <Play size={16} color={fg} fill={fg} />}
       </Pressable>
       <View className="flex-1 gap-1">
         <View className="h-1 overflow-hidden rounded-full bg-plum-100">
           <View style={{ width: `${progress * 100}%` }} className="h-1 rounded-full bg-rose-500" />
         </View>
-        <Text className="text-micro text-ink-muted">
-          {formatVoiceLength(status.playing || status.currentTime ? status.currentTime * 1000 : durationMs)}
-        </Text>
+        <Text className="text-micro text-ink-muted">{label}</Text>
       </View>
     </View>
   );
 }
 
-export function CallEntry({ message, myId, onCallBack }: { message: Message; myId: string; onCallBack: (m: CallMedia) => void }) {
+export const CallEntry = memo(function CallEntry({ message, myId, onCallBack }: { message: Message; myId: string; onCallBack: (m: CallMedia) => void }) {
   const call = message.call;
+  const c = usePalette();
   if (!call) return null;
   const { label, missed, detail } = describeCall(call, myId);
-  const c = usePalette();
   const color = missed ? c.onRoseDeep : c.inkSoft;
   const Icon = missed ? PhoneMissed : { audio: Phone, video: Video, listen: Headphones, watch: Tv }[call.media];
   const text = `${label}${detail ? ` · ${detail}` : ''} · ${formatClock(call.created_at)}`;
@@ -253,4 +305,4 @@ export function CallEntry({ message, myId, onCallBack }: { message: Message; myI
       )}
     </View>
   );
-}
+});

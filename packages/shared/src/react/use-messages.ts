@@ -14,6 +14,10 @@ import {
 import { notifyPartner } from '../api/push';
 import type { Message } from '../database.types';
 import { useCouple } from './couple-provider';
+import { cacheKey, readCache, writeCache } from './data-cache';
+
+/** How much of the thread is kept on the device for an instant open. */
+const KEEP = 60;
 
 interface Options {
   /** True while the thread is on screen and the app/tab is in the foreground. */
@@ -23,12 +27,14 @@ interface Options {
 /**
  * The chat thread: initial page, older pages, live inserts and receipt
  * updates, optimistic sends with retry, and read receipts while viewing.
- * Messages are kept oldest → newest.
+ * Messages are kept oldest → newest. The newest page is cached, so the
+ * thread draws at once and the server's copy merges in behind it.
  */
 export function useMessages({ viewing }: Options) {
   const { sb, couple, me, partner, channel, refreshUnread } = useCouple();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
+  const key = cacheKey(couple.id, 'chat:messages');
+  const [messages, setMessages] = useState<Message[]>(() => readCache<Message[]>(key) ?? []);
+  const [loading, setLoading] = useState(() => !readCache(key));
   const [hasOlder, setHasOlder] = useState(true);
   const viewingRef = useRef(viewing);
   viewingRef.current = viewing;
@@ -97,6 +103,16 @@ export function useMessages({ viewing }: Options) {
   useEffect(() => {
     if (viewing && !loading) markRead();
   }, [viewing, loading, markRead]);
+
+  // Keep the newest settled messages for next time (no drafts, no on-device files).
+  useEffect(() => {
+    if (loading) return;
+    const settled = messages.filter((m) => !m.pending && !m.failed);
+    writeCache(
+      key,
+      settled.slice(-KEEP).map(({ localUri: _l, upload: _u, ...m }) => m),
+    );
+  }, [key, loading, messages]);
 
   const loadOlder = useCallback(async () => {
     const oldest = messages[0];

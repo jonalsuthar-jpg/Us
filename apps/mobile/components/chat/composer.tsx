@@ -1,42 +1,45 @@
 import { formatVoiceLength } from '@us/shared';
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
-import { ArrowUp, ImagePlus, Mic, PenLine, Square, Sticker, Trash2, X } from 'lucide-react-native';
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { Camera, Mic, Paperclip, SendHorizontal, Square, Sticker, Trash2, X } from 'lucide-react-native';
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { cn } from '../ui/cn';
+import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withSpring, withTiming, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { usePalette } from '../ui/palette';
 import { Text } from '../ui/text';
 import type { ReplyQuote } from './bubble';
 
 const MAX_VOICE_MS = 5 * 60_000;
+const ICON = { size: 22, strokeWidth: 1.8 };
 
+/**
+ * The message bar, laid out like WhatsApp: stickers on the left of the
+ * field, attach and camera on its right, and one round button outside it that
+ * records a voice note and becomes Send once there's text.
+ */
 export function Composer({
   partnerName,
   onSend,
   onChange,
   replyTo,
   onCancelReply,
-  onPhoto,
   onVoice,
-  onGif,
-  onDoodle,
   onSticker,
+  onAttach,
+  onCamera,
 }: {
   partnerName: string;
   onSend: (text: string) => void;
   onChange: (text: string) => void;
   replyTo?: ReplyQuote | null;
   onCancelReply?: () => void;
-  /** Pick a photo; the current text goes along as its caption. */
-  onPhoto?: (caption: string) => void;
   onVoice?: (uri: string, durationMs: number) => void;
-  /** Open the GIF and sticker picker. */
-  onGif?: () => void;
-  /** Draw a doodle and send it as a picture. */
-  onDoodle?: () => void;
   /** Our stickers: send one, or make one from a photo. */
   onSticker?: () => void;
+  /** The attach sheet: gallery, camera, draw, GIF, make a sticker. */
+  onAttach?: () => void;
+  /** The in-app camera. */
+  onCamera?: () => void;
 }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +89,7 @@ export function Composer({
   return (
     <View className="gap-2">
       {replyTo ? (
-        <View className="flex-row items-center gap-3 rounded-[18px] border border-paper-edge bg-paper-sunken px-4 py-2">
+        <Animated.View entering={FadeIn.duration(140)} className="flex-row items-center gap-3 rounded-[18px] border border-paper-edge bg-paper-sunken px-4 py-2">
           <View className="flex-1 border-l-[3px] border-rose-400 pl-2.5">
             <Text className="font-sans-medium text-micro">{`Replying to ${replyTo.author}`}</Text>
             <Text numberOfLines={1} className="text-small text-ink-soft">
@@ -96,106 +99,152 @@ export function Composer({
           <Pressable accessibilityRole="button" accessibilityLabel="Cancel reply" hitSlop={8} onPress={onCancelReply}>
             <X size={18} color={c.inkMuted} />
           </Pressable>
-        </View>
+        </Animated.View>
       ) : null}
       {error ? <Text className="px-2 text-small text-rose-700">{error}</Text> : null}
 
-      {recording ? (
-        <View className="flex-row items-center gap-3 rounded-[26px] border border-rose-300 bg-paper-raised p-1.5 pl-4">
-          <View className="h-2.5 w-2.5 rounded-full bg-rose-600" />
-          <Text className="flex-1" accessibilityLiveRegion="none">{`Recording ${formatVoiceLength(rec.durationMillis)}`}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Discard voice note" onPress={() => void stop(false)} className="h-10 w-10 items-center justify-center rounded-full">
-            <Trash2 size={20} color={c.inkSoft} />
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Send voice note" onPress={() => void stop(true)} className="h-10 w-10 items-center justify-center rounded-full bg-rose-600">
-            <Square size={16} color="#fff" fill="#fff" />
-          </Pressable>
-        </View>
-      ) : (
-        <View className="flex-row items-end gap-1.5 rounded-[26px] border border-paper-edge bg-paper-raised p-1.5 pl-2">
-          {onPhoto ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Send a photo"
-              onPress={() => {
-                onPhoto(text.trim());
-                setText('');
+      <View className="flex-row items-end gap-2">
+        {recording ? (
+          <View className="min-h-[48px] flex-1 flex-row items-center gap-3 rounded-[26px] border border-rose-300 bg-paper-raised pl-4 pr-1" style={{ elevation: 1 }}>
+            <View className="h-2.5 w-2.5 rounded-full bg-rose-600" />
+            <Text className="flex-1" accessibilityLiveRegion="none">{`Recording ${formatVoiceLength(rec.durationMillis)}`}</Text>
+            <IconTap label="Discard voice note" onPress={() => void stop(false)}>
+              <Trash2 {...ICON} color={c.inkSoft} />
+            </IconTap>
+          </View>
+        ) : (
+          <View className="min-h-[48px] flex-1 flex-row items-end rounded-[26px] border border-paper-edge bg-paper-raised px-1" style={{ elevation: 1 }}>
+            {onSticker ? (
+              <IconTap label="Stickers" onPress={onSticker}>
+                <Sticker {...ICON} color={c.inkSoft} />
+              </IconTap>
+            ) : (
+              <View className="w-3" />
+            )}
+            <TextInput
+              ref={input}
+              accessibilityLabel={`Message ${partnerName}`}
+              placeholder={`Message ${partnerName}…`}
+              placeholderTextColor={c.placeholder}
+              multiline
+              maxLength={4000}
+              value={text}
+              onChangeText={(t) => {
+                setText(t);
+                onChange(t);
               }}
-              className="h-10 w-10 items-center justify-center rounded-full active:bg-paper-sunken"
-            >
-              <ImagePlus size={21} color={c.inkSoft} />
-            </Pressable>
-          ) : null}
-          {onSticker ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Stickers"
-              onPress={onSticker}
-              className="h-10 w-10 items-center justify-center rounded-full active:bg-paper-sunken"
-            >
-              <Sticker size={20} color={c.inkSoft} />
-            </Pressable>
-          ) : null}
-          {onDoodle ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Draw a doodle"
-              onPress={onDoodle}
-              className="h-10 w-10 items-center justify-center rounded-full active:bg-paper-sunken"
-            >
-              <PenLine size={20} color={c.inkSoft} />
-            </Pressable>
-          ) : null}
-          {onGif ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Send a GIF or sticker"
-              onPress={onGif}
-              className="h-10 items-center justify-center rounded-full px-1.5 active:bg-paper-sunken"
-            >
-              <Text className="rounded-md border-[1.5px] border-ink-soft px-1 font-sans-bold text-[11px] leading-[14px] text-ink-soft">GIF</Text>
-            </Pressable>
-          ) : null}
-          <TextInput
-            ref={input}
-            accessibilityLabel={`Message ${partnerName}`}
-            placeholder={`Message ${partnerName}…`}
-            placeholderTextColor={c.placeholder}
-            multiline
-            maxLength={4000}
-            value={text}
-            onChangeText={(t) => {
-              setText(t);
-              onChange(t);
-            }}
-            className="max-h-[140px] flex-1 py-2.5 font-sans text-body text-ink"
-          />
-          {!canSend && onVoice ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Record a voice note"
-              onPress={() => void start()}
-              className="h-10 w-10 items-center justify-center rounded-full bg-rose-50 active:bg-rose-100"
-            >
-              <Mic size={20} color={c.roseStrong} />
-            </Pressable>
+              className="max-h-[140px] flex-1 px-1 py-3 font-sans text-body text-ink"
+            />
+            {onAttach ? (
+              <IconTap label="Attach" onPress={onAttach}>
+                <View style={{ transform: [{ rotate: '-45deg' }] }}>
+                  <Paperclip {...ICON} color={c.inkSoft} />
+                </View>
+              </IconTap>
+            ) : null}
+            {/* Out of the way while typing, as in WhatsApp, so the words get the room. */}
+            {onCamera && !canSend ? (
+              <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(100)}>
+                <IconTap label="Camera" onPress={onCamera}>
+                  <Camera {...ICON} color={c.inkSoft} />
+                </IconTap>
+              </Animated.View>
+            ) : null}
+          </View>
+        )}
+
+        <ActionButton
+          label={recording ? 'Send voice note' : canSend ? 'Send' : 'Record a voice note'}
+          disabled={!recording && !canSend && !onVoice}
+          onPress={() => {
+            if (recording) return void stop(true);
+            if (canSend) {
+              void Haptics.selectionAsync().catch(() => {});
+              onSend(text.trim());
+              setText('');
+              return;
+            }
+            void start();
+          }}
+        >
+          {recording ? (
+            <Animated.View key="stop" entering={ZoomIn.duration(140)} exiting={ZoomOut.duration(100)}>
+              <Square size={17} color="#fff" fill="#fff" />
+            </Animated.View>
+          ) : canSend ? (
+            <Animated.View key="send" entering={ZoomIn.duration(140)} exiting={ZoomOut.duration(100)}>
+              <SendHorizontal size={21} color="#fff" strokeWidth={2.1} style={{ marginLeft: 2 }} />
+            </Animated.View>
           ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Send"
-              accessibilityState={{ disabled: !canSend }}
-              disabled={!canSend}
-              onPress={() => {
-                onSend(text.trim());
-                setText('');
-              }}
-              className={cn('h-10 w-10 items-center justify-center rounded-full bg-rose-600 active:bg-rose-700', !canSend && 'opacity-30')}
-            >
-              <ArrowUp size={20} color="#fff" strokeWidth={2.25} />
-            </Pressable>
+            <Animated.View key="mic" entering={ZoomIn.duration(140)} exiting={ZoomOut.duration(100)}>
+              <Mic size={22} color="#fff" strokeWidth={2} />
+            </Animated.View>
           )}
-        </View>
-      )}
+        </ActionButton>
+      </View>
     </View>
+  );
+}
+
+/** Springs down a little under the finger. */
+function usePressScale(to: number) {
+  const s = useSharedValue(1);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  return {
+    style,
+    onPressIn: () => {
+      s.value = withTiming(to, { duration: 90 });
+    },
+    onPressOut: () => {
+      s.value = withSpring(1, { damping: 14, stiffness: 320 });
+    },
+  };
+}
+
+/** A round, quiet icon button inside the message field. */
+function IconTap({ label, onPress, children }: { label: string; onPress: () => void; children: ReactNode }) {
+  const press = usePressScale(0.86);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={4}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      onPress={() => {
+        void Haptics.selectionAsync().catch(() => {});
+        onPress();
+      }}
+      className="h-[46px] w-10 items-center justify-center"
+    >
+      <Animated.View style={press.style}>{children}</Animated.View>
+    </Pressable>
+  );
+}
+
+/** The round mic / send button beside the field. */
+function ActionButton({ label, disabled, onPress, children }: { label: string; disabled?: boolean; onPress: () => void; children: ReactNode }) {
+  const press = usePressScale(0.9);
+  const c = usePalette();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      onPress={onPress}
+    >
+      <Animated.View
+        style={[
+          press.style,
+          { height: 48, width: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: c.roseStrong, elevation: 3, shadowColor: c.roseStrong, shadowOpacity: 0.35, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+          disabled && { opacity: 0.4 },
+        ]}
+      >
+        {children}
+      </Animated.View>
+    </Pressable>
   );
 }
