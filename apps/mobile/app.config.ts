@@ -44,7 +44,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-router',
     'expo-font',
-    'expo-secure-store',
     ['expo-splash-screen', { backgroundColor: PAPER, image: './assets/images/icon.png', imageWidth: 120 }],
     [
       'expo-build-properties',

@@ -1,7 +1,8 @@
 'use client';
 
-import { draftMessage, SPARK_DIVISIONS, tokens, type Message } from '@us/shared';
+import { draftMessage, tokens, type Message } from '@us/shared';
 import { Mic, MicOff, MonitorUp, Phone, PhoneOff, Video } from 'lucide-react';
+import { notFound } from 'next/navigation';
 import { useState } from 'react';
 import { Bubble } from '@/components/chat/bubble';
 import { CallEntry } from '@/components/chat/call-entry';
@@ -13,8 +14,6 @@ import { Field } from '@/components/ui/field';
 import { IconButton } from '@/components/ui/icon-button';
 import { PrivacyBadge } from '@/components/ui/privacy';
 import { Sheet } from '@/components/ui/sheet';
-import { ChipFace } from '@/components/spark/rank-chip';
-import { Emblem } from '@/components/spark/emblem';
 
 const SWATCHES: { name: string; role: string; hex: string; text?: boolean }[] = [
   { name: 'Deep plum', role: 'Ink · dark surfaces · calls', hex: tokens.colors.plum[800], text: true },
@@ -22,7 +21,7 @@ const SWATCHES: { name: string; role: string; hex: string; text?: boolean }[] = 
   { name: 'Rose clay', role: 'Primary · partner A', hex: tokens.colors.rose[400], text: true },
   { name: 'Dusty teal', role: 'Secondary · partner B', hex: tokens.colors.teal[500], text: true },
   { name: 'Warm gold', role: 'Highlights · memories', hex: tokens.colors.gold[400] },
-  { name: 'Sage', role: 'Growth · wellbeing', hex: tokens.colors.sage[400], text: true },
+  { name: 'Sage', role: 'Accents · plant', hex: tokens.colors.sage[400], text: true },
 ];
 
 const SAMPLE_AT = '2026-10-20T19:42:00.000Z';
@@ -33,6 +32,7 @@ function sample(id: string, sender: string, body: string, status: Message['statu
 }
 
 export default function DesignPage() {
+  if (process.env.NODE_ENV === 'production') notFound();
   const [dialog, setDialog] = useState(false);
   const now = SAMPLE_AT;
   const call = {
@@ -213,28 +213,6 @@ export default function DesignPage() {
         <p className="mt-4 text-small text-ink-muted">
           Ticks: clock = sending · one = sent · two = delivered · two gold = read.
         </p>
-      </Section>
-
-      <Section title="Spark Rank">
-        <div className="flex flex-wrap gap-3">
-          {[
-            { d: SPARK_DIVISIONS[0]!, progress: 0.2 },
-            { d: SPARK_DIVISIONS[8]!, progress: 0.55 },
-            { d: SPARK_DIVISIONS[13]!, progress: 0.85 },
-            { d: SPARK_DIVISIONS[21]!, progress: 1 },
-          ].map(({ d, progress }) => (
-            <ChipFace key={d.index} division={d} progress={progress} label={d.name} />
-          ))}
-        </div>
-        <ul className="mt-6 grid grid-cols-3 gap-4 sm:grid-cols-6">
-          {SPARK_DIVISIONS.map((d) => (
-            <li key={d.index} className="flex flex-col items-center gap-1.5">
-              <Emblem division={d} className="h-14 w-14" />
-              <span className="text-micro text-ink-muted">{d.name}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-4 text-small text-ink-muted">Each step of a tier gets more gold: I plain, II a rim, III a heavier rim, wings and a gem.</p>
       </Section>
 
       <Dialog

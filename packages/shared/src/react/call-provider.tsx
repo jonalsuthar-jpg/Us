@@ -38,7 +38,6 @@ export function CallProvider({ rtc, forceRelay, children }: Props) {
           iceServers: () => fetchIceServers(sb),
           notify: (req) => void notifyPartner(sb, req),
         },
-        log: (...a) => console.debug(...a),
       }),
     [sb, couple.id, me.id, partner.id, channel, rtc, forceRelay],
   );

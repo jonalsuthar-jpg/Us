@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   turbopack: { root: monorepoRoot },
   outputFileTracingRoot: monorepoRoot,
   reactStrictMode: true,
+  // Production bundles keep only errors and warnings.
+  compiler: { removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false },
   async headers() {
     return [
       {
