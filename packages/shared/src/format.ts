@@ -28,7 +28,7 @@ export function formatDuration(ms: number): string {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-/** What a call is, in words: "voice call", "video call", "listen together", "watch together". */
+/** What a call is, in words. Listen and watch are retired, but older call-log rows still name them. */
 export function callKind(media: Call['media']): string {
   return { audio: 'voice call', video: 'video call', listen: 'listen together', watch: 'watch together' }[media] ?? 'call';
 }

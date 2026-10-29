@@ -1,15 +1,13 @@
 /**
- * The app's five areas. Both apps build their navigation and the Phase 3–6
+ * The app's four areas. Both apps build their navigation and the Phase 3–6
  * placeholder screens from this list so the roadmap lives in one place.
  */
-export type ModuleId = 'talk' | 'connect' | 'plan' | 'memory' | 'growth';
+export type ModuleId = 'talk' | 'connect' | 'plan' | 'memory';
 
 export interface Feature {
   title: string;
   blurb: string;
   privacy: 'shared' | 'private' | 'private-until-reveal';
-  /** Not built yet, in a module that is otherwise live. */
-  soon?: boolean;
 }
 
 export interface AppModule {
@@ -21,17 +19,6 @@ export interface AppModule {
   status: 'live' | 'planned';
   features: Feature[];
 }
-
-/** Live things to do together on Connect that are still to come, after Listen and Watch. */
-export const TOGETHER_SOON: { id: 'draw' | 'games' | 'read'; title: string; blurb: string; short: string }[] = [
-  {
-    id: 'games',
-    title: 'Couple games',
-    blurb: 'How well do you know me, Would you rather, This or that. Answers revealed together.',
-    short: 'Quizzes revealed together',
-  },
-  { id: 'read', title: 'Read together', blurb: 'A short story or a poem, one shared page, highlights you both see.', short: 'One page, shared highlights' },
-];
 
 export const MODULES: AppModule[] = [
   {
@@ -58,19 +45,6 @@ export const MODULES: AppModule[] = [
         blurb: 'One prompt a day. Answers stay hidden until you’ve both replied.',
         privacy: 'private-until-reveal',
       },
-      {
-        title: 'Fight Translator',
-        blurb: 'Each of you writes privately. Underneath, a need — revealed only once you’ve both written, after a breath.',
-        privacy: 'private-until-reveal',
-        soon: true,
-      },
-      {
-        title: 'Future Letters',
-        blurb: 'Write now, sealed until a date or a milestone you choose.',
-        privacy: 'private-until-reveal',
-        soon: true,
-      },
-      { title: 'Inside Jokes', blurb: 'A dictionary of only-you-two moments, resurfaced now and then.', privacy: 'shared', soon: true },
     ],
   },
   {
@@ -100,23 +74,6 @@ export const MODULES: AppModule[] = [
       { title: 'Timeline', blurb: 'Moments, with photos.', privacy: 'shared' },
       { title: 'On this day', blurb: 'A gentle tap from the past.', privacy: 'shared' },
       { title: 'Trips & dates', blurb: 'Where you went — and private notes on how it felt.', privacy: 'private' },
-    ],
-  },
-  {
-    id: 'growth',
-    title: 'Growth',
-    tagline: 'Growing up, together and apart.',
-    phase: 6,
-    status: 'live',
-    features: [
-      { title: 'Goals', blurb: 'Yours, theirs, and ours.', privacy: 'shared' },
-      {
-        title: 'Mood check-ins',
-        blurb: 'Only you see your notes. Your partner can get a soft nudge — never the details.',
-        privacy: 'private',
-      },
-      { title: 'Worry space', blurb: 'Private by default. Share only if and when you want.', privacy: 'private' },
-      { title: 'Love languages', blurb: 'A quiz, and the occasional gentle idea.', privacy: 'private' },
     ],
   },
 ];

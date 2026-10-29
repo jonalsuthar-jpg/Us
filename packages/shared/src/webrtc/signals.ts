@@ -4,12 +4,6 @@ export interface MediaState {
   mic: boolean;
   camera: boolean;
   screen: boolean;
-  /** Listen together: I'm sharing what's playing (sound only). */
-  sound?: boolean;
-  /** …and I've paused it, for both of us. */
-  soundPaused?: boolean;
-  /** …and what I say is playing, shown to my partner. */
-  nowPlaying?: string | null;
 }
 
 /**
@@ -22,7 +16,7 @@ export interface MediaState {
  *   ── sdp(offer) ──────────────────▶
  *   ◀──────────────────── sdp(answer)
  *   ◀── ice ──────────────────── ice ─▶ (trickle, both ways)
- *   ◀── media-state ── media-state ──▶ (mic / camera / screen / sound flags)
+ *   ◀── media-state ── media-state ──▶ (mic / camera / screen flags)
  *   ── hangup ─────────────────────▶   (either side)
  *   ── cancel ─────────────────────▶   (caller gave up before answer)
  */

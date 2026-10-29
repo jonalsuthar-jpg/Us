@@ -8,7 +8,7 @@ import { cn } from '@/lib/cn';
 import { CoupleDoodle } from './art';
 import { DoodleDialog } from './doodle-dialog';
 
-/** Draw together and Draw & Guess, the two tiles under Listen and Watch. */
+/** Draw together and Draw & Guess, the two tiles at the top of Connect. */
 export function DrawTiles() {
   const { partner, partnerOnline } = useCouple();
   const drawing = usePartnerDrawing();

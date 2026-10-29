@@ -8,7 +8,7 @@ import { Display, Text } from '../ui/text';
 import { CoupleDoodle } from './art';
 import { DoodleSheet } from './doodle-sheet';
 
-/** Draw together and Draw & Guess, two-up under Listen and Watch. */
+/** Draw together and Draw & Guess, two-up. */
 export function DrawTiles() {
   const { partner, partnerOnline } = useCouple();
   const drawing = usePartnerDrawing();

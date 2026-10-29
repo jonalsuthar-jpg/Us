@@ -1,7 +1,7 @@
 import { formatDuration, type CallState } from '@us/shared';
 import { useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { Bluetooth, Check, ChevronDown, Ear, Headphones, Maximize, Mic, MicOff, Minimize, MonitorPlay, MonitorUp, PenLine, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
+import { Bluetooth, Check, ChevronDown, Ear, Headphones, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StatusBar, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -24,7 +24,6 @@ import { cn } from '../ui/cn';
 import { LiveBoard } from '../draw/live-board';
 import { Button, IconButton } from '../ui/button';
 import { Display, Text } from '../ui/text';
-import { ListenSurface } from './listen-surface';
 
 /**
  * Full-screen call surface, mounted once in the app layout. A call in progress
@@ -69,9 +68,7 @@ export function CallScreen() {
         onRequestClose={full ? () => setFull(false) : minimise}
       >
         {state.phase !== 'idle' &&
-          (state.media === 'listen' ? (
-            <ListenSurface state={state} onMinimise={canMinimise ? minimise : undefined} />
-          ) : full && sharing ? (
+          (full && sharing ? (
             <FullScreenShare state={state} onExit={() => setFull(false)} />
           ) : (
             <Surface state={state} onMinimise={canMinimise ? minimise : undefined} onFullScreen={sharing ? () => setFull(true) : undefined} />
@@ -144,7 +141,7 @@ function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }
           <Text className="font-sans-semibold text-small text-white" numberOfLines={1}>
             {partner.display_name}
           </Text>
-          <Text className="text-micro text-white/80">{`${status} · ${state.media === 'listen' ? 'listening together' : state.media === 'watch' ? 'watching together' : 'tap to return'}`}</Text>
+          <Text className="text-micro text-white/80">{`${status} · tap to return`}</Text>
         </View>
         <IconButton
           label={state.local.mic ? 'Mute' : 'Unmute'}
@@ -171,7 +168,6 @@ function useCallAudio(state: CallState) {
   useEffect(() => {
     if (active && !started.current) {
       started.current = true;
-      // Listening and watching play out loud, like a video call.
       void startCallAudio(state.media === 'audio' ? 'audio' : 'video');
     } else if (!active && started.current) {
       started.current = false;
@@ -182,9 +178,8 @@ function useCallAudio(state: CallState) {
   // Android cuts the mic (and camera) of a backgrounded app unless a call
   // service holds them; restarting it when the camera turns on adds the camera.
   useEffect(() => {
-    const what = state.media === 'listen' ? 'Listening with' : state.media === 'watch' ? 'Watching with' : 'Call with';
-    if (active) startCallService(`${what} ${partner.display_name}`, video);
-  }, [active, video, partner.display_name, state.media]);
+    if (active) startCallService(`Call with ${partner.display_name}`, video);
+  }, [active, video, partner.display_name]);
   // The app is showing this call now: stop any lock-screen ringing for it.
   const callId = state.call?.id ?? null;
   useEffect(() => {
@@ -250,7 +245,7 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
   const status =
     {
       outgoing: 'Calling…',
-      incoming: state.media === 'watch' ? 'wants to watch together' : isVideo ? 'wants to video call' : 'is calling you',
+      incoming: isVideo ? 'wants to video call' : 'is calling you',
       connecting: 'Connecting…',
       connected: formatDuration(elapsed),
       reconnecting: 'Reconnecting…',
@@ -318,9 +313,6 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
           <Text accessibilityLiveRegion="polite" className="mt-2 text-lead text-paper/70">
             {status}
           </Text>
-          {state.media === 'watch' && live && !state.remote.screen ? (
-            <Text className="mt-4 max-w-xs text-center text-small text-paper/70">{`Waiting for ${partner.display_name} to share their screen from their computer.`}</Text>
-          ) : null}
           {state.error && <Text className="mt-4 max-w-xs text-center text-small text-gold-200">{state.error}</Text>}
         </View>
       ) : (
@@ -356,7 +348,7 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
             </Labeled>
             <Labeled label="Accept">
               <IconButton label="Accept" tone="accept" size="xl" onPress={() => void m.accept()}>
-                {state.media === 'watch' ? <MonitorPlay size={28} color="#fff" /> : isVideo ? <Video size={28} color="#fff" /> : <Phone size={28} color="#fff" />}
+                {isVideo ? <Video size={28} color="#fff" /> : <Phone size={28} color="#fff" />}
               </IconButton>
             </Labeled>
           </>

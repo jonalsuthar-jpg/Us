@@ -143,11 +143,6 @@ export interface CallState {
    * source, or my speakers changed under it. Sharing again picks it back up.
    */
   shareSoundLost: boolean;
-  /**
-   * Listen together: I'm hearing what my partner shares. Off pauses it for me
-   * only; their sound keeps going out.
-   */
-  hearing: boolean;
   /** Bumped whenever tracks on either stream change, so views can re-bind. */
   revision: number;
 }
@@ -159,8 +154,8 @@ const INITIAL: CallState = {
   media: 'video',
   localStream: null,
   remoteStream: null,
-  local: { mic: true, camera: false, screen: false, sound: false, soundPaused: false, nowPlaying: null },
-  remote: { mic: true, camera: false, screen: false, sound: false, soundPaused: false, nowPlaying: null },
+  local: { mic: true, camera: false, screen: false },
+  remote: { mic: true, camera: false, screen: false },
   connectedAt: null,
   route: null,
   endReason: null,
@@ -171,14 +166,8 @@ const INITIAL: CallState = {
   micDeviceId: null,
   shareSound: false,
   shareSoundLost: false,
-  hearing: true,
   revision: 0,
 };
-
-/** What "Now playing" can say, at most. */
-export const NOW_PLAYING_MAX = 80;
-
-const NO_SOUND_COPY = 'No sound came with that. Pick a tab and turn on “Also share tab audio”, or share your whole screen with system audio.';
 
 const AUDIO_CONSTRAINTS: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 
@@ -215,10 +204,6 @@ export class CallManager {
   /** The shared screen's sound, and the mic + sound mix going out while sharing. */
   private screenAudio: MediaStreamTrack | null = null;
   private audioMix: { track: MediaStreamTrack; close: () => void } | null = null;
-  /** Listen together: the picture that came with my shared sound, kept (disabled) so the capture stays open. */
-  private soundPicture: MediaStreamTrack | null = null;
-  /** Picked on the click that started a listen or watch session; shared once we connect. */
-  private pendingDisplay: MediaStream | null = null;
   /** The camera's send settings, put back when a share ends. */
   private cameraEncoding: RTCRtpEncodingParameters | null = null;
   /** I picked Smooth or Sharp myself this call, so a new share keeps my choice. */
@@ -296,21 +281,6 @@ export class CallManager {
     this.opts.backend.notify({ category: 'incoming_call', callId: call.id });
 
     this.ringTimer = setTimeout(() => void this.cancelOutgoing('missed'), this.opts.ringTimeoutMs ?? 45_000);
-  }
-
-  /**
-   * Listen together or Watch together. On the web the UI asks what to share on
-   * the click itself (browsers only open the picker from a click) and hands it
-   * in; it goes out as soon as my partner picks up. Without one, my partner
-   * shares from their side.
-   */
-  async startSession(media: 'listen' | 'watch', display?: MediaStream) {
-    if (this.isBusy()) {
-      display?.getTracks().forEach((t) => t.stop());
-      return;
-    }
-    this.pendingDisplay = display ?? null;
-    await this.startCall(media);
   }
 
   /** Surface a ringing call found out-of-band (push tap, app cold start). */
@@ -440,11 +410,6 @@ export class CallManager {
 
   /** Stop and start my share, from a click: the browser asks what to share again. */
   async reshareScreen() {
-    if (this.state.local.sound) {
-      await this.stopSoundShare();
-      await this.startSoundShare();
-      return;
-    }
     await this.stopScreenShare();
     await this.startScreenShare();
   }
@@ -549,11 +514,6 @@ export class CallManager {
     return Boolean(this.opts.rtc.getDisplayMedia);
   }
 
-  /** Listen together needs a picker and a way to mix sound with my mic: web only. */
-  get canShareSound() {
-    return Boolean(this.opts.rtc.getDisplayMedia && this.opts.rtc.mixAudio);
-  }
-
   /** Ask what to share, from a click. Null when the picker was dismissed or isn't available. */
   async pickDisplay(): Promise<MediaStream | null> {
     if (!this.opts.rtc.getDisplayMedia) return null;
@@ -564,17 +524,13 @@ export class CallManager {
     }
   }
 
-  /** Share my screen. `given` is one already picked (a watch session started from Connect). */
-  async startScreenShare(given?: MediaStream) {
-    if ((!this.opts.rtc.getDisplayMedia && !given) || this.state.local.screen || !this.isLive()) {
-      given?.getTracks().forEach((t) => t.stop());
-      return;
-    }
-    const display = given ?? (await this.pickDisplay());
+  /** Share my screen. */
+  async startScreenShare() {
+    if (!this.opts.rtc.getDisplayMedia || this.state.local.screen || !this.isLive()) return;
+    const display = await this.pickDisplay();
     if (!display) return; // user dismissed the picker
     const track = display.getVideoTracks()[0];
     if (!track) return;
-    if (this.state.local.sound) await this.stopSoundShare();
     track.addEventListener('ended', () => void this.stopScreenShare());
     this.screenTrack = track;
     this.cameraEncoding = { ...(this.videoTx?.sender.getParameters?.().encodings?.[0] ?? {}) };
@@ -590,72 +546,6 @@ export class CallManager {
     if (sound && mic && this.opts.rtc.mixAudio) await this.mixInSound(sound, mic);
     else sound?.stop();
     this.setLocal({ screen: true });
-  }
-
-  /**
-   * Listen together: share the sound of a tab (or the whole screen) and no
-   * picture, mixed with my mic on the one audio sender. `given` is one already
-   * picked. Returns false if nothing is shared (dismissed, or it had no sound).
-   */
-  async startSoundShare(given?: MediaStream): Promise<boolean> {
-    const stopAll = (d?: MediaStream | null) => d?.getTracks().forEach((t) => t.stop());
-    if (!this.canShareSound || !this.isLive()) {
-      stopAll(given);
-      return false;
-    }
-    const display = given ?? (await this.pickDisplay());
-    if (!display) return false;
-    const sound = display.getAudioTracks()[0];
-    if (!sound) {
-      stopAll(display);
-      this.set({ error: NO_SOUND_COPY });
-      return false;
-    }
-    if (this.state.local.screen) await this.stopScreenShare();
-    if (this.state.local.sound) await this.stopSoundShare();
-    // The picture isn't sent, but stays open (disabled): closing it can end the capture.
-    // The browser's own "Stop sharing" ends it, and that ends the share.
-    const picture = display.getVideoTracks()[0] ?? null;
-    if (picture) {
-      picture.enabled = false;
-      picture.addEventListener('ended', () => {
-        if (this.soundPicture === picture) void this.stopSoundShare();
-      });
-    }
-    this.soundPicture = picture;
-    await this.mixInSound(sound, this.state.localStream?.getAudioTracks()[0] ?? null);
-    this.set({ error: null });
-    this.setLocal({ sound: true, soundPaused: false });
-    return true;
-  }
-
-  async stopSoundShare() {
-    if (!this.state.local.sound && !this.soundPicture) return;
-    this.soundPicture?.stop();
-    this.soundPicture = null;
-    await this.audioTx?.sender.replaceTrack(this.state.localStream?.getAudioTracks()[0] ?? null);
-    await this.setAudioBitrate(VOICE_BITRATE);
-    this.stopScreenAudio();
-    this.setLocal({ sound: false, soundPaused: false, nowPlaying: null });
-  }
-
-  /** Pause or play what I'm sharing, for both of us. My mic keeps working. */
-  setSoundPaused(paused: boolean) {
-    if (!this.screenAudio || !this.state.local.sound) return;
-    this.screenAudio.enabled = !paused;
-    this.setLocal({ soundPaused: paused });
-  }
-
-  /** Tell my partner what's playing. */
-  setNowPlaying(text: string) {
-    const nowPlaying = text.trim().slice(0, NOW_PLAYING_MAX) || null;
-    if (nowPlaying !== (this.state.local.nowPlaying ?? null)) this.setLocal({ nowPlaying });
-  }
-
-  /** Listen together: pause or play what my partner shares, for me only. */
-  setHearing(on: boolean) {
-    this.state.remoteStream?.getAudioTracks().forEach((t) => (t.enabled = on));
-    this.set({ hearing: on });
   }
 
   /** Mix shared sound with my mic onto the one audio sender, with room for music. */
@@ -862,11 +752,9 @@ export class CallManager {
     });
     this.cameraTrack = stream.getVideoTracks()[0] ?? null;
     const mic = stream.getAudioTracks()[0];
-    // Listening starts as music only; one tap on the mic to talk over it.
-    if (mic && media === 'listen') mic.enabled = false;
     this.watchMic(mic);
     this.set({ localStream: stream });
-    this.setLocal({ mic: media !== 'listen', camera: Boolean(this.cameraTrack), screen: false }, false);
+    this.setLocal({ mic: true, camera: Boolean(this.cameraTrack), screen: false }, false);
     void this.refreshCameraOptions();
   }
 
@@ -977,10 +865,6 @@ export class CallManager {
       this.broadcastMediaState();
       void this.detectRoute();
       if (!this.audioMix) void this.setAudioBitrate(VOICE_BITRATE);
-      // What I picked on Connect goes out now that they've picked up.
-      const picked = this.pendingDisplay;
-      this.pendingDisplay = null;
-      if (picked) void (this.state.media === 'listen' ? this.startSoundShare(picked) : this.startScreenShare(picked));
     } else if (s === 'disconnected') {
       this.set({ phase: 'reconnecting' });
       this.reconnectTimer = setTimeout(() => this.restartIce(), RECONNECT_GRACE_MS);
@@ -1095,10 +979,6 @@ export class CallManager {
     this.cameraTrack?.stop();
     this.screenTrack?.stop();
     this.cameraTrack = this.screenTrack = null;
-    this.soundPicture?.stop();
-    this.soundPicture = null;
-    this.pendingDisplay?.getTracks().forEach((t) => t.stop());
-    this.pendingDisplay = null;
     this.cameraEncoding = null;
     this.shareModePicked = false;
     this.stopScreenAudio();

@@ -9,7 +9,6 @@ import {
   Mic,
   MicOff,
   Minimize,
-  MonitorPlay,
   MonitorUp,
   MonitorX,
   Phone,
@@ -29,7 +28,6 @@ import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
 import { useElapsed } from '@/lib/hooks';
 import { LiveCanvas } from '@/components/draw/live-canvas';
-import { ListenScreen } from './listen-screen';
 import { StreamAudio, StreamVideo, useAudioDevices, type AudioDevice } from './media';
 
 /**
@@ -49,22 +47,14 @@ export function CallOverlay() {
   return (
     <>
       <AnimatePresence>
-        {visible &&
-          (state.media === 'listen' ? (
-            <ListenScreen
-              key={state.call?.id ?? 'pending'}
-              state={state}
-              minimised={minimised}
-              onMinimise={canMinimise ? () => setMinimised(true) : undefined}
-            />
-          ) : (
-            <CallScreen
-              key={state.call?.id ?? 'pending'}
-              state={state}
-              minimised={minimised}
-              onMinimise={canMinimise ? () => setMinimised(true) : undefined}
-            />
-          ))}
+        {visible && (
+          <CallScreen
+            key={state.call?.id ?? 'pending'}
+            state={state}
+            minimised={minimised}
+            onMinimise={canMinimise ? () => setMinimised(true) : undefined}
+          />
+        )}
       </AnimatePresence>
       {minimised && <CallBar state={state} onExpand={() => setMinimised(false)} />}
     </>
@@ -93,7 +83,7 @@ function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }
         <span className="min-w-0">
           <span className="block truncate text-small font-semibold">{partner.display_name}</span>
           <span className="block text-micro tabular-nums text-white/80" aria-live="polite">
-            {status} · {state.media === 'listen' ? 'listening together' : state.media === 'watch' ? 'watching together' : 'back to call'}
+            {status} · back to call
           </span>
         </span>
       </button>
@@ -175,7 +165,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
 
   const statusLine = {
     outgoing: 'Calling…',
-    incoming: state.media === 'watch' ? 'wants to watch together' : isVideo ? 'wants to video call' : 'is calling you',
+    incoming: isVideo ? 'wants to video call' : 'is calling you',
     connecting: 'Connecting…',
     connected: formatDuration(elapsed),
     reconnecting: 'Reconnecting…',
@@ -303,19 +293,6 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
           <p className="mt-2 text-lead tabular-nums text-paper/70" aria-live="polite">
             {statusLine}
           </p>
-          {state.media === 'watch' && live && !state.local.screen && !state.remote.screen ? (
-            m.canScreenShare ? (
-              <button
-                type="button"
-                onClick={() => void m.startScreenShare()}
-                className="mt-6 inline-flex h-12 items-center gap-2 rounded-control bg-teal-600 px-5 text-body font-semibold text-white hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 focus-visible:ring-offset-plum-800"
-              >
-                <MonitorUp className="h-5 w-5" /> Share something to watch
-              </button>
-            ) : (
-              <p className="mt-4 max-w-sm text-small text-paper/70">Waiting for {partner.display_name} to share their screen.</p>
-            )
-          ) : null}
           {state.error && <p className="mt-4 max-w-sm text-small text-gold-200">{state.error}</p>}
         </div>
       )}
@@ -400,7 +377,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
             </ControlStack>
             <ControlStack label="Accept">
               <IconButton ref={primary} label="Accept" tone="accept" size="xl" onClick={() => void m.accept()}>
-                {state.media === 'watch' ? <MonitorPlay className="h-7 w-7" /> : isVideo ? <Video className="h-7 w-7" /> : <Phone className="h-7 w-7" />}
+                {isVideo ? <Video className="h-7 w-7" /> : <Phone className="h-7 w-7" />}
               </IconButton>
             </ControlStack>
           </>
