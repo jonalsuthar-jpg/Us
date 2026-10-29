@@ -1,5 +1,6 @@
 package expo.modules.uscall
 
+import android.util.Log
 import com.onesignal.notifications.INotificationReceivedEvent
 import com.onesignal.notifications.INotificationServiceExtension
 
@@ -29,9 +30,15 @@ class CallNotificationExtension : INotificationServiceExtension {
       "incoming_call" -> {
         // With Us open, the app rings itself.
         if (CallRing.appInForeground(event.context)) return
-        event.preventDefault()
         val caller = data.optString("callerName").ifEmpty { event.notification.title ?: "Us" }
-        CallRing.show(event.context, callId, caller, data.optString("media") == "video")
+        try {
+          CallRing.show(event.context, callId, caller, data.optString("media") == "video")
+        } catch (e: Exception) {
+          // Never a silent call: OneSignal's own notification shows instead.
+          Log.e("UsCall", "ringing failed", e)
+          return
+        }
+        event.preventDefault()
       }
       "call_ended" -> CallRing.cancel(event.context, callId)
     }

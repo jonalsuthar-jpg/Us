@@ -1,6 +1,7 @@
 package expo.modules.uscall
 
 import android.app.ActivityManager
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,6 +13,7 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 
 /**
  * The ringing notification for an incoming call: rings and vibrates until
@@ -44,6 +46,9 @@ object CallRing {
   }
 
   fun appInForeground(context: Context): Boolean {
+    // Locked or asleep: the app can't ring over the lock screen itself.
+    if (context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) return false
+    if (!context.getSystemService(PowerManager::class.java).isInteractive) return false
     val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     val me = am.runningAppProcesses?.firstOrNull { it.pid == android.os.Process.myPid() } ?: return false
     return me.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
