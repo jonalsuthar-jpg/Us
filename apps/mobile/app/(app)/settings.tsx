@@ -3,8 +3,8 @@ import { COUPLE_ENDED_TOPIC, useCouple } from '@us/shared/react';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { Camera, ChevronLeft } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, AppState, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, IconButton } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { Display, Text } from '@/components/ui/text';
 import { env } from '@/lib/env';
 import { logoutPush, requestPushPermission } from '@/lib/push';
+import { canRingFullScreen, openFullScreenSettings } from '@/modules/us-call';
 import { playChime } from '@/lib/sounds';
 import { usePalette, useThemePref } from '@/components/ui/palette';
 import { Segmented } from '@/components/ui/segmented';
@@ -34,6 +35,12 @@ export default function Settings() {
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  // Android 14+ can switch off full-screen ringing; re-checked on return from its settings page.
+  const [fullScreen, setFullScreen] = useState(canRingFullScreen);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && setFullScreen(canRingFullScreen()));
+    return () => sub.remove();
+  }, []);
 
   async function changePhoto() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
@@ -182,6 +189,14 @@ export default function Settings() {
           </Button>
         ) : (
           <Text className="text-small text-ink-muted">Push isn’t configured (EXPO_PUBLIC_ONESIGNAL_APP_ID).</Text>
+        )}
+        {fullScreen ? null : (
+          <>
+            <Text className="text-small text-ink-soft">Calls can’t show on your lock screen yet. Allow full-screen notifications for Us.</Text>
+            <Button variant="secondary" className="self-start" onPress={openFullScreenSettings}>
+              Show calls on the lock screen
+            </Button>
+          </>
         )}
         <Button variant="quiet" className="self-start px-0" onPress={() => void playChime()}>
           Hear the chime

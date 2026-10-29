@@ -55,7 +55,7 @@ interface Style {
   iosSound?: string;
   androidChannelEnv?: string;
   priority: number;
-  iosInterruption: 'passive' | 'active' | 'time-sensitive' | 'critical';
+  iosInterruption: 'passive' | 'active' | 'time_sensitive' | 'critical';
   ttl?: number;
   threadId: string;
 }
@@ -66,7 +66,7 @@ const CATEGORIES: Record<Category, Style> = {
     iosSound: 'us_ring.wav',
     androidChannelEnv: 'ONESIGNAL_ANDROID_CHANNEL_CALLS',
     priority: 10,
-    iosInterruption: 'time-sensitive',
+    iosInterruption: 'time_sensitive',
     ttl: 45, // a ring that arrives late is worse than none
     threadId: 'calls',
   },
@@ -85,7 +85,7 @@ const CATEGORIES: Record<Category, Style> = {
   thinking_of_you: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'taps' },
   location_shared: { priority: 5, iosInterruption: 'passive', threadId: 'location' },
   // "Got home safe" should reach someone waiting up, even in a focus mode.
-  arrival: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'time-sensitive', threadId: 'arrival' },
+  arrival: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'time_sensitive', threadId: 'arrival' },
   new_snap: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'snaps' },
   snap_reaction: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'snaps' },
   // "Come draw with me" is only useful right now.
