@@ -15,7 +15,6 @@ export * from './api/calls';
 export * from './api/push';
 export * from './api/plan';
 export * from './api/memory';
-export * from './api/growth';
 export * from './api/home';
 export * from './api/connect';
 export * from './api/account';
@@ -23,8 +22,6 @@ export * from './api/together';
 export * from './api/snaps';
 export * from './api/plant';
 export * from './plant-art';
-export * from './api/spark';
-export * from './spark-art';
 
 export * from './realtime/couple-channel';
 export * from './realtime/typing';

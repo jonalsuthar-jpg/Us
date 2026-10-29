@@ -24,7 +24,6 @@ import { ErrorNote } from '@/components/app/module-header';
 import { DoodleNote, DrawingBanner } from '@/components/draw/home-draw';
 import { PlantCard } from '@/components/plant/plant-card';
 import { SnapRow } from '@/components/snaps/snap-row';
-import { RankChip } from '@/components/spark/rank-chip';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, Spinner } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -116,7 +115,6 @@ export function Home() {
           </p>
           <h1 className="truncate font-display text-title text-ink sm:text-[40px] sm:leading-[1.1]">{myName}</h1>
         </div>
-        {has('spark') && <RankChip />}
         <MobileSettingsLink className="h-10 w-10" />
       </header>
 
@@ -240,12 +238,6 @@ export function Home() {
             </Sheet>
           ) : null}
 
-          {d?.nudged && has('mood') ? (
-            <Sheet tone="note" accent="rose" pad="sm">
-              <p className="font-serif text-lead italic text-ink">{theirName} could use a little extra care today.</p>
-              <p className="mt-1 text-small text-ink-soft">A message, a call, or something small that says you noticed.</p>
-            </Sheet>
-          ) : null}
         </div>
       </div>
 

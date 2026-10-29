@@ -9,7 +9,6 @@ export type PushCategory =
   | 'incoming_call'
   | 'call_ended' // replaces a ringing call notification with "missed call"
   | 'new_message'
-  | 'wellbeing_nudge' // partner asked for a little care (never carries details)
   | 'memory_resurfaced' // TODO(phase-3/5)
   | 'letter_unlocked' // TODO(phase-3)
   | 'daily_question' // my partner answered today's question (never carries the answer)
@@ -19,7 +18,6 @@ export type PushCategory =
   | 'new_snap' // my partner posted a snap
   | 'snap_reaction' // my partner reacted to my snap
   | 'plant' // evening nudge: only my partner watered our plant today (sent by a schedule)
-  | 'spark_rank' // the two of us just reached a new Spark Rank
   | 'draw_invite' // come and draw with me (or play Draw & Guess)
   | 'doodle' // my partner left me a doodle
   | 'guess_turn'; // my partner drew their Draw & Guess turn
@@ -27,13 +25,11 @@ export type PushCategory =
 export type PushRequest =
   | { category: 'new_message'; messageId: string }
   | { category: 'incoming_call' | 'call_ended'; callId: string }
-  | { category: 'wellbeing_nudge'; checkinId: string }
   | { category: 'daily_question'; questionId: string }
   | { category: 'thinking_of_you'; tapId: string }
   | { category: 'location_shared' }
   | { category: 'arrival'; checkId: string }
   | { category: 'new_snap' | 'snap_reaction'; snapId: string }
-  | { category: 'spark_rank' }
   | { category: 'draw_invite'; game?: boolean }
   | { category: 'doodle'; drawingId: string }
   | { category: 'guess_turn'; drawingId: string };

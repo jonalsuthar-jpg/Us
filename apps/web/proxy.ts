@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const APP_ROUTES = ['/home', '/talk', '/connect', '/plan', '/memory', '/growth', '/settings', '/pair', '/waiting', '/admin'];
+const APP_ROUTES = ['/home', '/talk', '/connect', '/plan', '/memory', '/settings', '/pair', '/waiting', '/admin'];
 const AUTH_ROUTES = ['/sign-in', '/sign-up'];
 
 /**

@@ -8,7 +8,6 @@ export const MODULE_ACCENT: Record<ModuleId, { wash: string; ink: string; sheet:
   connect: { wash: 'bg-teal-100', ink: 'text-teal-700', sheet: 'teal' },
   plan: { wash: 'bg-plum-100', ink: 'text-plum-600', sheet: 'plum' },
   memory: { wash: 'bg-gold-100', ink: 'text-gold-700', sheet: 'gold' },
-  growth: { wash: 'bg-sage-100', ink: 'text-sage-700', sheet: 'sage' },
 };
 
 /** Title + tagline for a live module, with the module's colour as a soft wash. */

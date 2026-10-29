@@ -2,7 +2,7 @@
 
 import { MODULES, TAB_FEATURES, type ModuleId } from '@us/shared';
 import { useCouple, useFeatures } from '@us/shared/react';
-import { HeartHandshake, House, MessageCircleHeart, NotebookPen, Settings, Sparkles, Sprout } from 'lucide-react';
+import { HeartHandshake, House, MessageCircleHeart, NotebookPen, Settings, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -14,7 +14,6 @@ const ICONS: Record<ModuleId, typeof MessageCircleHeart> = {
   connect: HeartHandshake,
   plan: NotebookPen,
   memory: Sparkles,
-  growth: Sprout,
 };
 
 const DOT: Record<ModuleId, string> = {
@@ -22,7 +21,6 @@ const DOT: Record<ModuleId, string> = {
   connect: 'bg-teal-500',
   plan: 'bg-plum-500',
   memory: 'bg-gold-400',
-  growth: 'bg-sage-400',
 };
 
 /**

@@ -2,9 +2,9 @@
  * push — notify my partner via OneSignal.
  *
  * Body: { category: 'new_message', messageId } | { category: 'incoming_call' | 'call_ended', callId }
- *     | { category: 'wellbeing_nudge', checkinId } | { category: 'daily_question', questionId }
+ *     | { category: 'daily_question', questionId }
  *     | { category: 'thinking_of_you', tapId } | { category: 'location_shared' } | { category: 'arrival', checkId }
- *     | { category: 'new_snap' | 'snap_reaction', snapId } | { category: 'spark_rank' }
+ *     | { category: 'new_snap' | 'snap_reaction', snapId }
  *     | { category: 'draw_invite', game? } | { category: 'doodle' | 'guess_turn', drawingId }
  *
  * The record is re-read with the service role and the caller must be its
@@ -21,7 +21,6 @@ type Category =
   | 'incoming_call'
   | 'call_ended'
   | 'new_message'
-  | 'wellbeing_nudge'
   | 'memory_resurfaced'
   | 'letter_unlocked'
   | 'daily_question'
@@ -30,7 +29,6 @@ type Category =
   | 'arrival'
   | 'new_snap'
   | 'snap_reaction'
-  | 'spark_rank'
   | 'draw_invite'
   | 'doodle'
   | 'guess_turn';
@@ -40,7 +38,6 @@ const FEATURE: Record<Category, string> = {
   incoming_call: 'calls',
   call_ended: 'calls',
   new_message: 'chat',
-  wellbeing_nudge: 'mood',
   memory_resurfaced: 'memories',
   letter_unlocked: 'letters',
   daily_question: 'daily_question',
@@ -49,7 +46,6 @@ const FEATURE: Record<Category, string> = {
   arrival: 'arrival',
   new_snap: 'snaps',
   snap_reaction: 'snaps',
-  spark_rank: 'spark',
   draw_invite: 'draw',
   doodle: 'draw',
   guess_turn: 'draw',
@@ -82,7 +78,6 @@ const CATEGORIES: Record<Category, Style> = {
     iosInterruption: 'active',
     threadId: 'chat',
   },
-  wellbeing_nudge: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'wellbeing' },
   // TODO(phase-3/5): triggered by scheduled functions, not clients.
   memory_resurfaced: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'memories' },
   letter_unlocked: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'letters' },
@@ -93,7 +88,6 @@ const CATEGORIES: Record<Category, Style> = {
   arrival: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'time-sensitive', threadId: 'arrival' },
   new_snap: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'snaps' },
   snap_reaction: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'passive', threadId: 'snaps' },
-  spark_rank: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'spark' },
   // "Come draw with me" is only useful right now.
   draw_invite: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', ttl: 300, threadId: 'draw' },
   doodle: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'draw' },
@@ -114,11 +108,6 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const needs = FEATURE[body.category as Category];
   if (needs && !(await hasFeature(caller, needs))) return json({ skipped: 'feature_off' });
-  // Temporary diagnostics for call pushes (see the push_log migration).
-  const isCall = body.category === 'incoming_call' || body.category === 'call_ended';
-  const trace = (outcome: string, detail?: unknown) =>
-    isCall ? admin.from('push_log').insert({ category: String(body.category), outcome, detail: detail ?? null }).then(() => {}, () => {}) : Promise.resolve();
-  await trace('received', { callId: body.callId ?? null });
   const { data: me } = await admin.from('profiles').select('display_name, avatar_url').eq('id', userId).single();
   const name = me?.display_name ?? 'Your partner';
   // The photo sits in our private bucket, so the phone gets a signed link it
@@ -158,7 +147,6 @@ Deno.serve(async (req) => {
   } else if (body.category === 'incoming_call' || body.category === 'call_ended') {
     const { data: call } = await admin.from('calls').select('*').eq('id', body.callId).maybeSingle();
     if (!call || call.caller_id !== userId || call.couple_id !== coupleId) {
-      await trace('forbidden', { found: !!call, callerMatches: call?.caller_id === userId, coupleMatches: call?.couple_id === coupleId });
       return json({ error: 'forbidden' }, 403);
     }
     category = body.category;
@@ -167,7 +155,6 @@ Deno.serve(async (req) => {
     collapseId = `call-${call.id}`;
     if (category === 'incoming_call') {
       if (call.status !== 'ringing') {
-        await trace('skipped_not_ringing', { status: call.status });
         return json({ skipped: 'not_ringing' });
       }
       content =
@@ -185,21 +172,6 @@ Deno.serve(async (req) => {
     }
     // callerName / media let Android ring with a full-screen call even when Us is closed.
     data = { category, url: '/talk', callId: call.id, callerName: name, media: call.media };
-  } else if (body.category === 'wellbeing_nudge') {
-    // The check-in itself stays private: only its owner, flag and age are read,
-    // and the notification never carries the score or note.
-    const { data: c } = await admin
-      .from('mood_checkins')
-      .select('id, owner_id, nudge_partner, created_at')
-      .eq('id', body.checkinId)
-      .maybeSingle();
-    if (!c || c.owner_id !== userId || !c.nudge_partner) return json({ error: 'forbidden' }, 403);
-    if (Date.now() - Date.parse(c.created_at) > 10 * 60_000) return json({ skipped: 'stale' });
-    category = 'wellbeing_nudge';
-    heading = 'A gentle nudge';
-    content = `${name} could use a little extra care today.`;
-    collapseId = `nudge-${userId}`;
-    data = { category, url: '/growth' };
   } else if (body.category === 'daily_question') {
     // I just answered today's question. The push never carries the answer.
     const { data: q } = await admin.from('daily_questions').select('id, couple_id').eq('id', body.questionId).maybeSingle();
@@ -281,16 +253,6 @@ Deno.serve(async (req) => {
       content = `Reacted ${snap.reaction} to your snap.`;
       collapseId = `snap-reaction-${snap.id}`;
     }
-  } else if (body.category === 'spark_rank') {
-    // We just reached a new rank. The database hands out each rank once, so
-    // however many of our apps ask, my partner hears about it one time.
-    const { data: rank } = await admin.rpc('spark_claim_rank_up', { p_couple: coupleId });
-    if (!rank) return json({ skipped: 'nothing_new' });
-    category = 'spark_rank';
-    heading = 'Spark Rank';
-    content = `You two just reached ${rank} together ✨`;
-    collapseId = `spark-${coupleId}`;
-    data = { category, url: '/home' };
   } else if (body.category === 'draw_invite') {
     category = 'draw_invite';
     content = body.game ? 'wants to play Draw & Guess with you ✏️' : 'is drawing. Come and draw together ✏️';
@@ -354,10 +316,10 @@ Deno.serve(async (req) => {
   const result = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error('onesignal error', res.status, result);
-    await trace('onesignal_error', { status: res.status, result });
+    // Failures only: the admin overview counts them (push_failures_7d).
+    await admin.from('push_log').insert({ category: String(body.category), outcome: 'onesignal_error', detail: { status: res.status, result } }).then(() => {}, () => {});
     return json({ error: 'push_failed' }, 502);
   }
-  await trace('sent', { id: result.id ?? null, errors: result.errors ?? null });
   return json({ ok: true, id: result.id });
 });
 

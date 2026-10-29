@@ -104,24 +104,6 @@
   100% { transform: translateY(-70px) scale(1.2); opacity: 0; }
 }
 
-/* Spark Rank: Sparks float off the chip; a new rank pops in, glows and twinkles. */
-@keyframes us-spark-float {
-  0% { opacity: 0; transform: translateY(6px) scale(0.9); }
-  18% { opacity: 1; transform: translateY(-4px) scale(1); }
-  100% { opacity: 0; transform: translateY(-28px); }
-}
-@keyframes us-rank-pop {
-  0% { opacity: 0; transform: scale(0.2) rotate(-20deg); }
-  100% { opacity: 1; transform: scale(1) rotate(0deg); }
-}
-@keyframes us-rank-glow {
-  0%, 100% { opacity: 0.35; transform: scale(0.92); }
-  50% { opacity: 0.6; transform: scale(1.08); }
-}
-@keyframes us-twinkle {
-  0%, 100% { opacity: 0.2; transform: scale(0.6); }
-  50% { opacity: 1; transform: scale(1); }
-}
 @keyframes us-rise {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }

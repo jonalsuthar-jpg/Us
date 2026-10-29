@@ -1,6 +1,5 @@
 import type { CalendarEvent, Countdown, Couple, Memory, Profile } from '../database.types';
 import type { UsClient } from '../supabase';
-import { partnerNudges } from './growth';
 import { listMemories, onThisDay, removeMemoryPhoto, signedPhotoUrls, uploadMemoryPhoto } from './memory';
 import { listEvents } from './plan';
 import { listCountdowns, partnerTaps } from './together';
@@ -95,8 +94,6 @@ export interface HomeData {
   nextEvent: CalendarEvent | null;
   memory: FeaturedMemory | null;
   memoryPhotoUrl: string | null;
-  /** My partner asked for a little care recently. */
-  nudged: boolean;
   countdowns: Countdown[];
   /** My partner's "thinking of you" taps in the last day. */
   taps: { count: number; latest: string } | null;
@@ -104,12 +101,11 @@ export interface HomeData {
 
 /** Everything the Home page shows, in one round of requests. */
 export async function getHome(sb: UsClient, ids: { coupleId: string; meId: string }, now = new Date()): Promise<HomeData> {
-  const [couple, profiles, events, memories, nudges, countdowns] = await Promise.all([
+  const [couple, profiles, events, memories, countdowns] = await Promise.all([
     sb.from('couples').select('*').eq('id', ids.coupleId).single().then(unwrap<Couple>),
     sb.from('profiles').select('*').then(unwrap<Profile[]>),
     listEvents(sb, ids.coupleId, now, new Date(now.getTime() + 30 * 86_400_000)).catch(() => []),
     listMemories(sb, ids.coupleId).catch(() => []),
-    partnerNudges(sb, 24).catch(() => []),
     listCountdowns(sb, ids.coupleId).catch(() => []),
   ]);
   const me = profiles.find((p) => p.id === ids.meId);
@@ -129,7 +125,6 @@ export async function getHome(sb: UsClient, ids: { coupleId: string; meId: strin
     nextEvent: events[0] ?? null,
     memory,
     memoryPhotoUrl: (memory?.photo_path && urls[memory.photo_path]) || null,
-    nudged: nudges.length > 0,
     countdowns,
     taps,
   };

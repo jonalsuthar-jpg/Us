@@ -2,7 +2,7 @@ import { MODULES, TAB_FEATURES, type ModuleId } from '@us/shared';
 import { useCouple, useFeatures } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { TopTabs, type MaterialTopTabBarProps } from 'expo-router/js-top-tabs';
-import { HeartHandshake, House, MessageCircleHeart, NotebookPen, Sparkles, Sprout } from 'lucide-react-native';
+import { HeartHandshake, House, MessageCircleHeart, NotebookPen, Sparkles } from 'lucide-react-native';
 import { Animated, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePalette } from '@/components/ui/palette';
@@ -16,7 +16,6 @@ const ICONS: Record<'home' | ModuleId, typeof MessageCircleHeart> = {
   connect: HeartHandshake,
   plan: NotebookPen,
   memory: Sparkles,
-  growth: Sprout,
 };
 
 /**

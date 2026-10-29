@@ -8,7 +8,7 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-/** audio / video calls, plus Listen together (sound only) and Watch together (a shared screen). */
+/** audio / video calls. listen / watch are retired session kinds, kept for older call-log rows. */
 export type CallMedia = 'audio' | 'video' | 'listen' | 'watch';
 /** image / audio live in our chat folder; gif / sticker are GIPHY links (media_meta.url). */
 export type MediaKind = 'image' | 'audio' | 'gif' | 'sticker';
@@ -27,20 +27,6 @@ export type MessageKind = 'text' | 'call';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
 export type AccessStatusEnum = 'pending' | 'approved' | 'rejected' | 'suspended';
 export type MemoryKind = 'moment' | 'trip' | 'date';
-export type LoveLanguage = 'words' | 'acts' | 'gifts' | 'time' | 'touch';
-export type SparkKind =
-  | 'first_move'
-  | 'message'
-  | 'media'
-  | 'tap'
-  | 'snap'
-  | 'status'
-  | 'call_start'
-  | 'call_pickup'
-  | 'call_minutes'
-  | 'question'
-  | 'together';
-
 export type Database = {
   public: {
     Tables: {
@@ -366,38 +352,6 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
-      spark_events: {
-        /** Sparks one of us earned. I can read only my own. Written by triggers only. */
-        Row: {
-          id: number;
-          couple_id: string;
-          /** Null for the together bonus, which is ours. */
-          user_id: string | null;
-          day: string;
-          kind: SparkKind;
-          sparks: number;
-          source: string;
-          created_at: string;
-        };
-        Insert: never;
-        Update: never;
-        Relationships: [];
-      };
-      spark_seasons: {
-        /** Our running total for a month (season is its first day). Written by triggers only. */
-        Row: {
-          couple_id: string;
-          season: string;
-          carry_in: number;
-          sparks: number;
-          today: string | null;
-          today_sparks: number;
-          notified_rank: number;
-        };
-        Insert: never;
-        Update: never;
-        Relationships: [];
-      };
       location_shares: {
         Row: {
           owner_id: string;
@@ -432,40 +386,6 @@ export type Database = {
         };
         Insert: { id?: string; couple_id: string; requested_by: string; traveller_id: string; label?: string };
         Update: never;
-        Relationships: [];
-      };
-      // ------------------------------------------------------------ Phase 6
-      goals: {
-        Row: {
-          id: string;
-          couple_id: string;
-          /** null = a shared goal ("ours"). */
-          owner_id: string | null;
-          title: string;
-          progress: number;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: { id?: string; couple_id: string; owner_id: string | null; title: string; progress?: number };
-        Update: { title?: string; progress?: number };
-        Relationships: [];
-      };
-      mood_checkins: {
-        Row: { id: string; owner_id: string; score: number; note: string | null; nudge_partner: boolean; created_at: string };
-        Insert: { id?: string; owner_id: string; score: number; note?: string | null; nudge_partner?: boolean };
-        Update: { note?: string | null };
-        Relationships: [];
-      };
-      insecurity_checkins: {
-        Row: { id: string; owner_id: string; body: string; shared_at: string | null; created_at: string };
-        Insert: { id?: string; owner_id: string; body: string };
-        Update: { body?: string; shared_at?: string | null };
-        Relationships: [];
-      };
-      love_language_results: {
-        Row: { owner_id: string; scores: Json; primary_language: LoveLanguage; shared: boolean; taken_at: string };
-        Insert: { owner_id: string; scores: Json; primary_language: LoveLanguage; shared?: boolean; taken_at?: string };
-        Update: { scores?: Json; primary_language?: LoveLanguage; shared?: boolean; taken_at?: string };
         Relationships: [];
       };
       features: {
@@ -612,7 +532,6 @@ export type Database = {
       expire_stale_calls: { Args: Record<PropertyKey, never>; Returns: number };
       current_couple_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       current_partner_id: { Args: Record<PropertyKey, never>; Returns: string | null };
-      partner_nudges: { Args: { p_hours?: number }; Returns: { nudged_at: string }[] };
       set_couple_photo: { Args: { p_path: string | null }; Returns: Database['public']['Tables']['couples']['Row'] };
       pick_decision: {
         Args: { p_category: string };
@@ -701,18 +620,12 @@ export type LaborEntry = Tables['labor_entries']['Row'];
 export type Expense = Tables['expenses']['Row'];
 export type Memory = Tables['memories']['Row'];
 export type MemoryRating = Tables['memory_ratings']['Row'];
-export type Goal = Tables['goals']['Row'];
-export type MoodCheckin = Tables['mood_checkins']['Row'];
-export type Worry = Tables['insecurity_checkins']['Row'];
-export type LoveLanguageResult = Tables['love_language_results']['Row'];
 export type DailyQuestion = Tables['daily_questions']['Row'];
 export type Countdown = Tables['countdowns']['Row'];
 export type ListItem = Tables['list_items']['Row'];
 export type Tap = Tables['taps']['Row'];
 export type SnapRow = Tables['snaps']['Row'];
 export type PlantDay = Tables['plant_days']['Row'];
-export type SparkEvent = Tables['spark_events']['Row'];
-export type SparkSeason = Tables['spark_seasons']['Row'];
 export type LocationShare = Tables['location_shares']['Row'];
 export type ArrivalCheck = Tables['arrival_checks']['Row'];
 export type Drawing = Tables['drawings']['Row'];

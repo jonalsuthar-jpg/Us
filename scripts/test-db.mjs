@@ -248,23 +248,6 @@ await test('calls: listen and watch together ring and log like any call', async 
   }
 });
 
-await test('private tables: partner can never read or write my rows', async () => {
-  await as(alice, () => q(`insert into public.mood_checkins (owner_id, score, note) values ($1, 2, 'rough day')`, [alice]));
-  assert.equal((await as(bob, () => q(`select * from public.mood_checkins`))).length, 0);
-  await rejects(as(bob, () => q(`insert into public.mood_checkins (owner_id, score) values ($1, 5)`, [alice])), /row-level security/, 'write as partner');
-  const touched = await as(bob, () => q(`update public.mood_checkins set note = 'x' returning 1`));
-  assert.equal(touched.length, 0);
-  assert.equal((await as(alice, () => q(`select * from public.mood_checkins`))).length, 1);
-});
-
-await test('private tables: insecurity check-ins visible to partner only once shared', async () => {
-  await as(alice, () => q(`insert into public.insecurity_checkins (owner_id, body) values ($1, 'private worry')`, [alice]));
-  assert.equal((await as(bob, () => q(`select * from public.insecurity_checkins`))).length, 0);
-  await as(alice, () => q(`update public.insecurity_checkins set shared_at = now()`));
-  assert.equal((await as(bob, () => q(`select * from public.insecurity_checkins`))).length, 1);
-  assert.equal((await as(carol, () => q(`select * from public.insecurity_checkins`))).length, 0);
-});
-
 await test('shared phase tables: couple-scoped', async () => {
   await as(bob, () => q(`insert into public.calendar_events (couple_id, created_by, title, starts_at) values ($1, $2, 'Dinner', now())`, [couple.id, bob]));
   assert.equal((await as(alice, () => q(`select * from public.calendar_events`))).length, 1);
@@ -396,38 +379,6 @@ await test('memory ratings: private to each of us, only on our own memories', as
     /row-level security/,
     'rate another couple’s memory',
   );
-});
-
-console.log('\nPhase 6 · Growth');
-
-await test('goals: shared board; my goals are mine to edit, ours are for both', async () => {
-  const mine = (await as(alice, () => one(`insert into public.goals (couple_id, owner_id, title) values ($1, $2, 'Run 10k') returning id`, [couple.id, alice]))).id;
-  await as(bob, () => q(`insert into public.goals (couple_id, owner_id, title) values ($1, null, 'Save for Japan')`, [couple.id]));
-  assert.equal((await as(bob, () => q(`select * from public.goals`))).length, 2, 'board is shared');
-  assert.equal((await as(bob, () => q(`update public.goals set progress = 90 where id = $1 returning 1`, [mine]))).length, 0, 'partner cannot edit mine');
-  assert.equal((await as(alice, () => q(`update public.goals set progress = 40 where owner_id is null returning 1`))).length, 1, 'either edits ours');
-  await rejects(as(bob, () => q(`insert into public.goals (couple_id, owner_id, title) values ($1, $2, 'x')`, [couple.id, alice])), /row-level security/, 'goal for partner');
-  assert.equal((await as(carol, () => q(`select * from public.goals`))).length, 0);
-});
-
-await test('mood: partner gets nudge timestamps only — never score or note', async () => {
-  await as(bob, () => q(`insert into public.mood_checkins (owner_id, score, note, nudge_partner) values ($1, 1, 'awful meeting', true), ($1, 4, 'fine', false)`, [bob]));
-  const nudges = await as(alice, () => q(`select * from public.partner_nudges()`));
-  assert.equal(nudges.length, 1);
-  assert.deepEqual(Object.keys(nudges[0]), ['nudged_at']);
-  assert.equal((await as(bob, () => q(`select * from public.partner_nudges()`))).length, 0, 'alice never asked');
-  assert.equal((await as(carol, () => q(`select * from public.partner_nudges()`))).length, 0, 'outsider');
-  assert.equal((await as(alice, () => q(`select * from public.mood_checkins where owner_id = $1`, [bob]))).length, 0, 'rows stay private');
-});
-
-await test('love languages: private until the owner shares', async () => {
-  await as(alice, () => q(`insert into public.love_language_results (owner_id, scores, primary_language) values ($1, '{"time":5}', 'time')`, [alice]));
-  assert.equal((await as(bob, () => q(`select * from public.love_language_results`))).length, 0);
-  await as(alice, () => q(`update public.love_language_results set shared = true`));
-  assert.equal((await as(bob, () => q(`select primary_language from public.love_language_results`)))[0].primary_language, 'time');
-  assert.equal((await as(carol, () => q(`select * from public.love_language_results`))).length, 0);
-  assert.equal((await as(bob, () => q(`update public.love_language_results set primary_language = 'gifts' returning 1`))).length, 0, 'read-only for partner');
-  await rejects(as(bob, () => q(`insert into public.love_language_results (owner_id, scores, primary_language) values ($1, '{}', 'hugs')`, [bob])), /primary_valid/, 'unknown language');
 });
 
 console.log('\nHome');
@@ -841,117 +792,6 @@ await test("plant: my timezone must be real, and the couple's day follows partne
   assert.equal(day, (await one(`select (now() at time zone 'Pacific/Kiritimati')::date::text as d`)).d, "A's clock");
 });
 
-console.log('\nSpark Rank');
-
-const sparkDay = async () => (await one(`select public.couple_day($1, now())::text as d`, [couple.id])).d;
-const sparksOf = async (who, kind) =>
-  (await one(`select coalesce(sum(sparks), 0)::int as n from public.spark_events where couple_id = $1 and user_id = $2 and kind = $3`, [couple.id, who, kind])).n;
-const resetSparks = () => db.exec(`delete from public.spark_events; delete from public.spark_seasons;`);
-const say = (who, body = 'hi') => as(who, () => q(`insert into public.messages (couple_id, sender_id, body) values ($1, $2, $3)`, [couple.id, who, body]));
-
-await test('spark: I see only my own Sparks, we both see the season; only triggers write', async () => {
-  // Everything above earned Sparks for both of us.
-  const mine = await as(alice, () => q(`select user_id from public.spark_events`));
-  assert.ok(mine.length > 0, 'some');
-  assert.ok(mine.every((r) => r.user_id === alice), 'only mine');
-  const seasons = await as(bob, () => q(`select sparks from public.spark_seasons where couple_id = $1`, [couple.id]));
-  assert.equal(seasons.length, 1);
-  assert.ok(seasons[0].sparks > 0, 'a season total');
-  assert.equal((await as(carol, () => q(`select * from public.spark_seasons where couple_id = $1`, [couple.id]))).length, 0, 'outsider');
-  await rejects(as(alice, () => q(`update public.spark_seasons set sparks = 99999`)), /permission denied/, 'update season');
-  await rejects(
-    as(alice, () => q(`insert into public.spark_events (couple_id, user_id, day, kind, sparks, source) values ($1, $2, current_date, 'message', 500, 'x')`, [couple.id, alice])),
-    /permission denied/,
-    'insert event',
-  );
-  await rejects(as(alice, () => q(`select public.spark_award($1, $2, 'message', now(), 'x')`, [couple.id, alice])), /permission denied/, 'call spark_award');
-  await rejects(as(alice, () => q(`select public.spark_claim_rank_up($1)`, [couple.id])), /permission denied/, 'claim rank-up');
-});
-
-await test('spark: messages pay up to a daily cap; the first one after quiet hours is a first move', async () => {
-  await resetSparks();
-  for (let i = 0; i < 12; i++) await say(alice, `m${i}`);
-  assert.equal(await sparksOf(alice, 'message'), 20, 'capped at 20');
-  assert.equal(await sparksOf(alice, 'first_move'), 15, 'one first move');
-  // Bob answers within the hour: a reply, not a first move.
-  await say(bob);
-  assert.equal(await sparksOf(bob, 'first_move'), 0, 'reply');
-  // Four quiet hours later, whoever reaches out first gets it.
-  await q(`update public.spark_events set created_at = created_at - interval '5 hours'`);
-  await say(bob, 'miss you');
-  assert.equal(await sparksOf(bob, 'first_move'), 15, 'after quiet hours');
-  await say(alice, 'me too');
-  assert.equal(await sparksOf(alice, 'first_move'), 15, 'answering is not');
-});
-
-await test('spark: the day we both show up pays a together bonus once, more on a streak', async () => {
-  const today = await sparkDay();
-  const bonus = await q(`select user_id, sparks from public.spark_events where kind = 'together'`);
-  assert.equal(bonus.length, 1, 'once');
-  assert.equal(bonus[0].user_id, null, 'ours, not either of ours');
-  assert.equal((await as(alice, () => q(`select * from public.spark_events where kind = 'together'`))).length, 0, 'not in my effort');
-  await resetSparks();
-  await q(`insert into public.plant_days (couple_id, day, a_at, b_at) values ($1, $2::date - 1, now(), now()), ($1, $2::date - 2, now(), now()) on conflict do nothing`, [couple.id, today]);
-  await say(alice);
-  assert.equal((await one(`select sparks from public.spark_events where kind = 'together'`)).sparks, 25, 'three days running');
-  const season = await one(`select sparks, today_sparks from public.spark_seasons where couple_id = $1`, [couple.id]);
-  assert.equal(season.sparks, season.today_sparks, 'today counted');
-  assert.equal(season.sparks, (await one(`select sum(sparks)::int as n from public.spark_events`)).n, 'season adds up');
-});
-
-await test('spark: a status, a call we both pick up and the time we talk all count', async () => {
-  await resetSparks();
-  await as(alice, () => q(`update public.profiles set status_emoji = '☕', status_text = 'coffee', status_at = now() where id = $1`, [alice]));
-  assert.equal(await sparksOf(alice, 'status'), 3, 'status');
-  await as(alice, () => q(`update public.profiles set status_emoji = null, status_text = null, status_at = now() where id = $1`, [alice]));
-  assert.equal(await sparksOf(alice, 'status'), 3, 'clearing it earns nothing');
-
-  const call = (await as(alice, () => one(`insert into public.calls (couple_id, caller_id, callee_id) values ($1, $2, $3) returning id`, [couple.id, alice, bob]))).id;
-  assert.equal(await sparksOf(alice, 'call_start'), 0, 'ringing earns nothing');
-  await as(bob, () => q(`select public.set_call_status($1, 'active')`, [call]));
-  assert.equal(await sparksOf(alice, 'call_start'), 10, 'the caller reached out');
-  assert.equal(await sparksOf(alice, 'call_pickup'), 5, 'caller picked up');
-  assert.equal(await sparksOf(bob, 'call_pickup'), 5, 'callee picked up');
-  await q(`update public.calls set answered_at = now() - interval '10 minutes' where id = $1`, [call]);
-  assert.equal(await sparksOf(alice, 'call_start'), 10, 'once per call');
-  await as(alice, () => q(`select public.set_call_status($1, 'ended')`, [call]));
-  assert.equal(await sparksOf(alice, 'call_minutes'), 5, 'ten minutes, one per two');
-  assert.equal(await sparksOf(bob, 'call_minutes'), 5, 'for both of us');
-});
-
-await test('spark: a new month opens at 40% of the last; a rank-up is announced once', async () => {
-  await q(`update public.spark_seasons set season = (season - interval '1 month')::date, sparks = 1000`);
-  await say(bob, 'new month');
-  const s = await one(
-    `select carry_in, sparks, notified_rank from public.spark_seasons where couple_id = $1 and season = date_trunc('month', public.couple_day($1, now()))::date`,
-    [couple.id],
-  );
-  assert.equal(s.carry_in, 400, 'carry-in');
-  assert.ok(s.sparks > 400, 'plus what we just earned');
-  assert.equal(s.notified_rank, (await one(`select public.spark_division(400) as n`)).n, 'starting rank is not news');
-  assert.equal((await one(`select public.spark_claim_rank_up($1) as r`, [couple.id])).r, null, 'nothing new yet');
-
-  await q(`update public.spark_seasons set sparks = 500 where couple_id = $1 and carry_in = 400`, [couple.id]);
-  assert.equal((await one(`select public.spark_claim_rank_up($1) as r`, [couple.id])).r, 'Spark II');
-  assert.equal((await one(`select public.spark_claim_rank_up($1) as r`, [couple.id])).r, null, 'once');
-});
-
-await test('spark: the ladder matches the app', async () => {
-  const src = readFileSync(join(root, 'packages/shared/src/api/spark.ts'), 'utf8');
-  const steps = JSON.parse(src.match(/SPARK_STEPS = (\[[^\]]*\])/)[1]);
-  const expected = [];
-  let at = 0;
-  for (const step of steps) {
-    for (let i = 0; i < 3; i++) {
-      expected.push(at);
-      at += step;
-    }
-  }
-  expected.push(at);
-  assert.deepEqual((await q(`select at from public.spark_ladder() order by idx`)).map((r) => r.at), expected);
-  assert.equal((await one(`select name from public.spark_ladder() where idx = 21`)).name, 'Eternal');
-});
-
 console.log('\nDraw together');
 
 await test('draw: feature granted to the full plan and to people already on it', async () => {
@@ -1084,15 +924,14 @@ await test('sticker messages: a GIPHY link or one of our sticker files, nothing 
 
 console.log('\nLeaving');
 
-await test('unpair: removes everything we shared, keeps private data, frees both of us', async () => {
+await test('unpair: removes everything we shared, frees both of us', async () => {
   await rejects(as(null, () => q(`select public.unpair()`)), /not_paired/, 'signed out');
   await as(alice, () => q(`select public.unpair()`));
   assert.equal((await q(`select count(*)::int as n from public.couples where id = $1`, [couple.id]))[0].n, 0, 'couple gone');
-  for (const table of ['messages', 'calls', 'calendar_events', 'memories', 'goals', 'future_letters', 'daily_questions', 'inside_jokes', 'snaps', 'plant_days', 'spark_events', 'spark_seasons']) {
+  for (const table of ['messages', 'calls', 'calendar_events', 'memories', 'future_letters', 'daily_questions', 'inside_jokes', 'snaps', 'plant_days']) {
     const n = (await q(`select count(*)::int as n from public.${table} where couple_id = $1`, [couple.id]))[0].n;
     assert.equal(n, 0, `${table} cleared`);
   }
-  assert.ok((await as(alice, () => q(`select * from public.mood_checkins`))).length > 0, 'private check-ins kept');
   assert.deepEqual((await as(bob, () => q(`select id from public.profiles`))).map((r) => r.id), [bob], 'no longer see each other');
   assert.equal((await as(carol, () => q(`select * from public.couples`))).length, 1, 'other couples untouched');
   await rejects(as(bob, () => q(`select public.unpair()`)), /not_paired/, 'already unpaired');

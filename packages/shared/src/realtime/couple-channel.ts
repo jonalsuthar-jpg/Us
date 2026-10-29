@@ -1,5 +1,5 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import type { Call, MessageRow, SparkSeason } from '../database.types';
+import type { Call, MessageRow } from '../database.types';
 import type { UsClient } from '../supabase';
 import type { DrawEvent } from '../draw/session';
 import type { SignalEvent } from '../webrtc/signals';
@@ -39,16 +39,15 @@ export interface ChangedEvent {
  * The couple's realtime link. Two Supabase channels:
  *
  *  - `couple:<id>` (private broadcast + presence) — typing, online presence,
- *    WebRTC signaling and "changed" pings for the Plan/Memory/Growth data.
+ *    WebRTC signaling and "changed" pings for the Plan/Memory data.
  *    Ephemeral; nothing touches the database. Access is restricted to the
  *    two members by Realtime Authorization policies.
  *  - `db:<id>` (Postgres Changes) — message inserts / receipt updates, call
- *    status changes and our Spark Rank season, filtered server-side by RLS.
+ *    status changes, filtered server-side by RLS.
  */
 export class CoupleChannel {
   readonly messages = new Emitter<RowChange<MessageRow>>();
   readonly calls = new Emitter<RowChange<Call>>();
-  readonly sparks = new Emitter<RowChange<SparkSeason>>();
   readonly typing = new Emitter<TypingEvent>();
   readonly signals = new Emitter<SignalEnvelope>();
   readonly presence = new Emitter<Set<string>>();
@@ -111,9 +110,6 @@ export class CoupleChannel {
       )
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calls', filter }, (p) =>
         this.calls.emit({ type: p.eventType, row: (p.eventType === 'DELETE' ? p.old : p.new) as Call }),
-      )
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'spark_seasons', filter }, (p) =>
-        this.sparks.emit({ type: p.eventType, row: (p.eventType === 'DELETE' ? p.old : p.new) as SparkSeason }),
       )
       .subscribe();
   }

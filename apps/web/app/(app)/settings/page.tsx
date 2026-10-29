@@ -256,7 +256,7 @@ export default function SettingsPage() {
         </h2>
         <p className="text-small text-ink-soft">
           Unpairing deletes everything you and {partner.display_name} share, for both of you: messages, plans, memories and their photos, and
-          your daily answers. Your private check-ins and worries stay yours. Deleting your account removes all of it, and you.
+          your daily answers. Deleting your account removes all of it, and you.
         </p>
         {leaveError && <p role="alert" className="text-small text-rose-700">{leaveError}</p>}
         <div className="flex flex-wrap gap-3">

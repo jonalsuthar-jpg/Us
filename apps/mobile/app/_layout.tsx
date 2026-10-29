@@ -22,7 +22,7 @@ import { UpdateBanner } from '@/components/update-banner';
 
 void SplashScreen.preventAutoHideAsync();
 
-// Shared timers (the plant, Spark Rank) only tick while Us is on screen.
+// Shared timers (the plant) only tick while Us is on screen.
 setForegroundSource({
   isActive: () => AppState.currentState === 'active',
   subscribe: (cb) => {

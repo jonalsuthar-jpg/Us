@@ -242,26 +242,6 @@ await step('memory: private photo bucket scoped to the couple', async () => {
   return 'partner reads, outsider blocked';
 });
 
-await step('growth: nudge exposes only a timestamp; push verifies ownership', async () => {
-  const { data: mood, error } = await bob.sb
-    .from('mood_checkins')
-    .insert({ owner_id: bob.id, score: 2, note: 'e2e private note', nudge_partner: true })
-    .select()
-    .single();
-  if (error) throw error;
-  cleanup.push(() => bob.sb.from('mood_checkins').delete().eq('id', mood.id));
-  const { data: nudges, error: e2 } = await alice.sb.rpc('partner_nudges', { p_hours: 1 });
-  if (e2) throw e2;
-  if (!nudges.length || Object.keys(nudges[0]).join() !== 'nudged_at') throw new Error('nudge shape leaked fields');
-  const { data: rows } = await alice.sb.from('mood_checkins').select('*');
-  if (rows.length) throw new Error('alice can read check-ins');
-  const { data: ok, error: e3 } = await bob.sb.functions.invoke('push', { body: { category: 'wellbeing_nudge', checkinId: mood.id } });
-  if (e3) throw e3;
-  const { error: spoof, data: spoofData } = await alice.sb.functions.invoke('push', { body: { category: 'wellbeing_nudge', checkinId: mood.id } });
-  if (!spoof && !spoofData?.skipped) throw new Error('alice could nudge as bob');
-  return `owner: ${JSON.stringify(ok)}, spoof: ${spoof ? 'forbidden' : 'skipped'}`;
-});
-
 for (const undo of cleanup.reverse()) await undo();
 
 for (const c of [aliceCh, bobCh]) await c?.ch.unsubscribe();

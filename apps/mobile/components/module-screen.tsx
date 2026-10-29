@@ -1,6 +1,6 @@
 import { moduleById, type ModuleId } from '@us/shared';
 import { router } from 'expo-router';
-import { HeartHandshake, MessageCircleHeart, NotebookPen, Settings, Sparkles, Sprout } from 'lucide-react-native';
+import { HeartHandshake, MessageCircleHeart, NotebookPen, Settings, Sparkles } from 'lucide-react-native';
 import type { ReactNode } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,7 +14,6 @@ const MODULE_ICON: Record<ModuleId, typeof Sparkles> = {
   connect: HeartHandshake,
   plan: NotebookPen,
   memory: Sparkles,
-  growth: Sprout,
 };
 
 export const MODULE_ACCENT: Record<ModuleId, { wash: string; ink: string; sheet: 'rose' | 'teal' | 'plum' | 'gold' | 'sage' }> = {
@@ -22,7 +21,6 @@ export const MODULE_ACCENT: Record<ModuleId, { wash: string; ink: string; sheet:
   connect: { wash: 'bg-teal-100', ink: 'text-teal-700', sheet: 'teal' },
   plan: { wash: 'bg-plum-100', ink: 'text-plum-600', sheet: 'plum' },
   memory: { wash: 'bg-gold-100', ink: 'text-gold-700', sheet: 'gold' },
-  growth: { wash: 'bg-sage-100', ink: 'text-sage-700', sheet: 'sage' },
 };
 
 /** Scrolling screen with the module's title, tagline and colour wash. */
@@ -44,7 +42,7 @@ export function ModuleScreen({
   const a = MODULE_ACCENT[id];
   const c = usePalette();
   const Icon = MODULE_ICON[id];
-  const iconColor = { talk: c.onRose, connect: c.onTeal, plan: c.onPlum, memory: c.onGold, growth: c.onSage }[id];
+  const iconColor = { talk: c.onRose, connect: c.onTeal, plan: c.onPlum, memory: c.onGold }[id];
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"

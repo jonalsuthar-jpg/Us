@@ -26,7 +26,6 @@ import { ErrorNote } from '../module-screen';
 import { PlantCard } from '../plant/plant-card';
 import { DoodleNote, DrawingBanner } from '@/components/draw/home-draw';
 import { SnapRow } from '../snaps/snap-row';
-import { RankChip } from '../spark/rank-chip';
 import { Avatar } from '../ui/avatar';
 import { Button, IconButton } from '../ui/button';
 import { cn } from '../ui/cn';
@@ -124,7 +123,6 @@ export function HomeScreen() {
             {myName}
           </Display>
         </View>
-        {has('spark') && <RankChip />}
         <IconButton label="Settings" size="sm" tone="raised" onPress={() => router.push('/settings')}>
           <Settings size={19} color={c.inkSoft} />
         </IconButton>
@@ -219,15 +217,6 @@ export function HomeScreen() {
             <Text className="font-sans-medium text-small">{theirName}</Text>
             {` is thinking of you · ${d.taps.count > 1 ? `${d.taps.count} times today, last ` : ''}${timeAgo(d.taps.latest)}`}
           </Text>
-        </Sheet>
-      ) : null}
-
-      {d?.nudged && has('mood') ? (
-        <Sheet tone="note" accent="rose" className="gap-1">
-          <Display italic className="text-lead">
-            {theirName} could use a little extra care today.
-          </Display>
-          <Text className="text-small text-ink-soft">A message, a call, or something small that says you noticed.</Text>
         </Sheet>
       ) : null}
 

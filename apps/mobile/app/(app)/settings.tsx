@@ -192,7 +192,7 @@ export default function Settings() {
         <Display className="text-heading">Leaving</Display>
         <Text className="text-small text-ink-soft">
           Unpairing deletes everything you and {partner.display_name} share, for both of you: messages, plans, memories and their photos, and
-          your daily answers. Your private check-ins and worries stay yours. Deleting your account removes all of it, and you.
+          your daily answers. Deleting your account removes all of it, and you.
         </Text>
         {leaveError ? <Text className="text-small text-rose-700">{leaveError}</Text> : null}
         <Button
