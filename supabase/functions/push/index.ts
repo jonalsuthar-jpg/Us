@@ -170,8 +170,9 @@ Deno.serve(async (req) => {
     } else {
       content = `Missed ${kind}`;
     }
-    // callerName / media let Android ring with a full-screen call even when Us is closed.
-    data = { category, url: '/talk', callId: call.id, callerName: name, media: call.media };
+    // callerName / media let Android ring with a full-screen call even when Us is closed;
+    // sentAt lets it ignore an old call push that OneSignal replays later.
+    data = { category, url: '/talk', callId: call.id, callerName: name, media: call.media, sentAt: Date.now() };
   } else if (body.category === 'daily_question') {
     // I just answered today's question. The push never carries the answer.
     const { data: q } = await admin.from('daily_questions').select('id, couple_id').eq('id', body.questionId).maybeSingle();

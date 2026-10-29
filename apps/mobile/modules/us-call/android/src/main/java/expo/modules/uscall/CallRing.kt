@@ -30,6 +30,24 @@ object CallRing {
 
   private var ringingCallId: String? = null
 
+  /**
+   * Calls that already rang or ended here. OneSignal replays a push it never
+   * displayed itself each time the app process starts, so without this an
+   * old call would ring again after it was over.
+   */
+  private const val PREFS = "us_call"
+  private const val HANDLED = "handled"
+  private const val HANDLED_KEEP = 20
+
+  fun handled(context: Context, callId: String): Boolean =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(HANDLED, "")!!.split(',').contains(callId)
+
+  fun markHandled(context: Context, callId: String) {
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val ids = prefs.getString(HANDLED, "")!!.split(',').filter { it.isNotEmpty() && it != callId }
+    prefs.edit().putString(HANDLED, (ids + callId).takeLast(HANDLED_KEEP).joinToString(",")).apply()
+  }
+
   fun notificationId(callId: String) = "us-ring-$callId".hashCode()
 
   /** Opens the app on the call, answering or declining it there. */
@@ -75,6 +93,7 @@ object CallRing {
   }
 
   fun show(context: Context, callId: String, caller: String, video: Boolean) {
+    markHandled(context, callId)
     ensureChannel(context)
     val id = notificationId(callId)
     val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -113,6 +132,7 @@ object CallRing {
   /** Stop ringing: this call, or whichever is ringing when callId is null. */
   fun cancel(context: Context, callId: String?) {
     val id = callId ?: ringingCallId ?: return
+    markHandled(context, id)
     context.getSystemService(NotificationManager::class.java).cancel(notificationId(id))
     if (ringingCallId == id) ringingCallId = null
     IncomingCallActivity.dismiss(id)

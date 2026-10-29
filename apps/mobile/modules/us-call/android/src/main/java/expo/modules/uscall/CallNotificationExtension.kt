@@ -11,6 +11,10 @@ import com.onesignal.notifications.INotificationServiceExtension
  * gather into one conversation notification instead of one each.
  */
 class CallNotificationExtension : INotificationServiceExtension {
+  private companion object {
+    const val STALE_MS = 120_000L
+  }
+
   override fun onNotificationReceived(event: INotificationReceivedEvent) {
     val data = event.notification.additionalData ?: return
     if (data.optString("category") == "new_message") {
@@ -28,8 +32,17 @@ class CallNotificationExtension : INotificationServiceExtension {
     val callId = data.optString("callId").takeIf { it.isNotEmpty() } ?: return
     when (data.optString("category")) {
       "incoming_call" -> {
+        // A replay of a call that already rang or ended, or one that's too old to answer.
+        val sentAt = data.optLong("sentAt")
+        if (CallRing.handled(event.context, callId) || (sentAt > 0 && System.currentTimeMillis() - sentAt > STALE_MS)) {
+          event.preventDefault()
+          return
+        }
         // With Us open, the app rings itself.
-        if (CallRing.appInForeground(event.context)) return
+        if (CallRing.appInForeground(event.context)) {
+          CallRing.markHandled(event.context, callId)
+          return
+        }
         val caller = data.optString("callerName").ifEmpty { event.notification.title ?: "Us" }
         try {
           CallRing.show(event.context, callId, caller, data.optString("media") == "video")
