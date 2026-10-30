@@ -116,6 +116,8 @@ export const Bubble = memo(function Bubble({
               accessibilityRole="button"
               accessibilityLabel={`Reply to ${quote.author}: ${quote.text}. Show it`}
               onPress={() => onJumpTo?.(quote.id)}
+              onLongPress={longPress}
+              delayLongPress={300}
               className={cn('mb-1.5 rounded-[10px] border-l-[3px] px-2.5 py-1.5', mine ? 'border-rose-600 bg-paper-raised/60' : 'border-plum-300 bg-paper-sunken', photo && url && 'm-1')}
             >
               <Text className="font-sans-semibold text-micro text-ink">{quote.author}</Text>

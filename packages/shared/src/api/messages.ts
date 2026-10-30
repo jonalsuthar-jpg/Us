@@ -253,7 +253,7 @@ const RANK: Record<MessageStatus, number> = { sent: 0, delivered: 1, read: 2 };
 export function mergeMessage(existing: Message | undefined, incoming: Message): Message {
   if (!existing) return incoming;
   const status = RANK[incoming.status] >= RANK[existing.status] ? incoming.status : existing.status;
-  return {
+  const merged: Message = {
     ...existing,
     ...incoming,
     status,
@@ -264,4 +264,57 @@ export function mergeMessage(existing: Message | undefined, incoming: Message): 
     localUri: incoming.localUri ?? existing.localUri,
     upload: undefined,
   };
+  return sameMessage(existing, merged) ? existing : merged;
+}
+
+/** True when nothing on screen would differ, so a row can keep its identity and not redraw. */
+function sameMessage(a: Message, b: Message): boolean {
+  if (!!a.pending !== !!b.pending || !!a.failed !== !!b.failed || a.upload !== b.upload) return false;
+  for (const key of Object.keys(b) as (keyof Message)[]) {
+    if (key === 'pending' || key === 'failed' || key === 'upload') continue;
+    const x = a[key];
+    const y = b[key];
+    if (x === y) continue;
+    if (typeof x !== 'object' || typeof y !== 'object' || JSON.stringify(x) !== JSON.stringify(y)) return false;
+  }
+  return true;
+}
+
+/**
+ * Merge rows into a thread kept oldest → newest. Rows that didn't change keep
+ * their identity, and if nothing changed the same array comes back, so a
+ * re-fetch of what's already on screen costs no redraw.
+ */
+export function mergeMessages(prev: Message[], incoming: Message[]): Message[] {
+  const fresh = new Map(incoming.map((m) => [m.id, m]));
+  let changed = false;
+  const merged = prev.map((m) => {
+    const update = fresh.get(m.id);
+    if (!update) return m;
+    fresh.delete(m.id);
+    const next = mergeMessage(m, update);
+    if (next !== m) changed = true;
+    return next;
+  });
+  if (!changed && !fresh.size) return prev;
+  const next = fresh.size ? [...merged, ...fresh.values()] : merged;
+  // Timestamps sort as plain strings; localeCompare is far too slow for a long thread on Hermes.
+  const sorted = next.every((m, i) => i === 0 || next[i - 1]!.created_at <= m.created_at);
+  return sorted ? next : next.sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+}
+
+/**
+ * Forget rows the server no longer has. `page` is the newest page, newest
+ * first, and is the truth for the stretch of time it covers (back to the start
+ * of the thread when `wholeThread`). Unsent drafts and anything newer than the
+ * page, which arrived while it was being fetched, are left alone.
+ */
+export function dropDeleted(prev: Message[], page: Message[], wholeThread: boolean): Message[] {
+  const seen = new Set(page.map((m) => m.id));
+  const newest = page[0]?.created_at;
+  const oldest = wholeThread ? undefined : page[page.length - 1]?.created_at;
+  const next = prev.filter(
+    (m) => m.pending || m.failed || seen.has(m.id) || (newest !== undefined && m.created_at > newest) || (oldest !== undefined && m.created_at < oldest),
+  );
+  return next.length === prev.length ? prev : next;
 }

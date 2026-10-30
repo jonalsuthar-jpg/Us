@@ -1,4 +1,4 @@
-import { clusters, formatDay, groupByDay, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
+import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
 import { useCallManager, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -74,7 +74,7 @@ function Thread() {
   useEffect(() => {
     if (viewing) clearMessageNotifications();
   }, [viewing]);
-  const { messages, loading, hasOlder, loadOlder, send, retry, react, pin } = useMessages({ viewing });
+  const { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, react, pin } = useMessages({ viewing });
   const media = useChatMedia(messages);
   const [acting, setActing] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -88,7 +88,7 @@ function Thread() {
   const list = useRef<FlatList<Row>>(null);
 
   const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id), [sb, couple.id]);
-  const pinSignature = messages.map((m) => (m.pinned_at ? m.id : '')).join('');
+  const pinSignature = useMemo(() => messages.map((m) => (m.pinned_at ? m.id : '')).join(''), [messages]);
   useEffect(() => {
     void pins.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,16 +142,26 @@ function Thread() {
   const c = usePalette();
 
   // Inverted list → newest first. Reply quotes are worked out here, once per
-  // change, so rows keep the same props and don't redraw while scrolling.
+  // change, and an unchanged quote stays the same object, so rows keep the same
+  // props and don't redraw while scrolling or when older messages load.
+  const quotes = useRef(new Map<string, ReplyQuote>());
   const rows = useMemo<Row[]>(() => {
     const byId = new Map(messages.map((m) => [m.id, m]));
     const allSnaps = [...(snaps.data?.mine ?? []), ...(snaps.data?.partner ?? [])];
-    const quoteFor = (m: Message): ReplyQuote | null => {
+    const buildQuote = (m: Message): ReplyQuote | null => {
       const snap = snapReplyQuote(m, me.id, partner.display_name, allSnaps);
       if (snap) return { id: `snap-${m.snap_id}`, ...snap };
       if (!m.reply_to) return null;
       const r = byId.get(m.reply_to);
       return r ? { id: r.id, author: authorOf(r), text: messagePreview(r) } : { id: m.reply_to, author: 'Earlier message', text: 'Scroll up to see it' };
+    };
+    const quoteFor = (m: Message): ReplyQuote | null => {
+      const next = buildQuote(m);
+      if (!next) return null;
+      const was = quotes.current.get(m.id);
+      if (was && was.id === next.id && was.author === next.author && was.text === next.text) return was;
+      quotes.current.set(m.id, next);
+      return next;
     };
     const out: Row[] = [];
     for (const g of groupByDay(messages)) {
@@ -180,6 +190,16 @@ function Thread() {
     list.current?.scrollToOffset({ offset: 0, animated: true });
     setNewBelow(0);
   }
+
+  // Older messages load as you near the top. FlatList's onEndReached fires once
+  // per content height, so a missed or failed load stuck the thread until you
+  // scrolled away and back; this looks at where the list actually is, every time.
+  const listBox = useRef({ offset: 0, visible: 0, content: 0 });
+  const canLoadOlder = hasOlder && !olderFailed;
+  const checkNearOldest = () => {
+    const { offset, visible, content } = listBox.current;
+    if (canLoadOlder && visible > 0 && content - visible - offset < visible * 1.5) void loadOlder();
+  };
 
   function jumpTo(id: string) {
     const index = rows.findIndex((r) => r.key === id);
@@ -230,7 +250,8 @@ function Thread() {
           mediaUrl={item.message.media_path ? media[item.message.media_path] : undefined}
           quote={item.quote}
           highlighted={highlight === item.message.id}
-          animate={viewing}
+          // Only rows that play something care, so switching tabs doesn't redraw the rest.
+          animate={isLinkedMedia(item.message.media_kind) ? viewing : true}
           onRetry={onRetry}
           onLongPress={onLongPress}
           onReact={onReact}
@@ -242,6 +263,15 @@ function Thread() {
     [me.id, mySlot, partnerSlot, partner.display_name, media, highlight, viewing, onRetry, onLongPress, onReact, onReply, onJumpTo, onCallBack],
   );
   const typingHeader = useMemo(() => <TypingBubble visible={partnerTyping} name={partner.display_name} slot={partnerSlot} />, [partnerTyping, partner.display_name, partnerSlot]);
+  const olderFooter = olderFailed ? (
+    <Pressable accessibilityRole="button" onPress={() => void loadOlder()} className="items-center py-4">
+      <Text className="font-sans-medium text-small text-rose-700">Couldn’t load older messages. Tap to try again</Text>
+    </Pressable>
+  ) : loadingOlder ? (
+    <View className="items-center py-4">
+      <ActivityIndicator color={c.rose} />
+    </View>
+  ) : undefined;
 
   const attachOptions: AttachOption[] = [
     { key: 'gallery', label: 'Gallery', icon: ATTACH_ICONS.gallery, tint: ATTACH_TINTS.gallery, onPress: () => void sendFromGallery().catch(fail) },
@@ -327,7 +357,10 @@ function Thread() {
             // Detaching off-screen rows helps Android; on iOS it can blank rows mid-scroll.
             removeClippedSubviews={Platform.OS === 'android'}
             onScroll={(e) => {
-              const up = e.nativeEvent.contentOffset.y > 600;
+              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+              listBox.current = { offset: contentOffset.y, visible: layoutMeasurement.height, content: contentSize.height };
+              checkNearOldest();
+              const up = contentOffset.y > 600;
               if (up !== awayRef.current) {
                 awayRef.current = up;
                 setAway(up);
@@ -335,9 +368,16 @@ function Thread() {
               }
             }}
             scrollEventThrottle={100}
-            onEndReached={() => hasOlder && void loadOlder()}
-            onEndReachedThreshold={0.5}
+            onLayout={(e) => {
+              listBox.current.visible = e.nativeEvent.layout.height;
+              checkNearOldest();
+            }}
+            onContentSizeChange={(_, height) => {
+              listBox.current.content = height;
+              checkNearOldest();
+            }}
             ListHeaderComponent={typingHeader}
+            ListFooterComponent={olderFooter}
             ListEmptyComponent={
               <View className="items-center py-24" style={{ transform: [{ scaleY: -1 }] }}>
                 <Display light italic className="text-title">

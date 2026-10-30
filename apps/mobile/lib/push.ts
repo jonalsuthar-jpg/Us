@@ -19,6 +19,12 @@ export function requestPushPermission(): Promise<boolean> {
   return OneSignal.Notifications.requestPermission(true);
 }
 
+/** Whether Android/iOS already lets us notify. */
+export function hasPushPermission(): Promise<boolean> {
+  if (!initialised) return Promise.resolve(false);
+  return OneSignal.Notifications.getPermissionAsync();
+}
+
 export function logoutPush() {
   if (initialised) OneSignal.logout();
 }

@@ -14,8 +14,11 @@ import { PlantArt } from './plant-art';
 
 const WATERS = ['📸 A snap', '💗 Thinking of you', '💬 A message', '❓ Today’s question', '📞 A call you both pick up'];
 
-/** Our little plant: grows on days we both show up for each other. */
-export function PlantCard() {
+/**
+ * Our little plant: grows on days we both show up for each other.
+ * `animate` is off while the card can't be seen; moving it costs a redraw every frame.
+ */
+export function PlantCard({ animate = true }: { animate?: boolean }) {
   const { couple, partner, mySlot, partnerSlot } = useCouple();
   const { state } = usePlant();
   const [open, setOpen] = useState(false);
@@ -48,7 +51,7 @@ export function PlantCard() {
         className="overflow-hidden rounded-[28px] border border-paper-edge bg-paper-raised active:opacity-95"
       >
         <View>
-          <PlantArt scene={scene} title={title} />
+          <PlantArt scene={scene} title={title} still={!animate || open} />
           {grew ? (
             <Animated.View entering={ZoomIn.springify()} exiting={FadeOut} className="absolute inset-0 items-center justify-center">
               <Text className="overflow-hidden rounded-full bg-paper-raised/90 px-4 py-1.5 font-sans-medium text-small">It grew! Now {state.stage.name} 🌸</Text>

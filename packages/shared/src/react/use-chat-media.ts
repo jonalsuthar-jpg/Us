@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { chatMediaUrls } from '../api/messages';
 import type { Message } from '../database.types';
 import { useCouple } from './couple-provider';
@@ -27,9 +27,11 @@ export function useChatMedia(messages: Pick<Message, 'media_path'>[]): Record<st
   });
   const asked = useRef(new Set<string>());
 
-  const missing = messages
-    .map((m) => m.media_path)
-    .filter((p): p is string => !!p && !urls[p] && !asked.current.has(p));
+  // Worked out once per change: the thread also redraws for typing pings and the like.
+  const missing = useMemo(
+    () => messages.map((m) => m.media_path).filter((p): p is string => !!p && !urls[p] && !asked.current.has(p)),
+    [messages, urls],
+  );
   const missingKey = missing.join('|');
 
   useEffect(() => {

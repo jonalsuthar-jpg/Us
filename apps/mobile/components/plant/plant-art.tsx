@@ -1,7 +1,7 @@
 import { PLANT_ORIGIN, PLANT_VIEWBOX, type ArtLayerId, type ArtShape, type PlantScene } from '@us/shared';
 import { useEffect, useId } from 'react';
 import { View, type ViewStyle } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, RadialGradient, Stop } from 'react-native-svg';
 
 const { width: W, height: H } = PLANT_VIEWBOX;
@@ -17,7 +17,13 @@ export function PlantArt({ scene, style, title, still }: { scene: PlantScene; st
   const sway = useSharedValue(0);
   const fall = useSharedValue(0);
   useEffect(() => {
-    if (calm) return;
+    if (calm) {
+      cancelAnimation(sway);
+      cancelAnimation(fall);
+      sway.value = 0;
+      fall.value = 0;
+      return;
+    }
     sway.value = withRepeat(withTiming(1, { duration: 2250, easing: Easing.inOut(Easing.sin) }), -1, true);
     fall.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.in(Easing.quad) }), -1, false);
   }, [calm, sway, fall]);
@@ -29,11 +35,14 @@ export function PlantArt({ scene, style, title, still }: { scene: PlantScene; st
   return (
     <View style={[{ aspectRatio: W / H, overflow: 'hidden' }, style]} accessible accessibilityRole="image" accessibilityLabel={title}>
       {layer(['sky', 'ground'])}
-      <Animated.View style={[fill, { transformOrigin: `${(PLANT_ORIGIN.x / W) * 100}% ${(PLANT_ORIGIN.y / H) * 100}%` }, swayStyle]}>
+      {/* Kept as textures on Android, so moving a layer doesn't repaint its SVG every frame. */}
+      <Animated.View renderToHardwareTextureAndroid style={[fill, { transformOrigin: `${(PLANT_ORIGIN.x / W) * 100}% ${(PLANT_ORIGIN.y / H) * 100}%` }, swayStyle]}>
         {layer(['plant'])}
       </Animated.View>
       {layer(['pot', 'canLeft', 'canRight'])}
-      <Animated.View style={[fill, dripStyle]}>{layer(['petals', 'drops'])}</Animated.View>
+      <Animated.View renderToHardwareTextureAndroid style={[fill, dripStyle]}>
+        {layer(['petals', 'drops'])}
+      </Animated.View>
     </View>
   );
 }

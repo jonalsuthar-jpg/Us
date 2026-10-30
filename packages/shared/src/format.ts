@@ -1,7 +1,17 @@
 import type { Call, Message } from './database.types';
 
+/** Building a formatter is slow on Hermes and a long thread asks for thousands of labels, so each is made once. */
+function formatter(options: Intl.DateTimeFormatOptions) {
+  let made: Intl.DateTimeFormat | undefined;
+  return (d: Date) => (Number.isNaN(d.getTime()) ? 'Invalid Date' : (made ??= new Intl.DateTimeFormat(undefined, options)).format(d));
+}
+const clockLabel = formatter({ hour: 'numeric', minute: '2-digit' });
+const weekdayLabel = formatter({ weekday: 'long' });
+const dateLabel = formatter({ day: 'numeric', month: 'long' });
+const fullDateLabel = formatter({ day: 'numeric', month: 'long', year: 'numeric' });
+
 export function formatClock(iso: string | number | Date): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return clockLabel(new Date(iso));
 }
 
 /** "Today", "Yesterday", "Tuesday", "12 March", "12 March 2024". */
@@ -11,12 +21,8 @@ export function formatDay(iso: string, now = new Date()): string {
   const days = Math.round((startOf(now) - startOf(d)) / 86_400_000);
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';
-  if (days < 7) return d.toLocaleDateString(undefined, { weekday: 'long' });
-  return d.toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'long',
-    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
-  });
+  if (days < 7) return weekdayLabel(d);
+  return d.getFullYear() === now.getFullYear() ? dateLabel(d) : fullDateLabel(d);
 }
 
 export function formatDuration(ms: number): string {

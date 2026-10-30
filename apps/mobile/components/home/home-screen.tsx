@@ -18,7 +18,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
 import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Pencil, Phone, Settings, Sparkles, Video } from 'lucide-react-native';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bootHome, saveHome } from '@/lib/boot-cache';
@@ -68,11 +68,24 @@ export function HomeScreen() {
 
   // Home summarises every area, so any change my partner makes anywhere refreshes it.
   useEffect(() => channel.changes.on((e) => e.from !== me.id && void home.reload()), [channel, me.id, home.reload]);
+  const [focused, setFocused] = useState(false);
   useFocusEffect(
     useCallback(() => {
+      setFocused(true);
       void home.reload();
+      return () => setFocused(false);
     }, [home.reload]),
   );
+
+  // The pager keeps Home drawn next to Talk, so the plant only moves while it's on screen here.
+  const [plantInView, setPlantInView] = useState(false);
+  const plantBox = useRef({ top: 0, height: 0 });
+  const scrollBox = useRef({ top: 0, height: 0 });
+  const checkPlant = useCallback(() => {
+    const plant = plantBox.current;
+    const view = scrollBox.current;
+    setPlantInView(plant.height > 0 && plant.top < view.top + view.height && plant.top + plant.height > view.top);
+  }, []);
 
   const [tapState, setTapState] = useState<'idle' | 'sent' | 'wait'>('idle');
   async function tap() {
@@ -115,6 +128,15 @@ export function HomeScreen() {
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 40 }}
       contentContainerClassName="gap-5 px-5"
       refreshControl={<RefreshControl refreshing={home.loading && !!d} onRefresh={() => void home.reload()} />}
+      scrollEventThrottle={100}
+      onScroll={(e) => {
+        scrollBox.current.top = e.nativeEvent.contentOffset.y;
+        checkPlant();
+      }}
+      onLayout={(e) => {
+        scrollBox.current.height = e.nativeEvent.layout.height;
+        checkPlant();
+      }}
     >
       <View className="flex-row items-center gap-2.5">
         <View className="flex-1">
@@ -273,7 +295,16 @@ export function HomeScreen() {
         />
       ) : null}
 
-      {d && has('plant') ? <PlantCard /> : null}
+      {d && has('plant') ? (
+        <View
+          onLayout={(e) => {
+            plantBox.current = { top: e.nativeEvent.layout.y, height: e.nativeEvent.layout.height };
+            checkPlant();
+          }}
+        >
+          <PlantCard animate={focused && plantInView} />
+        </View>
+      ) : null}
 
       <FormSheet centered open={editingStatus} title="Your status" onClose={() => setEditingStatus(false)}>
         {editingStatus ? (

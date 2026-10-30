@@ -13,7 +13,7 @@ import { PrivacyBadge } from '@/components/ui/privacy';
 import { Sheet } from '@/components/ui/sheet';
 import { Display, Text } from '@/components/ui/text';
 import { env } from '@/lib/env';
-import { logoutPush, requestPushPermission } from '@/lib/push';
+import { hasPushPermission, logoutPush, requestPushPermission } from '@/lib/push';
 import { canRingFullScreen, openFullScreenSettings } from '@/modules/us-call';
 import { playChime } from '@/lib/sounds';
 import { usePalette, useThemePref } from '@/components/ui/palette';
@@ -38,7 +38,13 @@ export default function Settings() {
   // Android 14+ can switch off full-screen ringing; re-checked on return from its settings page.
   const [fullScreen, setFullScreen] = useState(canRingFullScreen);
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && setFullScreen(canRingFullScreen()));
+    const checkPush = () => void hasPushPermission().then(setPush).catch(() => {});
+    checkPush();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') return;
+      setFullScreen(canRingFullScreen());
+      checkPush();
+    });
     return () => sub.remove();
   }, []);
 

@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ackMessages,
   draftMessage,
+  dropDeleted,
   fetchMessage,
   fetchMessages,
-  mergeMessage,
+  mergeMessages,
   PAGE_SIZE,
   pinMessage,
   reactToMessage,
@@ -28,37 +29,43 @@ interface Options {
  * The chat thread: initial page, older pages, live inserts and receipt
  * updates, optimistic sends with retry, and read receipts while viewing.
  * Messages are kept oldest → newest. The newest page is cached, so the
- * thread draws at once and the server's copy merges in behind it.
+ * thread draws at once and the server's copy merges in behind it. Messages
+ * that couldn't be sent are kept too, and go again once we're back online.
  */
 export function useMessages({ viewing }: Options) {
   const { sb, couple, me, partner, channel, refreshUnread } = useCouple();
   const key = cacheKey(couple.id, 'chat:messages');
-  const [messages, setMessages] = useState<Message[]>(() => readCache<Message[]>(key) ?? []);
+  const unsentKey = cacheKey(couple.id, 'chat:unsent');
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const unsent = (readCache<Message[]>(unsentKey) ?? []).map((m) => ({ ...m, pending: false, failed: true }));
+    return mergeMessages(readCache<Message[]>(key) ?? [], unsent);
+  });
   const [loading, setLoading] = useState(() => !readCache(key));
   const [hasOlder, setHasOlder] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderFailed, setOlderFailed] = useState(false);
   const viewingRef = useRef(viewing);
   viewingRef.current = viewing;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const hasOlderRef = useRef(hasOlder);
+  hasOlderRef.current = hasOlder;
+  const fetchingOlder = useRef(false);
+  const delivering = useRef(new Set<string>());
+  // What came from the device hasn't been checked against the server yet.
+  const checked = useRef(false);
 
   const upsert = useCallback((incoming: Message | Message[]) => {
-    const list = Array.isArray(incoming) ? incoming : [incoming];
-    setMessages((prev) => {
-      const byId = new Map(prev.map((m) => [m.id, m]));
-      for (const m of list) byId.set(m.id, mergeMessage(byId.get(m.id), m));
-      return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
-    });
+    setMessages((prev) => mergeMessages(prev, Array.isArray(incoming) ? incoming : [incoming]));
   }, []);
 
   const markRead = useCallback(() => {
     let changed = false;
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.sender_id === partner.id && m.status !== 'read') {
-          changed = true;
-          return { ...m, status: 'read' };
-        }
-        return m;
-      }),
-    );
+    setMessages((prev) => {
+      if (!prev.some((m) => m.sender_id === partner.id && m.status !== 'read')) return prev;
+      changed = true;
+      return prev.map((m) => (m.sender_id === partner.id && m.status !== 'read' ? { ...m, status: 'read' } : m));
+    });
     // Fire regardless of local state — cheap, idempotent, and catches rows not loaded yet.
     void ackMessages(sb, 'read')
       .then(() => refreshUnread())
@@ -66,13 +73,45 @@ export function useMessages({ viewing }: Options) {
     return changed;
   }, [sb, partner.id, refreshUnread]);
 
-  // Initial load + resync after reconnects.
+  const deliver = useCallback(
+    async (draft: Message) => {
+      if (delivering.current.has(draft.id)) return;
+      delivering.current.add(draft.id);
+      try {
+        const saved = await sendMessage(sb, draft);
+        upsert({ ...saved, pending: false, failed: false });
+        void notifyPartner(sb, { category: 'new_message', messageId: saved.id });
+      } catch {
+        setMessages((prev) => prev.map((m) => (m.id === draft.id ? { ...m, pending: false, failed: true } : m)));
+      } finally {
+        delivering.current.delete(draft.id);
+      }
+    },
+    [sb, upsert],
+  );
+
+  const retry = useCallback(
+    (id: string) => {
+      const m = messagesRef.current.find((x) => x.id === id);
+      if (!m || !m.failed) return Promise.resolve();
+      const again = { ...m, failed: false, pending: true };
+      setMessages((prev) => prev.map((x) => (x.id === id ? again : x)));
+      return deliver(again);
+    },
+    [deliver],
+  );
+
+  // Initial load + resync after reconnects, then anything still waiting to go, in order.
   const loadLatest = useCallback(async () => {
     const page = await fetchMessages(sb, couple.id);
-    upsert(page);
+    const wholeThread = !checked.current || page.length < PAGE_SIZE;
+    checked.current = true;
+    setMessages((prev) => mergeMessages(dropDeleted(prev, page, wholeThread), page));
     setHasOlder(page.length === PAGE_SIZE);
+    setOlderFailed(false);
     setLoading(false);
-  }, [sb, couple.id, upsert]);
+    for (const m of messagesRef.current.filter((x) => x.failed)) await retry(m.id);
+  }, [sb, couple.id, retry]);
 
   useEffect(() => {
     void loadLatest().catch(() => setLoading(false));
@@ -80,7 +119,10 @@ export function useMessages({ viewing }: Options) {
       if (s === 'live') void loadLatest().catch(() => {});
     });
     const offMessages = channel.messages.on(async ({ type, row }) => {
-      if (type === 'DELETE') return;
+      if (type === 'DELETE') {
+        setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev.filter((m) => m.id !== row.id) : prev));
+        return;
+      }
       if (row.kind === 'call') {
         const full = await fetchMessage(sb, row.id).catch(() => null);
         upsert(full ?? row);
@@ -91,7 +133,7 @@ export function useMessages({ viewing }: Options) {
     });
     const offCalls = channel.calls.on(({ row }) => {
       // Keep embedded call info on call-log entries fresh.
-      setMessages((prev) => prev.map((m) => (m.call_id === row.id ? { ...m, call: row } : m)));
+      setMessages((prev) => (prev.some((m) => m.call_id === row.id) ? prev.map((m) => (m.call_id === row.id ? { ...m, call: row } : m)) : prev));
     });
     return () => {
       offStatus();
@@ -104,36 +146,41 @@ export function useMessages({ viewing }: Options) {
     if (viewing && !loading) markRead();
   }, [viewing, loading, markRead]);
 
-  // Keep the newest settled messages for next time (no drafts, no on-device files).
+  // Keep the newest settled messages for next time (no drafts, no on-device files),
+  // and anything unsent, unless it has a file to upload: those bytes only live in memory.
   useEffect(() => {
     if (loading) return;
-    const settled = messages.filter((m) => !m.pending && !m.failed);
-    writeCache(
-      key,
-      settled.slice(-KEEP).map(({ localUri: _l, upload: _u, ...m }) => m),
-    );
-  }, [key, loading, messages]);
+    const settled: Message[] = [];
+    const unsent: Message[] = [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const { localUri: _l, upload, ...m } = messages[i]!;
+      if (m.pending || m.failed) {
+        if (!upload) unsent.unshift(m);
+      } else if (settled.length < KEEP) settled.unshift(m);
+    }
+    writeCache(key, settled);
+    writeCache(unsentKey, unsent);
+  }, [key, unsentKey, loading, messages]);
 
+  /** Safe to call as often as you like: it does nothing while a page is on its way or once there's nothing older. */
   const loadOlder = useCallback(async () => {
-    const oldest = messages[0];
-    if (!oldest || !hasOlder) return;
-    const page = await fetchMessages(sb, couple.id, oldest.created_at);
-    upsert(page);
-    setHasOlder(page.length === PAGE_SIZE);
-  }, [sb, couple.id, messages, hasOlder, upsert]);
-
-  const deliver = useCallback(
-    async (draft: Message) => {
-      try {
-        const saved = await sendMessage(sb, draft);
-        upsert({ ...saved, pending: false, failed: false });
-        void notifyPartner(sb, { category: 'new_message', messageId: saved.id });
-      } catch {
-        setMessages((prev) => prev.map((m) => (m.id === draft.id ? { ...m, pending: false, failed: true } : m)));
-      }
-    },
-    [sb, upsert],
-  );
+    // Cursor from a row the server has: an old unsent draft could skip everything after it.
+    const oldest = messagesRef.current.find((m) => !m.pending && !m.failed);
+    if (!oldest || !checked.current || !hasOlderRef.current || fetchingOlder.current) return;
+    fetchingOlder.current = true;
+    setLoadingOlder(true);
+    setOlderFailed(false);
+    try {
+      const page = await fetchMessages(sb, couple.id, oldest.created_at);
+      upsert(page);
+      setHasOlder(page.length === PAGE_SIZE);
+    } catch {
+      setOlderFailed(true);
+    } finally {
+      fetchingOlder.current = false;
+      setLoadingOlder(false);
+    }
+  }, [sb, couple.id, upsert]);
 
   /** Send text, optionally replying to a message and/or with a photo or voice note. */
   const send = useCallback(
@@ -155,7 +202,7 @@ export function useMessages({ viewing }: Options) {
   /** Set (or with null, clear) my reaction. Optimistic, rolled back on failure. */
   const react = useCallback(
     async (id: string, emoji: string | null) => {
-      const before = messages.find((m) => m.id === id)?.reactions ?? {};
+      const before = messagesRef.current.find((m) => m.id === id)?.reactions ?? {};
       patch(id, (m) => {
         const next = { ...m.reactions };
         if (emoji) next[me.id] = emoji;
@@ -169,7 +216,7 @@ export function useMessages({ viewing }: Options) {
         throw e;
       }
     },
-    [sb, me.id, messages, patch, upsert],
+    [sb, me.id, patch, upsert],
   );
 
   const pin = useCallback(
@@ -181,16 +228,5 @@ export function useMessages({ viewing }: Options) {
     [sb, channel, upsert],
   );
 
-  const retry = useCallback(
-    (id: string) => {
-      const m = messages.find((x) => x.id === id);
-      if (!m || !m.failed) return;
-      const again = { ...m, failed: false, pending: true };
-      setMessages((prev) => prev.map((x) => (x.id === id ? again : x)));
-      void deliver(again);
-    },
-    [messages, deliver],
-  );
-
-  return { messages, loading, hasOlder, loadOlder, send, retry, markRead, react, pin };
+  return { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, markRead, react, pin };
 }
