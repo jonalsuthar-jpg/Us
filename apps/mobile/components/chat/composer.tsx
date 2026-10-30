@@ -19,6 +19,7 @@ const ICON = { size: 22, strokeWidth: 1.8 };
  */
 export function Composer({
   partnerName,
+  initialText = '',
   onSend,
   onChange,
   replyTo,
@@ -29,6 +30,8 @@ export function Composer({
   onCamera,
 }: {
   partnerName: string;
+  /** A draft to pick up where you left off. */
+  initialText?: string;
   onSend: (text: string) => void;
   onChange: (text: string) => void;
   replyTo?: ReplyQuote | null;
@@ -41,7 +44,7 @@ export function Composer({
   /** The in-app camera. */
   onCamera?: () => void;
 }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const c = usePalette();

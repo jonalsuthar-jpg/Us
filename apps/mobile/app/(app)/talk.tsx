@@ -1,10 +1,10 @@
 import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
-import { useCallManager, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
+import { cacheKey, readCache, useCallManager, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { ChevronsDown, Copy, Phone, Pin, PinOff, Plus, Reply, Search, Settings, Sticker, Video } from 'lucide-react-native';
+import { ArrowLeft, ChevronsDown, Copy, Phone, Pin, PinOff, Plus, Reply, Search, Sticker, Video } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, FlatList, Modal, Platform, Pressable, TextInput, View, type ListRenderItem } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -52,13 +52,33 @@ function useViewing() {
   return focused && active;
 }
 
+/** Back to the tabs. Opened from a notification on a cold start, there may be nothing behind chat. */
+function leaveChat() {
+  if (router.canGoBack()) router.back();
+  else router.replace('/home');
+}
+
+function BackButton() {
+  const c = usePalette();
+  return (
+    <IconButton label="Back" size="sm" onPress={leaveChat}>
+      <ArrowLeft size={22} color={c.ink} />
+    </IconButton>
+  );
+}
+
 export default function Talk() {
   const chat = useFeature('chat');
   const insets = useSafeAreaInsets();
   if (!chat) {
     return (
-      <View className="flex-1 justify-center px-5" style={{ paddingTop: insets.top }}>
-        <FeatureOff />
+      <View className="flex-1 px-5" style={{ paddingTop: insets.top + 8 }}>
+        <View className="flex-row">
+          <BackButton />
+        </View>
+        <View className="flex-1 justify-center">
+          <FeatureOff />
+        </View>
       </View>
     );
   }
@@ -86,6 +106,8 @@ function Thread() {
   const [attach, setAttach] = useState(false);
   const [camera, setCamera] = useState(false);
   const list = useRef<FlatList<Row>>(null);
+  // This screen closes when you leave it, so what you were typing is kept for when you're back.
+  const draftKey = cacheKey(couple.id, 'chat:draft');
 
   const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id), [sb, couple.id]);
   const pinSignature = useMemo(() => messages.map((m) => (m.pinned_at ? m.id : '')).join(''), [messages]);
@@ -250,7 +272,7 @@ function Thread() {
           mediaUrl={item.message.media_path ? media[item.message.media_path] : undefined}
           quote={item.quote}
           highlighted={highlight === item.message.id}
-          // Only rows that play something care, so switching tabs doesn't redraw the rest.
+          // Only rows that play something care, so leaving the app doesn't redraw the rest.
           animate={isLinkedMedia(item.message.media_kind) ? viewing : true}
           onRetry={onRetry}
           onLongPress={onLongPress}
@@ -283,9 +305,11 @@ function Thread() {
 
   return (
     // Android draws edge-to-edge, so the window no longer resizes for the keyboard:
-    // lift the composer ourselves on both platforms.
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.chat }} behavior="padding">
-      <View style={{ paddingTop: insets.top + 8 }} className="flex-row items-center gap-2 border-b border-paper-edge bg-paper-raised pb-2.5 pl-4 pr-2">
+    // lift the composer ourselves on both platforms. The offset takes back the
+    // safe area under the composer, which the keyboard covers when it's up.
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.chat }} behavior="padding" keyboardVerticalOffset={-insets.bottom}>
+      <View style={{ paddingTop: insets.top + 8 }} className="flex-row items-center gap-2 border-b border-paper-edge bg-paper-raised pb-2.5 pl-1 pr-2">
+        <BackButton />
         <Pressable
           accessibilityRole="imagebutton"
           accessibilityLabel={`${partner.display_name}'s photo. Open`}
@@ -311,9 +335,6 @@ function Thread() {
         </IconButton>
         <IconButton label="Search messages" size="sm" onPress={() => setPanel('search')}>
           <Search size={20} color={c.ink} />
-        </IconButton>
-        <IconButton label="Settings" size="sm" onPress={() => router.push('/settings')}>
-          <Settings size={20} color={c.ink} />
         </IconButton>
       </View>
 
@@ -407,15 +428,20 @@ function Thread() {
         ) : null}
       </View>
 
-      <View style={{ paddingBottom: 8 }} className="px-2 pt-1">
+      <View style={{ paddingBottom: insets.bottom + 8 }} className="px-2 pt-1">
         {notice ? <Text className="mb-2 px-2 text-small text-rose-700">{notice}</Text> : null}
         <Composer
           partnerName={partner.display_name}
-          onChange={onComposerChange}
+          initialText={readCache<string>(draftKey)}
+          onChange={(t) => {
+            onComposerChange(t);
+            writeCache(draftKey, t);
+          }}
           replyTo={replyTo ? { id: replyTo.id, author: authorOf(replyTo), text: messagePreview(replyTo) } : null}
           onCancelReply={() => setReplyTo(null)}
           onSend={(t) => {
             onComposerSent();
+            writeCache(draftKey, '');
             sendWithReply(t);
           }}
           onVoice={(uri, ms) => void sendVoice(uri, ms).catch(fail)}

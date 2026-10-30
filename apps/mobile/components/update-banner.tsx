@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AppState, Pressable, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ABOVE_CHAT_FAB } from './chat/chat-fab';
 import { Text } from './ui/text';
 
 /** Look for a new version when the app comes back to the foreground (at most every 10 minutes). */
@@ -41,7 +42,7 @@ export function UpdateBanner() {
     <Animated.View
       entering={FadeInDown.duration(320)}
       pointerEvents="box-none"
-      style={{ position: 'absolute', left: 12, right: 12, bottom: insets.bottom + 72 }}
+      style={{ position: 'absolute', left: 12, right: 12, bottom: insets.bottom + ABOVE_CHAT_FAB }}
     >
       <View className="flex-row items-center gap-3 rounded-full bg-plum-800 py-2 pl-4 pr-2" style={{ elevation: 10 }}>
         <RefreshCw size={18} color="#FFD98A" />

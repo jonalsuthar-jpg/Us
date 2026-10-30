@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { HeartHandshake, Settings } from 'lucide-react-native';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CLEAR_CHAT_FAB } from '@/components/chat/chat-fab';
 import { AnswersCard, DailyQuestion, useDaily } from '@/components/connect/daily-question';
 import { DailyDoodleCard, DrawingsStrip, DrawTiles } from '@/components/draw/connect-draw';
 import { FeatureOff } from '@/components/feature-off';
@@ -21,7 +22,7 @@ export default function Connect() {
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 40 }}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: CLEAR_CHAT_FAB }}
       contentContainerClassName="gap-5 px-5"
       refreshControl={<RefreshControl refreshing={daily.loading && !!daily.data} onRefresh={() => void daily.reload()} />}
     >

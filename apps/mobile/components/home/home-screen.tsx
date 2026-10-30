@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bootHome, saveHome } from '@/lib/boot-cache';
+import { CLEAR_CHAT_FAB } from '../chat/chat-fab';
 import { ErrorNote } from '../module-screen';
 import { PlantCard } from '../plant/plant-card';
 import { DoodleNote, DrawingBanner } from '@/components/draw/home-draw';
@@ -77,7 +78,7 @@ export function HomeScreen() {
     }, [home.reload]),
   );
 
-  // The pager keeps Home drawn next to Talk, so the plant only moves while it's on screen here.
+  // The pager keeps Home drawn next to Connect, so the plant only moves while it's on screen here.
   const [plantInView, setPlantInView] = useState(false);
   const plantBox = useRef({ top: 0, height: 0 });
   const scrollBox = useRef({ top: 0, height: 0 });
@@ -125,7 +126,7 @@ export function HomeScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 40 }}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: CLEAR_CHAT_FAB }}
       contentContainerClassName="gap-5 px-5"
       refreshControl={<RefreshControl refreshing={home.loading && !!d} onRefresh={() => void home.reload()} />}
       scrollEventThrottle={100}

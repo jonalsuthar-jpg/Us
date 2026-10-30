@@ -4,6 +4,7 @@ import { HeartHandshake, MessageCircleHeart, NotebookPen, Settings, Sparkles } f
 import type { ReactNode } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CLEAR_CHAT_FAB } from './chat/chat-fab';
 import { IconButton } from './ui/button';
 import { cn } from './ui/cn';
 import { usePalette } from './ui/palette';
@@ -46,7 +47,7 @@ export function ModuleScreen({
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 40 }}
+      contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: CLEAR_CHAT_FAB }}
       contentContainerClassName="gap-6 px-5"
       refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
     >

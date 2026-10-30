@@ -19,6 +19,9 @@ import { usePalette } from '@/components/ui/palette';
 // Every screen's last-known data survives a cold start.
 setDataCacheStore(dataCacheStore);
 
+// Opened straight into chat from a notification, the tabs are still behind it for Back.
+export const unstable_settings = { anchor: '(tabs)' };
+
 /** Resolves access and the couple, then mounts realtime + calls for every screen (tabs and settings). */
 export default function AppLayout() {
   const [ctx, setCtx] = useState<CoupleContext | null>(null);
@@ -102,6 +105,8 @@ export default function AppLayout() {
         <Bridge />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.paper } }}>
           <Stack.Screen name="(tabs)" />
+          {/* Singular: a notification tapped while already in chat stays in that chat. */}
+          <Stack.Screen name="talk" dangerouslySingular options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="questions" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="draw/index" options={{ animation: 'slide_from_right' }} />

@@ -3,6 +3,7 @@ import { router, usePathname } from 'expo-router';
 import { MessageCircleQuestion } from 'lucide-react-native';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ABOVE_CHAT_FAB } from '../chat/chat-fab';
 import { Text } from '../ui/text';
 
 /**
@@ -31,7 +32,7 @@ function Bridge() {
     <View
       accessibilityRole="alert"
       className="absolute inset-x-3 flex-row items-center gap-3 rounded-[20px] bg-plum-800 p-3 pl-3.5"
-      style={{ bottom: insets.bottom + 76, elevation: 12, shadowColor: '#170F21', shadowOpacity: 0.4, shadowRadius: 20, shadowOffset: { width: 0, height: 12 } }}
+      style={{ bottom: insets.bottom + ABOVE_CHAT_FAB, elevation: 12, shadowColor: '#170F21', shadowOpacity: 0.4, shadowRadius: 20, shadowOffset: { width: 0, height: 12 } }}
     >
       <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-gold-400">
         <MessageCircleQuestion size={20} color="#352203" />
