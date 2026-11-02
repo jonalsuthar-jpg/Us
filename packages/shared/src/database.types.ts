@@ -127,6 +127,10 @@ export type Database = {
           pinned_by: string | null;
           /** A reply to one of our snaps (kept after the snap itself is gone). */
           snap_id: string | null;
+          /** Encrypted body + media_meta (base64); body and media_meta are null when set. */
+          ciphertext: string | null;
+          /** Which chat key `ciphertext` is under. */
+          key_version: number | null;
         };
         Insert: {
           id?: string;
@@ -140,6 +144,8 @@ export type Database = {
           media_kind?: MediaKind | null;
           media_meta?: MediaMeta | null;
           snap_id?: string | null;
+          ciphertext?: string | null;
+          key_version?: number | null;
         };
         Update: never;
         Relationships: [
@@ -340,8 +346,19 @@ export type Database = {
           seen_at: string | null;
           reaction: string | null;
           reacted_at: string | null;
+          /** Encrypted caption (base64); caption is null when set. */
+          caption_ct: string | null;
+          key_version: number | null;
         };
-        Insert: { id?: string; couple_id: string; author_id: string; photo_path: string; caption?: string | null };
+        Insert: {
+          id?: string;
+          couple_id: string;
+          author_id: string;
+          photo_path: string;
+          caption?: string | null;
+          caption_ct?: string | null;
+          key_version?: number | null;
+        };
         Update: never;
         Relationships: [];
       };
@@ -423,6 +440,31 @@ export type Database = {
         Row: { id: string; couple_id: string; created_by: string; path: string; width: number; height: number; created_at: string };
         Insert: { id?: string; couple_id: string; created_by: string; path: string; width?: number; height?: number };
         Update: never;
+        Relationships: [];
+      };
+      // ------------------------------------------------------ Encrypted chat
+      chat_devices: {
+        Row: { id: string; user_id: string; public_key: string; label: string; created_at: string; revoked_at: string | null };
+        Insert: { id?: string; user_id?: string; public_key: string; label: string };
+        Update: never;
+        Relationships: [];
+      };
+      chat_keys: {
+        Row: { couple_id: string; key_version: number; created_by: string; created_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      chat_key_wraps: {
+        Row: { couple_id: string; key_version: number; device_id: string; wrapped_key: string; wrapped_by: string | null; created_at: string };
+        Insert: { couple_id: string; key_version: number; device_id: string; wrapped_key: string; wrapped_by: string };
+        Update: never;
+        Relationships: [];
+      };
+      chat_key_backups: {
+        Row: { user_id: string; couple_id: string; key_version: number; salt: string; params: Json; wrapped_key: string; updated_at: string };
+        Insert: { user_id?: string; couple_id: string; key_version: number; salt: string; params: Json; wrapped_key: string; updated_at?: string };
+        Update: { salt?: string; params?: Json; wrapped_key?: string; updated_at?: string };
         Relationships: [];
       };
       // ------------------------------------------------------- Draw together
@@ -557,6 +599,12 @@ export type Database = {
       unpair: { Args: Record<PropertyKey, never>; Returns: undefined };
       mark_arrived: { Args: { p_id: string }; Returns: Database['public']['Tables']['arrival_checks']['Row'] };
       cancel_arrival: { Args: { p_id: string }; Returns: Database['public']['Tables']['arrival_checks']['Row'] };
+      claim_chat_key: { Args: { p_version: number; p_device_id: string; p_wrapped_key: string }; Returns: boolean };
+      revoke_chat_device: { Args: { p_id: string }; Returns: undefined };
+      encrypt_legacy_message: {
+        Args: { p_id: string; p_ciphertext: string; p_key_version: number; p_reactions: Record<string, string> };
+        Returns: Database['public']['Tables']['messages']['Row'];
+      };
       react_to_message: { Args: { p_id: string; p_emoji: string | null }; Returns: Database['public']['Tables']['messages']['Row'] };
       pin_message: { Args: { p_id: string; p_pinned: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };
       mark_snap_seen: { Args: { p_id: string }; Returns: Database['public']['Tables']['snaps']['Row'] };
@@ -631,6 +679,8 @@ export type ArrivalCheck = Tables['arrival_checks']['Row'];
 export type Drawing = Tables['drawings']['Row'];
 export type Sticker = Tables['stickers']['Row'];
 export type DrawWord = Tables['draw_words']['Row'];
+export type ChatDevice = Tables['chat_devices']['Row'];
+export type ChatKeyWrap = Tables['chat_key_wraps']['Row'];
 export type DrawGame = Tables['draw_games']['Row'];
 export type DailyEntry = Database['public']['Functions']['daily_history']['Returns'][number];
 
@@ -645,4 +695,12 @@ export type Message = MessageRow & {
   localUri?: string;
   /** Client-only: the file still to upload, kept so a failed send can retry. */
   upload?: { body: Blob | ArrayBuffer | Uint8Array; contentType: string };
+  /**
+   * Client-only, encrypted rows: 'ok' once opened (body and media_meta filled
+   * in), 'locked' while this device has no key for it, 'failed' when it
+   * doesn't open (tampered, or under a key we don't have).
+   */
+  e2ee?: 'ok' | 'locked' | 'failed';
+  /** Client-only: the media file's real type, from inside the ciphertext. */
+  mime?: string | null;
 };

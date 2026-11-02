@@ -1,10 +1,11 @@
-import { getCoupleContext, getMyAccess, tokens, type CoupleContext, type MyAccess } from '@us/shared';
+import { clearMediaVault, getCoupleContext, getMyAccess, tokens, type CoupleContext, type MyAccess } from '@us/shared';
 import { AccessProvider, CallProvider, clearDataCache, CoupleProvider, hydrateDataCache, setDataCacheStore, useCallManager, useCallState, useCouple } from '@us/shared/react';
 import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { CallScreen } from '@/components/call/call-screen';
+import { ChatKeyApproval } from '@/components/chat/chat-key';
 import { DrawBridge, drawRoute } from '@/components/draw/draw-bridge';
 import { TapHeart } from '@/components/tap-heart';
 import { readAccess, readBoot, saveAccess, saveContext } from '@/lib/boot-cache';
@@ -65,6 +66,7 @@ export default function AppLayout() {
       saveContext(userId, next);
       if (!next) {
         clearDataCache();
+        void clearMediaVault();
         return router.replace('/pair');
       }
       // Swap in the fresh copy only if something changed, so realtime isn't torn down for nothing.
@@ -73,6 +75,7 @@ export default function AppLayout() {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         clearDataCache();
+        void clearMediaVault();
         router.replace('/sign-in');
       }
     });
@@ -116,6 +119,7 @@ export default function AppLayout() {
           <Stack.Screen name="draw/[id]" options={{ animation: 'fade_from_bottom' }} />
         </Stack>
         <TapHeart />
+        <ChatKeyApproval />
         <DrawBridge />
         <CallScreen />
       </CallProvider>

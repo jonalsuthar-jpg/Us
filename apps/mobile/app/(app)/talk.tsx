@@ -1,5 +1,5 @@
 import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
-import { cacheKey, readCache, useCallManager, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
+import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachSheet, ATTACH_ICONS, ATTACH_TINTS, type AttachOption } from '@/components/chat/attach-sheet';
 import { Bubble, CallEntry, type ReplyQuote } from '@/components/chat/bubble';
 import { CameraSheet } from '@/components/chat/camera-sheet';
+import { ChatKeyBanner } from '@/components/chat/chat-key';
 import { Composer } from '@/components/chat/composer';
 import { SwipeableRow } from '@/components/chat/swipeable-row';
 import { DoodleSheet } from '@/components/draw/doodle-sheet';
@@ -96,6 +97,7 @@ function Thread() {
   }, [viewing]);
   const { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, react, pin } = useMessages({ viewing });
   const media = useChatMedia(messages);
+  const { cipher } = useChatKey();
   const [acting, setActing] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -109,7 +111,8 @@ function Thread() {
   // This screen closes when you leave it, so what you were typing is kept for when you're back.
   const draftKey = cacheKey(couple.id, 'chat:draft');
 
-  const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id), [sb, couple.id]);
+  // Opened pins hold message text: kept in memory only.
+  const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id, cipher), [sb, couple.id, cipher], undefined, 'memory');
   const pinSignature = useMemo(() => messages.map((m) => (m.pinned_at ? m.id : '')).join(''), [messages]);
   useEffect(() => {
     void pins.reload();
@@ -337,6 +340,8 @@ function Thread() {
           <Search size={20} color={c.ink} />
         </IconButton>
       </View>
+
+      <ChatKeyBanner />
 
       {latestPin ? (
         <Pressable
@@ -656,22 +661,38 @@ function MessageList({ items, empty, onPick, authorOf }: { items: Message[]; emp
 
 function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; authorOf: (m: Message) => string }) {
   const { sb, couple } = useCouple();
+  const { cipher } = useChatKey();
   const c = usePalette();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Message[] | null>(null);
+  const [searching, setSearching] = useState(false);
   useEffect(() => {
-    if (q.trim().length < 2) return setResults(null);
-    let cancelled = false;
+    if (q.trim().length < 2) {
+      setSearching(false);
+      return setResults(null);
+    }
+    // Messages are encrypted, so the search reads back through the thread here on the phone.
+    const signal = { aborted: false };
     const t = setTimeout(() => {
-      void searchMessages(sb, couple.id, q)
-        .then((r) => !cancelled && setResults(r))
-        .catch(() => !cancelled && setResults([]));
+      setSearching(true);
+      void searchMessages(sb, couple.id, q, cipher, {
+        signal,
+        onProgress: (found, done) => {
+          if (signal.aborted) return;
+          setResults(found);
+          if (done) setSearching(false);
+        },
+      }).catch(() => {
+        if (signal.aborted) return;
+        setResults((r) => r ?? []);
+        setSearching(false);
+      });
     }, 300);
     return () => {
-      cancelled = true;
+      signal.aborted = true;
       clearTimeout(t);
     };
-  }, [q, sb, couple.id]);
+  }, [q, sb, couple.id, cipher]);
   return (
     <>
       <TextInput
@@ -684,7 +705,8 @@ function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; autho
         returnKeyType="search"
         className="h-11 rounded-control border border-paper-edge bg-paper px-4 font-sans text-body text-ink"
       />
-      {results ? <MessageList items={results} empty="Nothing found." onPick={onPick} authorOf={authorOf} /> : null}
+      {searching ? <Text className="px-1 pt-2 text-micro text-ink-soft">Searching older messages…</Text> : null}
+      {results ? <MessageList items={results} empty={searching ? 'Nothing yet…' : 'Nothing found.'} onPick={onPick} authorOf={authorOf} /> : null}
     </>
   );
 }

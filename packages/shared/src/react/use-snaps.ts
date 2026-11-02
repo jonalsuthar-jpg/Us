@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { keptSnapIds, listSnaps, SNAP_TOPIC, type Snaps } from '../api/snaps';
+import { useChatKey } from './chat-key-provider';
 import { useCouple } from './couple-provider';
 import { useCoupleData, type CoupleData } from './use-couple-data';
 
@@ -11,14 +12,15 @@ export interface SnapsData extends Snaps {
 /** Our live snaps, refreshed when my partner posts, sees or reacts, and when one expires. */
 export function useSnaps(): CoupleData<SnapsData> {
   const { sb, couple, me } = useCouple();
+  const { cipher } = useChatKey();
   const snaps = useCoupleData<SnapsData>(
     SNAP_TOPIC,
     async () => {
-      const live = await listSnaps(sb, couple.id, me.id);
+      const live = await listSnaps(sb, couple.id, me.id, new Date(), cipher);
       const kept = await keptSnapIds(sb, [...live.mine, ...live.partner].map((s) => s.id));
       return { ...live, kept };
     },
-    [sb, couple.id, me.id],
+    [sb, couple.id, me.id, cipher],
     undefined,
     'memory',
   );

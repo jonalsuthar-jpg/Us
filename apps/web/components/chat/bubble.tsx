@@ -1,4 +1,4 @@
-import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, isOurStickerPath, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
+import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, isOurStickerPath, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
 import { Copy, Pin, PinOff, Plus, Reply, Sticker } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Ticks } from '@/components/ui/ticks';
@@ -218,6 +218,8 @@ export function Bubble({
               {message.body}
             </span>
           ) : null}
+          {/* Encrypted, and this browser can't open it (yet). */}
+          {message.e2ee === 'locked' || message.e2ee === 'failed' ? <span className="italic text-ink-muted">{messagePreview(message)}</span> : null}
           {/* Meta floats bottom-right; the spacer reserves room on the last line. */}
           <span aria-hidden className={cn('inline-block', message.pinned_at ? 'w-[5.25rem]' : 'w-[4.25rem]')} />
           <span

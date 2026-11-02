@@ -10,6 +10,10 @@ export type { ColorScheme } from './theme.js';
 
 export * from './api/pairing';
 export * from './api/messages';
+export * from './api/chat-keys';
+export * from './api/chat-media';
+export * from './api/legacy-encryption';
+export * from './crypto';
 export * from './api/gifs';
 export * from './api/calls';
 export * from './api/push';

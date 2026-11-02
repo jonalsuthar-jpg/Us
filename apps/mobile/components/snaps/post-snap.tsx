@@ -1,5 +1,5 @@
 import { postSnap } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { useChatKey, useCouple } from '@us/shared/react';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, ImageIcon } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
@@ -16,6 +16,7 @@ type Picked = { uri: string; mimeType: string };
 /** Take or choose a photo, add a caption, share it for 24 hours. */
 export function PostSnap({ open, onClose, mutate }: { open: boolean; onClose: () => void; mutate: <R>(write: () => Promise<R>) => Promise<R> }) {
   const { sb, couple, me, partner } = useCouple();
+  const { sealer } = useChatKey();
   const c = usePalette();
   const { height } = useWindowDimensions();
   const [photo, setPhoto] = useState<Picked | null>(null);
@@ -51,7 +52,8 @@ export function PostSnap({ open, onClose, mutate }: { open: boolean; onClose: ()
     setError(null);
     try {
       const bytes = await (await fetch(photo.uri)).arrayBuffer();
-      await mutate(() => postSnap(sb, couple.id, me.id, { body: bytes, contentType: photo.mimeType }, caption));
+      const cipher = await sealer();
+      await mutate(() => postSnap(sb, couple.id, me.id, { body: bytes, contentType: photo.mimeType }, caption, cipher));
       onClose();
     } catch (e) {
       setError((e as Error).message);

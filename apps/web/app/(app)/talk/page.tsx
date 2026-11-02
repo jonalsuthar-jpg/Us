@@ -1,7 +1,8 @@
 'use client';
 
 import { clusters, formatDay, groupByDay, keepSticker, listPinned, messagePreview, searchMessages, snapReplyQuote, STICKERS_TOPIC, type Message, type Sticker } from '@us/shared';
-import { useCallManager, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
+import { useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
+import { ChatKeyBanner } from '@/components/chat/chat-key';
 import { ChevronsDown, Phone, Pin, Search, Video } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
@@ -42,6 +43,7 @@ function Thread() {
   const active = usePageActive();
   const { messages, loading, hasOlder, loadOlder, send, retry, react, pin } = useMessages({ viewing: active });
   const media = useChatMedia(messages);
+  const { cipher } = useChatKey();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -57,7 +59,8 @@ function Thread() {
     sendWithReply('', { media: { kind: 'sticker', path: st.path, meta: { width: st.width, height: st.height }, localUri: url } });
 
   // Pinned messages (any age). Refreshes on a partner's pin ping and when a loaded message's pin changes.
-  const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id), [sb, couple.id]);
+  // Opened pins hold message text: kept in memory only.
+  const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id, cipher), [sb, couple.id, cipher], undefined, 'memory');
   const pinSignature = messages.map((m) => (m.pinned_at ? m.id : '')).join('');
   useEffect(() => {
     void pins.reload();
@@ -191,6 +194,8 @@ function Thread() {
         </IconButton>
         <MobileSettingsLink />
       </header>
+
+      <ChatKeyBanner />
 
       {latestPin ? (
         <button
@@ -423,21 +428,37 @@ function MessageList({ items, empty, onPick, authorOf }: { items: Message[]; emp
 
 function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; authorOf: (m: Message) => string }) {
   const { sb, couple } = useCouple();
+  const { cipher } = useChatKey();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Message[] | null>(null);
+  const [searching, setSearching] = useState(false);
   useEffect(() => {
-    if (q.trim().length < 2) return setResults(null);
-    let cancelled = false;
+    if (q.trim().length < 2) {
+      setSearching(false);
+      return setResults(null);
+    }
+    // Messages are encrypted, so the search reads back through the thread here in the browser.
+    const signal = { aborted: false };
     const t = setTimeout(() => {
-      void searchMessages(sb, couple.id, q)
-        .then((r) => !cancelled && setResults(r))
-        .catch(() => !cancelled && setResults([]));
+      setSearching(true);
+      void searchMessages(sb, couple.id, q, cipher, {
+        signal,
+        onProgress: (found, done) => {
+          if (signal.aborted) return;
+          setResults(found);
+          if (done) setSearching(false);
+        },
+      }).catch(() => {
+        if (signal.aborted) return;
+        setResults((r) => r ?? []);
+        setSearching(false);
+      });
     }, 300);
     return () => {
-      cancelled = true;
+      signal.aborted = true;
       clearTimeout(t);
     };
-  }, [q, sb, couple.id]);
+  }, [q, sb, couple.id, cipher]);
   return (
     <div className="space-y-3">
       <input
@@ -449,7 +470,8 @@ function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; autho
         aria-label="Search messages"
         className="h-11 w-full rounded-control border border-paper-edge bg-paper px-4 text-body text-ink placeholder:text-ink-muted/70 focus:border-rose-300 focus:outline-none"
       />
-      {results ? <MessageList items={results} empty="Nothing found." onPick={onPick} authorOf={authorOf} /> : null}
+      {searching ? <p className="text-micro text-ink-muted">Searching older messages…</p> : null}
+      {results ? <MessageList items={results} empty={searching ? 'Nothing yet…' : 'Nothing found.'} onPick={onPick} authorOf={authorOf} /> : null}
     </div>
   );
 }

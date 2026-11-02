@@ -1,3 +1,4 @@
+import type { ChatCipher } from '../crypto/chat-cipher';
 import type { Memory, MessageRow, SnapRow } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
@@ -36,7 +37,18 @@ function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
 
 const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic' };
 
-export async function listSnaps(sb: UsClient, coupleId: string, myId: string, now = new Date()): Promise<Snaps> {
+/** A snap's caption, opened on this device when it's encrypted (left out if it won't open). */
+export function openSnapCaption(r: SnapRow, cipher: ChatCipher | null): string | null {
+  if (!r.caption_ct) return r.caption;
+  if (!cipher || r.key_version !== cipher.version) return null;
+  try {
+    return cipher.decryptCaption(r.photo_path, r.caption_ct);
+  } catch {
+    return null;
+  }
+}
+
+export async function listSnaps(sb: UsClient, coupleId: string, myId: string, now = new Date(), cipher: ChatCipher | null = null): Promise<Snaps> {
   const rows = unwrap<SnapRow[]>(
     await sb
       .from('snaps')
@@ -54,7 +66,7 @@ export async function listSnaps(sb: UsClient, coupleId: string, myId: string, no
     if (error) throw error;
     for (const row of data ?? []) if (row.path && row.signedUrl) urls[row.path] = row.signedUrl;
   }
-  const snaps = rows.map((r) => ({ ...r, url: urls[r.photo_path] ?? null }));
+  const snaps = rows.map((r) => ({ ...r, caption: openSnapCaption(r, cipher), url: urls[r.photo_path] ?? null }));
   return { mine: snaps.filter((s) => s.author_id === myId), partner: snaps.filter((s) => s.author_id !== myId) };
 }
 
@@ -65,13 +77,23 @@ export async function postSnap(
   authorId: string,
   photo: { body: Blob | ArrayBuffer | Uint8Array; contentType: string },
   caption?: string | null,
+  cipher?: ChatCipher | null,
 ): Promise<SnapRow> {
   const path = `${coupleId}/${uuid()}.${EXT[photo.contentType] ?? 'jpg'}`;
+  const text = caption?.trim() || null;
+  const sealed = text && cipher ? cipher.encryptCaption(path, text) : null;
   const { error } = await sb.storage.from(SNAPS_BUCKET).upload(path, photo.body, { contentType: photo.contentType, upsert: false });
   if (error) throw error;
   const { data, error: insertError } = await sb
     .from('snaps')
-    .insert({ couple_id: coupleId, author_id: authorId, photo_path: path, caption: caption?.trim() || null })
+    .insert({
+      couple_id: coupleId,
+      author_id: authorId,
+      photo_path: path,
+      caption: sealed ? null : text,
+      caption_ct: sealed,
+      key_version: sealed ? cipher!.version : null,
+    })
     .select('*')
     .single();
   if (insertError) {
@@ -102,8 +124,8 @@ export async function deleteSnap(sb: UsClient, snap: Pick<SnapRow, 'id' | 'photo
 }
 
 /** Reply in chat, linked to the snap. */
-export async function replyToSnap(sb: UsClient, snap: Pick<SnapRow, 'id' | 'couple_id'>, senderId: string, text: string) {
-  const saved = await sendMessage(sb, draftMessage(snap.couple_id, senderId, text.trim(), { snapId: snap.id }));
+export async function replyToSnap(sb: UsClient, snap: Pick<SnapRow, 'id' | 'couple_id'>, senderId: string, text: string, cipher?: ChatCipher | null) {
+  const saved = await sendMessage(sb, draftMessage(snap.couple_id, senderId, text.trim(), { snapId: snap.id }), cipher);
   void notifyPartner(sb, { category: 'new_message', messageId: saved.id });
   return saved;
 }

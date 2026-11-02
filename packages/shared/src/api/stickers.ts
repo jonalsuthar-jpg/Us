@@ -1,7 +1,8 @@
+import type { ChatCipher } from '../crypto/chat-cipher';
 import type { Sticker } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
-import { CHAT_BUCKET } from './messages';
+import { CHAT_BUCKET, ENCRYPTED_MIME, toBytes } from './messages';
 
 /** "Our stickers changed" ping on the couple channel. */
 export const STICKERS_TOPIC = 'stickers';
@@ -18,13 +19,15 @@ export const stickerPath = (coupleId: string, id: string = uuid()) => `${coupleI
 
 export const isOurStickerPath = (path: string | null | undefined) => !!path && /\/sticker-[0-9a-f-]{36}\.(png|webp)$/.test(path);
 
-/** Upload a sticker I made and keep it in Ours. */
+/** Upload a sticker I made and keep it in Ours. With a cipher the file is encrypted (its path stays the same shape). */
 export async function saveSticker(
   sb: UsClient,
-  s: { coupleId: string; me: string; png: Blob | ArrayBuffer | Uint8Array; width?: number; height?: number },
+  s: { coupleId: string; me: string; png: Blob | ArrayBuffer | Uint8Array; width?: number; height?: number; cipher?: ChatCipher | null },
 ): Promise<Sticker> {
   const path = stickerPath(s.coupleId);
-  const { error } = await sb.storage.from(CHAT_BUCKET).upload(path, s.png, { contentType: 'image/png', upsert: false });
+  const { error } = s.cipher
+    ? await sb.storage.from(CHAT_BUCKET).upload(path, s.cipher.encryptFile(path, await toBytes(s.png)), { contentType: ENCRYPTED_MIME, upsert: false })
+    : await sb.storage.from(CHAT_BUCKET).upload(path, s.png, { contentType: 'image/png', upsert: false });
   if (error) throw error;
   try {
     return unwrap(

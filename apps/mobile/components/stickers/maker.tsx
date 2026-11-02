@@ -11,7 +11,7 @@ import {
   type StickerTextStyle,
   type Stroke,
 } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { useChatKey, useCouple } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { ImagePlus, Pencil, Type, X } from 'lucide-react-native';
@@ -129,6 +129,7 @@ interface Props {
  */
 export function StickerMaker({ open, onClose, onSaved }: Props) {
   const { sb, couple, me, channel } = useCouple();
+  const { sealer } = useChatKey();
   const c = usePalette();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -239,7 +240,7 @@ export function StickerMaker({ open, onClose, onSaved }: Props) {
     try {
       session.finish();
       const b64 = await new Promise<string>((resolve) => node.toDataURL!((d) => resolve(d), { width: STICKER_SIZE, height: STICKER_SIZE }));
-      const sticker = await saveSticker(sb, { coupleId: couple.id, me: me.id, png: base64ToBytes(b64) });
+      const sticker = await saveSticker(sb, { coupleId: couple.id, me: me.id, png: base64ToBytes(b64), cipher: await sealer() });
       channel.sendChanged(STICKERS_TOPIC);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       onSaved(sticker, send);

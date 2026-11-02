@@ -134,10 +134,11 @@ Deno.serve(async (req) => {
     const { data: now } = await admin.from('messages').select('status').eq('id', msg.id).maybeSingle();
     if (now?.status === 'read') return json({ skipped: 'already_read' });
     category = 'new_message';
+    // An encrypted message has no body here: only what kind of message it is.
     content = truncate(
       msg.body?.trim() ||
         ({ image: '📷 Photo', audio: '🎤 Voice note', gif: 'GIF', sticker: 'Sticker' } as Record<string, string>)[msg.media_kind ?? ''] ||
-        '',
+        'New message',
       160,
     );
     data = { category, url: '/talk', messageId: msg.id, ...(avatar ? { avatar } : {}) };
@@ -244,6 +245,7 @@ Deno.serve(async (req) => {
     if (category === 'new_snap') {
       if (snap.author_id !== userId) return json({ error: 'forbidden' }, 403);
       if (Date.now() - Date.parse(snap.created_at) > 10 * 60_000) return json({ skipped: 'stale' });
+      // An encrypted caption stays out of the notification (caption is null then).
       content = snap.caption ? `📸 ${truncate(snap.caption, 120)}` : '📸 Shared a snap. It’s here for 24 hours.';
       // A few snaps in a row show as one notification.
       collapseId = `snap-${userId}`;

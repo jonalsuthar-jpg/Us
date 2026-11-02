@@ -4,6 +4,7 @@ import { PROFILE_TOPIC, profilePhotos, type CoupleContext } from '../api/pairing
 import { CoupleChannel, type ChannelStatus } from '../realtime/couple-channel';
 import type { UsClient } from '../supabase';
 import type { PartnerSlot } from '../tokens';
+import { ChatKeyProvider } from './chat-key-provider';
 
 export interface CoupleValue extends CoupleContext {
   sb: UsClient;
@@ -169,5 +170,9 @@ export function CoupleProvider({ sb, context, platform, onEnded, children }: Pro
     [context, sb, channel, partnerOnline, connection, unread, refreshUnread, photoOf, photos, me.id, photosChanged],
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      <ChatKeyProvider platform={platform}>{children}</ChatKeyProvider>
+    </Ctx.Provider>
+  );
 }

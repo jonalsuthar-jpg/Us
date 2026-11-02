@@ -1,11 +1,12 @@
 'use client';
 
-import { clearMyPhoto, deleteAccount, friendlyError, setMyPhoto, unpair, updateMyProfile } from '@us/shared';
+import { clearMyPhoto, deleteAccount, friendlyError, leaveChatOnThisDevice, setMyPhoto, unpair, updateMyProfile } from '@us/shared';
 import { COUPLE_ENDED_TOPIC, useAccess, useCouple } from '@us/shared/react';
 import { BellRing, Camera, Check, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { ChatSecurity } from '@/components/chat/chat-key';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -178,6 +179,13 @@ export default function SettingsPage() {
         )}
       </section>
 
+      <section aria-labelledby="chat-security" className="space-y-4">
+        <h2 id="chat-security" className="font-display text-heading text-ink">
+          Chat security
+        </h2>
+        <ChatSecurity meId={me.id} partnerName={partner.display_name} />
+      </section>
+
       <section aria-labelledby="pair" className="space-y-4">
         <h2 id="pair" className="font-display text-heading text-ink">
           The two of you
@@ -317,6 +325,8 @@ export default function SettingsPage() {
           variant="secondary"
           onClick={async () => {
             await logoutPush();
+            // A browser may be shared: it leaves the chat and forgets its keys.
+            await leaveChatOnThisDevice(sb, me.id, couple.id);
             await sb.auth.signOut();
             router.replace('/sign-in');
           }}

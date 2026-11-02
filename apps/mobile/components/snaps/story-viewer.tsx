@@ -10,7 +10,7 @@ import {
   snapTimeLeft,
   type Snap,
 } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { useChatKey, useCouple } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { BookmarkCheck, BookmarkPlus, Check, Send, Trash2, X } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -36,6 +36,7 @@ interface Props {
  */
 export function StoryViewer({ snaps, start, kept, onClose, mutate }: Props) {
   const { sb, me, partner } = useCouple();
+  const { sealer } = useChatKey();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(start);
@@ -118,7 +119,7 @@ export function StoryViewer({ snaps, start, kept, onClose, mutate }: Props) {
     if (!snap || !reply.trim()) return;
     const text = reply;
     setReply('');
-    await act('Sent to your chat', () => replyToSnap(sb, snap, me.id, text));
+    await act('Sent to your chat', async () => replyToSnap(sb, snap, me.id, text, await sealer()));
   }
 
   return (

@@ -13,7 +13,7 @@ import {
   type StickerText,
   type StickerTextStyle,
 } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { useChatKey, useCouple } from '@us/shared/react';
 import { ImagePlus, Pencil, Type } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { drawInk } from '@/components/draw/render';
@@ -70,6 +70,7 @@ interface Props {
  */
 export function StickerMaker({ open, onOpenChange, onSaved }: Props) {
   const { sb, couple, me, channel } = useCouple();
+  const { sealer } = useChatKey();
   const file = useRef<HTMLInputElement>(null);
   const ink = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -178,7 +179,7 @@ export function StickerMaker({ open, onOpenChange, onSaved }: Props) {
       await document.fonts?.ready;
       for (const t of texts) paintText(ctx, t, STICKER_SIZE);
       const png = await new Promise<Blob>((resolve, reject) => out.toBlob((b) => (b ? resolve(b) : reject(new Error('No picture'))), 'image/png'));
-      const sticker = await saveSticker(sb, { coupleId: couple.id, me: me.id, png });
+      const sticker = await saveSticker(sb, { coupleId: couple.id, me: me.id, png, cipher: await sealer() });
       channel.sendChanged(STICKERS_TOPIC);
       onSaved(sticker, send);
       onOpenChange(false);

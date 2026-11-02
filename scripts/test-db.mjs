@@ -922,13 +922,89 @@ await test('sticker messages: a GIPHY link or one of our sticker files, nothing 
   await rejects(send({ meta: JSON.stringify({ url: 'https://evil.example.com/x.gif' }) }), /media_shape/, 'other host');
 });
 
+console.log('\nEncrypted chat');
+
+const pub = (n) => Buffer.alloc(32, n).toString('base64');
+const device = (user, n) => as(user, () => one(`insert into public.chat_devices (public_key, label) values ($1, 'Phone') returning id`, [pub(n)]));
+let aliceDevice, bobDevice;
+
+await test('chat devices: register as yourself, seen by the couple only', async () => {
+  aliceDevice = (await device(alice, 1)).id;
+  bobDevice = (await device(bob, 2)).id;
+  await rejects(as(alice, () => q(`insert into public.chat_devices (user_id, public_key, label) values ($1, $2, 'x')`, [bob, pub(3)])), /row-level security/, 'spoof owner');
+  await rejects(as(alice, () => q(`insert into public.chat_devices (public_key, label) values ('nope', 'x')`)), /check constraint/, 'not a key');
+  assert.equal((await as(bob, () => q(`select id from public.chat_devices`))).length, 2);
+  assert.equal((await as(carol, () => q(`select id from public.chat_devices`))).length, 0, 'outsider');
+  await rejects(as(alice, () => q(`update public.chat_devices set revoked_at = now()`)), /permission denied/, 'update');
+});
+
+await test('chat key: one per couple even when both claim at once, sealed only to our devices', async () => {
+  assert.equal((await as(alice, () => one(`select public.claim_chat_key(1::smallint, $1, 'sealed-a') as made`, [aliceDevice]))).made, true);
+  assert.equal((await as(bob, () => one(`select public.claim_chat_key(1::smallint, $1, 'sealed-b') as made`, [bobDevice]))).made, false, 'second claim loses');
+  await rejects(as(bob, () => q(`select public.claim_chat_key(2::smallint, $1, 'x')`, [aliceDevice])), /device_not_found/, 'someone else’s device');
+  assert.equal((await as(bob, () => q(`select * from public.chat_keys`))).length, 1);
+  assert.equal((await as(carol, () => q(`select * from public.chat_keys`))).length, 0, 'outsider');
+  await rejects(as(alice, () => q(`insert into public.chat_keys (couple_id, key_version, created_by) values ($1, 5, $2)`, [couple.id, aliceDevice])), /permission denied/, 'direct insert');
+
+  // Alice seals the key to Bob's device; Carol can't seal or read anything.
+  await as(alice, () => q(`insert into public.chat_key_wraps (couple_id, key_version, device_id, wrapped_key, wrapped_by) values ($1, 1, $2, 'sealed-b', $3)`, [couple.id, bobDevice, aliceDevice]));
+  await rejects(as(alice, () => q(`insert into public.chat_key_wraps (couple_id, key_version, device_id, wrapped_key, wrapped_by) values ($1, 1, $2, 'x', $3)`, [couple.id, bobDevice, bobDevice])), /row-level security/, 'as a device that isn’t mine');
+  const carolDevice = (await device(carol, 4)).id;
+  await rejects(as(alice, () => q(`insert into public.chat_key_wraps (couple_id, key_version, device_id, wrapped_key, wrapped_by) values ($1, 1, $2, 'x', $3)`, [couple.id, carolDevice, aliceDevice])), /row-level security/, 'to an outsider');
+  assert.equal((await as(carol, () => q(`select * from public.chat_key_wraps`))).length, 0, 'outsider reads');
+  assert.equal((await as(bob, () => q(`select * from public.chat_key_wraps`))).length, 2);
+});
+
+await test('chat key backups: mine alone', async () => {
+  await as(alice, () => q(`insert into public.chat_key_backups (couple_id, key_version, salt, params, wrapped_key) values ($1, 1, 's', '{"n":131072}', 'w')`, [couple.id]));
+  assert.equal((await as(alice, () => q(`select * from public.chat_key_backups`))).length, 1);
+  assert.equal((await as(bob, () => q(`select * from public.chat_key_backups`))).length, 0, 'partner');
+  await rejects(as(carol, () => q(`insert into public.chat_key_backups (couple_id, key_version, salt, params, wrapped_key) values ($1, 1, 's', '{}', 'w')`, [couple.id])), /row-level security/, 'other couple');
+});
+
+await test('encrypted messages: ciphertext instead of content, under one of our keys', async () => {
+  const send = (cols, vals) => as(alice, () => one(`insert into public.messages (couple_id, sender_id, ${cols}) values ($1, $2, ${vals.map((_, i) => `$${i + 3}`).join(', ')}) returning *`, [couple.id, alice, ...vals]));
+  const m = await send('ciphertext, key_version', ['Y2lwaGVy', 1]);
+  assert.equal(m.body, null);
+  await send('ciphertext, key_version, media_kind', ['Y2lwaGVy', 1, 'gif']);
+  await rejects(send('ciphertext, key_version, body', ['Y2lwaGVy', 1, 'leak']), /encryption_shape/, 'plaintext alongside');
+  await rejects(send('ciphertext', ['Y2lwaGVy']), /encryption_shape/, 'no key version');
+  await rejects(send('ciphertext, key_version', ['Y2lwaGVy', 7]), /row-level security/, 'unknown key');
+
+  // Reactions on encrypted messages are base64, longer than an emoji.
+  const sealed = Buffer.alloc(60, 9).toString('base64');
+  await as(bob, () => q(`select public.react_to_message($1, $2)`, [m.id, sealed]));
+  await rejects(as(bob, () => q(`select public.react_to_message($1, $2)`, [m.id, 'not base64 '.repeat(4)])), /reaction_too_long/, 'long plaintext');
+});
+
+await test('legacy messages: encrypted once, in our thread, with the same reactions', async () => {
+  const old = await as(alice, () => one(`insert into public.messages (couple_id, sender_id, body) values ($1, $2, 'before') returning id`, [couple.id, alice]));
+  await as(bob, () => q(`select public.react_to_message($1, '❤️')`, [old.id]));
+  await rejects(as(bob, () => q(`select public.encrypt_legacy_message($1, 'Y3Q=', 1::smallint, '{}')`, [old.id])), /reactions_mismatch/, 'dropped a reaction');
+  await rejects(as(carol, () => q(`select public.encrypt_legacy_message($1, 'Y3Q=', 1::smallint, $2)`, [old.id, { [bob]: 'c2VhbGVk' }])), /message_not_found/, 'outsider');
+  await rejects(as(bob, () => q(`select public.encrypt_legacy_message($1, 'Y3Q=', 9::smallint, $2)`, [old.id, { [bob]: 'c2VhbGVk' }])), /key_not_found/, 'unknown key');
+  const done = (await as(bob, () => one(`select (public.encrypt_legacy_message($1, 'Y3Q=', 1::smallint, $2)).*`, [old.id, { [bob]: 'c2VhbGVk' }])));
+  assert.equal(done.body, null);
+  assert.equal(done.ciphertext, 'Y3Q=');
+  assert.equal(done.reactions[bob], 'c2VhbGVk');
+  const again = await as(alice, () => one(`select (public.encrypt_legacy_message($1, 'b3RoZXI=', 1::smallint, $2)).*`, [old.id, { [bob]: 'x' }]));
+  assert.equal(again.ciphertext, 'Y3Q=', 'only once');
+});
+
+await test('revoking a chat device: mine only, and its sealed key goes', async () => {
+  await rejects(as(alice, () => q(`select public.revoke_chat_device($1)`, [bobDevice])), /device_not_found/, 'partner’s device');
+  await as(bob, () => q(`select public.revoke_chat_device($1)`, [bobDevice]));
+  assert.equal((await q(`select count(*)::int as n from public.chat_key_wraps where device_id = $1`, [bobDevice]))[0].n, 0);
+  await rejects(as(alice, () => q(`insert into public.chat_key_wraps (couple_id, key_version, device_id, wrapped_key, wrapped_by) values ($1, 1, $2, 'x', $3)`, [couple.id, bobDevice, aliceDevice])), /row-level security/, 'sealed to a revoked device');
+});
+
 console.log('\nLeaving');
 
 await test('unpair: removes everything we shared, frees both of us', async () => {
   await rejects(as(null, () => q(`select public.unpair()`)), /not_paired/, 'signed out');
   await as(alice, () => q(`select public.unpair()`));
   assert.equal((await q(`select count(*)::int as n from public.couples where id = $1`, [couple.id]))[0].n, 0, 'couple gone');
-  for (const table of ['messages', 'calls', 'calendar_events', 'memories', 'future_letters', 'daily_questions', 'inside_jokes', 'snaps', 'plant_days']) {
+  for (const table of ['messages', 'calls', 'calendar_events', 'memories', 'future_letters', 'daily_questions', 'inside_jokes', 'snaps', 'plant_days', 'chat_keys', 'chat_key_wraps', 'chat_key_backups']) {
     const n = (await q(`select count(*)::int as n from public.${table} where couple_id = $1`, [couple.id]))[0].n;
     assert.equal(n, 0, `${table} cleared`);
   }

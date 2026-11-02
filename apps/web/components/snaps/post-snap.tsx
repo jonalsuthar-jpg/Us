@@ -1,7 +1,7 @@
 'use client';
 
 import { postSnap } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { useChatKey, useCouple } from '@us/shared/react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ErrorNote } from '@/components/app/module-header';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { shrinkPhoto } from '@/lib/image';
 /** Preview the chosen photo, add a caption, share it for 24 hours. */
 export function PostSnap({ file, onClose, mutate }: { file: File | null; onClose: () => void; mutate: <R>(write: () => Promise<R>) => Promise<R> }) {
   const { sb, couple, me, partner } = useCouple();
+  const { sealer } = useChatKey();
   const [preview, setPreview] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,7 +34,8 @@ export function PostSnap({ file, onClose, mutate }: { file: File | null; onClose
     setError(null);
     try {
       const { blob, type } = await shrinkPhoto(file);
-      await mutate(() => postSnap(sb, couple.id, me.id, { body: blob, contentType: type }, caption));
+      const cipher = await sealer();
+      await mutate(() => postSnap(sb, couple.id, me.id, { body: blob, contentType: type }, caption, cipher));
       onClose();
     } catch (err) {
       setError((err as Error).message);

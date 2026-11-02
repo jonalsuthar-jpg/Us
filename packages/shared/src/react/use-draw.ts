@@ -15,11 +15,12 @@ import {
 } from '../api/draw';
 import { toDateKey } from '../api/plan';
 import type { DrawGame, Drawing, Sticker } from '../database.types';
-import { chatMediaUrls } from '../api/messages';
+import { openChatMedia } from '../api/chat-media';
 import { listStickers, STICKERS_TOPIC } from '../api/stickers';
 import { gameStoreFor, GameStore } from '../draw/game-store';
 import { DrawHub, HERE_EVERY_MS, HERE_TTL_MS, LIVE_CANVAS, type DrawSession, type DrawState, type PartnerCursor } from '../draw/session';
 import type { CoupleChannel } from '../realtime/couple-channel';
+import { useChatKey } from './chat-key-provider';
 import { useCouple } from './couple-provider';
 
 const hubs = new WeakMap<CoupleChannel, DrawHub>();
@@ -244,6 +245,7 @@ export function useDrawGames(enabled = true): TurnGameView {
 /** Our saved stickers, newest first, with links to their pictures. */
 export function useStickers(enabled = true): { stickers: Sticker[]; urls: Record<string, string>; loading: boolean; reload: () => void } {
   const { sb, couple, channel } = useCouple();
+  const { cipher } = useChatKey();
   const [stickers, setStickers] = useState<Sticker[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -251,13 +253,14 @@ export function useStickers(enabled = true): { stickers: Sticker[]; urls: Record
     if (!enabled) return;
     void (async () => {
       const list = await listStickers(sb, couple.id);
-      const links = await chatMediaUrls(sb, list.map((s) => s.path));
+      // Encrypted sticker files open on the device; older ones get signed links.
+      const links = await openChatMedia(sb, cipher, list.map((s) => ({ path: s.path, mime: 'image/png' })));
       setStickers(list);
       setUrls(links);
     })()
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [sb, couple.id, enabled]);
+  }, [sb, couple.id, enabled, cipher]);
   useEffect(() => {
     reload();
     return channel.changes.on((e) => e.topic === STICKERS_TOPIC && reload());

@@ -1,10 +1,13 @@
 'use client';
 
-import { getCoupleContext, getMyAccess, type CoupleContext, type MyAccess } from '@us/shared';
+import { clearMediaVault, getCoupleContext, getMyAccess, type CoupleContext, type MyAccess } from '@us/shared';
 import { AccessProvider, CallProvider, CoupleProvider } from '@us/shared/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
+import { ChatKeyApproval } from '@/components/chat/chat-key';
 import { Seal } from '@/components/ui/avatar';
+// Before any chat code runs: where this browser keeps its chat keys.
+import '@/lib/chat-crypto';
 import { env } from '@/lib/env';
 import { webRtc } from '@/lib/rtc';
 import { getSupabase } from '@/lib/supabase/client';
@@ -34,7 +37,10 @@ export function SessionGate({ children }: { children: ReactNode }) {
       setCtx(c);
     });
     const { data: sub } = sb.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') router.replace('/sign-in');
+      if (event === 'SIGNED_OUT') {
+        void clearMediaVault();
+        router.replace('/sign-in');
+      }
     });
     return () => {
       cancelled = true;
@@ -56,6 +62,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
       <CoupleProvider sb={getSupabase()} context={ctx} platform="web" onEnded={() => window.location.assign('/pair')}>
         <CallProvider rtc={webRtc} forceRelay={env.forceRelay}>
           {children}
+          <ChatKeyApproval />
         </CallProvider>
       </CoupleProvider>
     </AccessProvider>

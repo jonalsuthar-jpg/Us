@@ -1,3 +1,4 @@
+import { isEncryptedReaction, type ChatCipher } from '../crypto/chat-cipher';
 import type { MediaKind, MediaMeta, Message, MessageRow, MessageStatus } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
@@ -63,6 +64,8 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
     pinned_at: null,
     pinned_by: null,
     snap_id: extras.snapId ?? null,
+    ciphertext: null,
+    key_version: null,
     call: null,
     pending: true,
     localUri: extras.media?.localUri,
@@ -74,25 +77,33 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
  * Insert a message (uploading its photo / voice note first, if any). The
  * client-generated id makes retries idempotent, and the upload path is
  * derived from it, so a retry overwrites rather than duplicating the file.
+ *
+ * With a cipher, the text, media details and file are encrypted on the way
+ * out and only the ciphertext reaches the server.
  */
-export async function sendMessage(sb: UsClient, draft: Message): Promise<MessageRow> {
+export async function sendMessage(sb: UsClient, draft: Message, cipher?: ChatCipher | null): Promise<MessageRow> {
   let mediaPath = draft.media_path;
   if (!mediaPath && draft.upload && draft.media_kind) {
-    mediaPath = await uploadChatMedia(sb, draft.couple_id, draft.id, draft.upload.body, draft.upload.contentType);
+    mediaPath = await uploadChatMedia(sb, draft.couple_id, draft.id, draft.upload.body, draft.upload.contentType, cipher);
   }
   const linked = isLinkedMedia(draft.media_kind);
+  const body = draft.body?.trim() ? draft.body : null;
+  const meta = mediaPath || linked ? draft.media_meta : null;
+  const ciphertext = cipher ? cipher.encryptMessage(draft, { body, meta, mime: draft.upload ? baseMime(draft.upload.contentType) : null }) : null;
   const { data, error } = await sb
     .from('messages')
     .insert({
       id: draft.id,
       couple_id: draft.couple_id,
       sender_id: draft.sender_id,
-      body: draft.body?.trim() ? draft.body : null,
+      body: ciphertext ? null : body,
       reply_to: draft.reply_to,
       snap_id: draft.snap_id,
       media_path: mediaPath,
       media_kind: mediaPath || linked ? draft.media_kind : null,
-      media_meta: mediaPath || linked ? draft.media_meta : null,
+      media_meta: ciphertext ? null : meta,
+      ciphertext,
+      key_version: ciphertext ? cipher!.version : null,
     })
     .select('*')
     .single();
@@ -141,14 +152,32 @@ const MEDIA_EXT: Record<string, string> = {
 /** Strip codec parameters ("audio/webm;codecs=opus" → "audio/webm"). */
 export const baseMime = (type: string) => type.split(';')[0]!.trim().toLowerCase();
 
+/** Opaque bytes: what every encrypted file is uploaded as. */
+export const ENCRYPTED_MIME = 'application/octet-stream';
+
+export async function toBytes(body: Blob | ArrayBuffer | Uint8Array): Promise<Uint8Array> {
+  if (body instanceof Uint8Array) return body;
+  if (body instanceof ArrayBuffer) return new Uint8Array(body);
+  return new Uint8Array(await body.arrayBuffer());
+}
+
+/** With a cipher the file is encrypted first; its real type travels inside the message. */
 export async function uploadChatMedia(
   sb: UsClient,
   coupleId: string,
   messageId: string,
   body: Blob | ArrayBuffer | Uint8Array,
   contentType: string,
+  cipher?: ChatCipher | null,
 ): Promise<string> {
   const type = baseMime(contentType);
+  if (cipher) {
+    const path = `${coupleId}/${messageId}.enc`;
+    const sealed = cipher.encryptFile(path, await toBytes(body));
+    const { error } = await sb.storage.from(CHAT_BUCKET).upload(path, sealed, { contentType: ENCRYPTED_MIME, upsert: true });
+    if (error) throw error;
+    return path;
+  }
   const path = `${coupleId}/${messageId}.${MEDIA_EXT[type] ?? 'bin'}`;
   const { error } = await sb.storage.from(CHAT_BUCKET).upload(path, body, { contentType: type, upsert: true });
   if (error) throw error;
@@ -173,8 +202,10 @@ export function formatVoiceLength(ms: number | undefined | null): string {
 }
 
 /** One line describing a message, for reply quotes, pins, search and pushes. */
-export function messagePreview(m: Pick<MessageRow, 'body' | 'media_kind' | 'kind'>): string {
+export function messagePreview(m: Pick<Message, 'body' | 'media_kind' | 'kind' | 'e2ee'>): string {
   if (m.body?.trim()) return m.body.trim();
+  if (m.e2ee === 'locked') return '🔒 Encrypted message';
+  if (m.e2ee === 'failed') return '🔒 Couldn’t open this message';
   if (m.media_kind === 'image') return '📷 Photo';
   if (m.media_kind === 'audio') return '🎤 Voice note';
   if (m.media_kind === 'gif') return 'GIF';
@@ -193,9 +224,15 @@ export const MORE_REACTIONS = [
   '🙏', '👏', '💪', '👌', '🤞', '🌹', '🎉', '💯',
 ] as const;
 
-/** Set (or with null, remove) my reaction. */
-export async function reactToMessage(sb: UsClient, id: string, emoji: string | null): Promise<MessageRow> {
-  const { data, error } = await sb.rpc('react_to_message', { p_id: id, p_emoji: emoji });
+/** Set (or with null, remove) my reaction; with a cipher it's encrypted. */
+export async function reactToMessage(
+  sb: UsClient,
+  id: string,
+  emoji: string | null,
+  sealed?: { cipher: ChatCipher; me: string } | null,
+): Promise<MessageRow> {
+  const value = emoji && sealed ? sealed.cipher.encryptReaction(id, sealed.me, emoji) : emoji;
+  const { data, error } = await sb.rpc('react_to_message', { p_id: id, p_emoji: value });
   if (error) throw error;
   return data;
 }
@@ -218,7 +255,8 @@ export function groupReactions(reactions: Record<string, string> | null | undefi
   return [...out.values()].sort((a, b) => b.count - a.count);
 }
 
-export async function listPinned(sb: UsClient, coupleId: string): Promise<Message[]> {
+/** Pinned messages, newest pin first, opened with the cipher when they're encrypted. */
+export async function listPinned(sb: UsClient, coupleId: string, cipher: ChatCipher | null = null): Promise<Message[]> {
   const { data, error } = await sb
     .from('messages')
     .select(SELECT)
@@ -227,24 +265,117 @@ export async function listPinned(sb: UsClient, coupleId: string): Promise<Messag
     .order('pinned_at', { ascending: false })
     .limit(50);
   if (error) throw error;
-  return (data ?? []) as Message[];
+  return openMessages((data ?? []) as Message[], cipher);
 }
 
 /** Escape LIKE wildcards so a search for "50%" means exactly that. */
 export const escapeLike = (q: string) => q.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-export async function searchMessages(sb: UsClient, coupleId: string, query: string): Promise<Message[]> {
-  const q = query.trim();
+const SEARCH_PAGE = 500;
+const SEARCH_LIMIT = 50;
+
+export interface SearchOptions {
+  /** Called with everything found so far, as each stretch of history is read. */
+  onProgress?: (found: Message[], done: boolean) => void;
+  /** Stop reading (a newer search started). */
+  signal?: { aborted: boolean };
+}
+
+/**
+ * Search the thread on this device. The server can't read encrypted
+ * messages, so history is read back a page at a time, opened here and
+ * matched, newest first, until enough turn up or the thread runs out.
+ */
+export async function searchMessages(
+  sb: UsClient,
+  coupleId: string,
+  query: string,
+  cipher: ChatCipher | null,
+  opts: SearchOptions = {},
+): Promise<Message[]> {
+  const q = query.trim().toLocaleLowerCase();
   if (q.length < 2) return [];
-  const { data, error } = await sb
-    .from('messages')
-    .select(SELECT)
-    .eq('couple_id', coupleId)
-    .ilike('body', `%${escapeLike(q)}%`)
-    .order('created_at', { ascending: false })
-    .limit(50);
-  if (error) throw error;
-  return (data ?? []) as Message[];
+  const found: Message[] = [];
+  let before: string | undefined;
+  for (;;) {
+    let page = sb.from('messages').select(SELECT).eq('couple_id', coupleId).eq('kind', 'text').order('created_at', { ascending: false }).limit(SEARCH_PAGE);
+    if (before) page = page.lt('created_at', before);
+    const { data, error } = await page;
+    if (error) throw error;
+    if (opts.signal?.aborted) return found;
+    const rows = (data ?? []) as Message[];
+    for (const m of openMessages(rows, cipher)) {
+      if (found.length < SEARCH_LIMIT && m.body?.toLocaleLowerCase().includes(q)) found.push(m);
+    }
+    const done = rows.length < SEARCH_PAGE || found.length >= SEARCH_LIMIT;
+    opts.onProgress?.([...found], done);
+    if (done) return found;
+    before = rows[rows.length - 1]!.created_at;
+  }
+}
+
+// --------------------------------------------------------------- opening ---
+
+type Opened = { body: string | null; meta: MediaMeta | null; mime: string | null } | null;
+
+// A message's ciphertext never changes once set, so each is opened once per key.
+const opened = new WeakMap<ChatCipher, Map<string, Opened>>();
+
+function openPayload(m: Message, cipher: ChatCipher): Opened {
+  let cache = opened.get(cipher);
+  if (!cache) opened.set(cipher, (cache = new Map()));
+  const hit = cache.get(m.id);
+  if (hit !== undefined) return hit;
+  let out: Opened = null;
+  try {
+    const p = cipher.decryptMessage(m, m.ciphertext!);
+    out = {
+      body: typeof p.body === 'string' ? p.body : null,
+      meta: p.meta && typeof p.meta === 'object' ? p.meta : null,
+      mime: typeof p.mime === 'string' ? p.mime : null,
+    };
+  } catch {
+    out = null;
+  }
+  if (cache.size > 5000) cache.clear();
+  cache.set(m.id, out);
+  return out;
+}
+
+function openReactions(m: Message, cipher: ChatCipher | null): Record<string, string> {
+  const raw = m.reactions ?? {};
+  if (!Object.values(raw).some(isEncryptedReaction)) return raw;
+  const out: Record<string, string> = {};
+  for (const [user, value] of Object.entries(raw)) {
+    if (!isEncryptedReaction(value)) out[user] = value;
+    else if (cipher) {
+      // One that doesn't open isn't shown.
+      try {
+        out[user] = cipher.decryptReaction(m.id, user, value);
+      } catch {
+        // skip
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * A row from the server, made readable. An encrypted message gets its text
+ * and media details back (e2ee 'ok') or says why not ('locked': this device
+ * has no key yet; 'failed': it doesn't open). Older plain rows pass through.
+ */
+export function openMessage(m: Message, cipher: ChatCipher | null): Message {
+  const reactions = openReactions(m, cipher);
+  if (!m.ciphertext) return reactions === m.reactions ? m : { ...m, reactions };
+  if (!cipher) return { ...m, reactions, e2ee: 'locked' };
+  const p = m.key_version === cipher.version ? openPayload(m, cipher) : null;
+  if (!p) return { ...m, reactions, e2ee: 'failed' };
+  return { ...m, reactions, body: p.body, media_meta: p.meta, mime: p.mime, e2ee: 'ok' };
+}
+
+export function openMessages(rows: Message[], cipher: ChatCipher | null): Message[] {
+  return rows.map((m) => openMessage(m, cipher));
 }
 
 const RANK: Record<MessageStatus, number> = { sent: 0, delivered: 1, read: 2 };

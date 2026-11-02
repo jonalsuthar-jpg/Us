@@ -163,6 +163,8 @@ export const Bubble = memo(function Bubble({
           {message.media_kind === 'audio' ? <VoiceNote url={url} durationMs={meta?.duration_ms} mine={mine} /> : null}
 
           {hasText ? <Text className={cn('text-ink', photo && url && 'px-2.5 pt-1.5')}>{message.body}</Text> : null}
+          {/* Encrypted, and this phone can't open it (yet). */}
+          {message.e2ee === 'locked' || message.e2ee === 'failed' ? <Text className="italic text-ink-soft">{messagePreview(message)}</Text> : null}
           <View className={cn('mt-0.5 flex-row items-center justify-end gap-1 self-end', photo && url && 'px-2 pb-1')}>
             {message.pinned_at ? <Pin size={11} color={c.inkMuted} /> : null}
             <Text className="text-[12px] leading-[15px] text-ink-muted">{formatClock(message.created_at)}</Text>

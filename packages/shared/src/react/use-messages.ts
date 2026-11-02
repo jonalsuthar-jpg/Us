@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ackMessages,
   draftMessage,
@@ -6,6 +6,7 @@ import {
   fetchMessage,
   fetchMessages,
   mergeMessages,
+  openMessage,
   PAGE_SIZE,
   pinMessage,
   reactToMessage,
@@ -14,6 +15,7 @@ import {
 } from '../api/messages';
 import { notifyPartner } from '../api/push';
 import type { Message } from '../database.types';
+import { useChatKey } from './chat-key-provider';
 import { useCouple } from './couple-provider';
 import { cacheKey, readCache, writeCache } from './data-cache';
 
@@ -31,12 +33,16 @@ interface Options {
  * Messages are kept oldest → newest. The newest page is cached, so the
  * thread draws at once and the server's copy merges in behind it. Messages
  * that couldn't be sent are kept too, and go again once we're back online.
+ *
+ * State and cache hold rows as the server has them (encrypted ones stay
+ * encrypted on the device); `messages` is the opened, readable thread.
  */
 export function useMessages({ viewing }: Options) {
   const { sb, couple, me, partner, channel, refreshUnread } = useCouple();
+  const { cipher, sealer } = useChatKey();
   const key = cacheKey(couple.id, 'chat:messages');
   const unsentKey = cacheKey(couple.id, 'chat:unsent');
-  const [messages, setMessages] = useState<Message[]>(() => {
+  const [rows, setMessages] = useState<Message[]>(() => {
     const unsent = (readCache<Message[]>(unsentKey) ?? []).map((m) => ({ ...m, pending: false, failed: true }));
     return mergeMessages(readCache<Message[]>(key) ?? [], unsent);
   });
@@ -46,8 +52,8 @@ export function useMessages({ viewing }: Options) {
   const [olderFailed, setOlderFailed] = useState(false);
   const viewingRef = useRef(viewing);
   viewingRef.current = viewing;
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
+  const messagesRef = useRef(rows);
+  messagesRef.current = rows;
   const hasOlderRef = useRef(hasOlder);
   hasOlderRef.current = hasOlder;
   const fetchingOlder = useRef(false);
@@ -78,7 +84,7 @@ export function useMessages({ viewing }: Options) {
       if (delivering.current.has(draft.id)) return;
       delivering.current.add(draft.id);
       try {
-        const saved = await sendMessage(sb, draft);
+        const saved = await sendMessage(sb, draft, await sealer());
         upsert({ ...saved, pending: false, failed: false });
         void notifyPartner(sb, { category: 'new_message', messageId: saved.id });
       } catch {
@@ -87,7 +93,7 @@ export function useMessages({ viewing }: Options) {
         delivering.current.delete(draft.id);
       }
     },
-    [sb, upsert],
+    [sb, upsert, sealer],
   );
 
   const retry = useCallback(
@@ -152,15 +158,15 @@ export function useMessages({ viewing }: Options) {
     if (loading) return;
     const settled: Message[] = [];
     const unsent: Message[] = [];
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const { localUri: _l, upload, ...m } = messages[i]!;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const { localUri: _l, upload, ...m } = rows[i]!;
       if (m.pending || m.failed) {
         if (!upload) unsent.unshift(m);
       } else if (settled.length < KEEP) settled.unshift(m);
     }
     writeCache(key, settled);
     writeCache(unsentKey, unsent);
-  }, [key, unsentKey, loading, messages]);
+  }, [key, unsentKey, loading, rows]);
 
   /** Safe to call as often as you like: it does nothing while a page is on its way or once there's nothing older. */
   const loadOlder = useCallback(async () => {
@@ -210,13 +216,14 @@ export function useMessages({ viewing }: Options) {
         return { reactions: next };
       });
       try {
-        upsert(await reactToMessage(sb, id, emoji));
+        const seal = await sealer();
+        upsert(await reactToMessage(sb, id, emoji, seal ? { cipher: seal, me: me.id } : null));
       } catch (e) {
         patch(id, () => ({ reactions: before }));
         throw e;
       }
     },
-    [sb, me.id, patch, upsert],
+    [sb, me.id, patch, upsert, sealer],
   );
 
   const pin = useCallback(
@@ -226,6 +233,18 @@ export function useMessages({ viewing }: Options) {
       channel.sendChanged('chat:pins');
     },
     [sb, channel, upsert],
+  );
+
+  // Opened once per row (and per key): unchanged rows keep their identity, so they don't redraw.
+  const opened = useMemo(() => new WeakMap<Message, Message>(), [cipher]);
+  const messages = useMemo(
+    () =>
+      rows.map((r) => {
+        let m = opened.get(r);
+        if (!m) opened.set(r, (m = openMessage(r, cipher)));
+        return m;
+      }),
+    [rows, opened, cipher],
   );
 
   return { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, markRead, react, pin };

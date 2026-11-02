@@ -13,7 +13,7 @@ import {
   snapTimeLeft,
   type Snap,
 } from '@us/shared';
-import { useCouple } from '@us/shared/react';
+import { useChatKey, useCouple } from '@us/shared/react';
 import { BookmarkCheck, BookmarkPlus, Check, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { cn } from '@/lib/cn';
@@ -34,6 +34,7 @@ interface Props {
  */
 export function StoryViewer({ snaps, start, kept, onClose, mutate }: Props) {
   const { sb, me, partner } = useCouple();
+  const { sealer } = useChatKey();
   const [index, setIndex] = useState(start);
   const [progress, setProgress] = useState(0);
   const [held, setHeld] = useState(false);
@@ -116,7 +117,7 @@ export function StoryViewer({ snaps, start, kept, onClose, mutate }: Props) {
     const text = reply;
     setReply('');
     (document.activeElement as HTMLElement | null)?.blur();
-    await act('Sent to your chat', () => replyToSnap(sb, snap, me.id, text));
+    await act('Sent to your chat', async () => replyToSnap(sb, snap, me.id, text, await sealer()));
   }
 
   return (

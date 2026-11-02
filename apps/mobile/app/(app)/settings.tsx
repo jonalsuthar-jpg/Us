@@ -6,6 +6,7 @@ import { Camera, ChevronLeft } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, AppState, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChatSecurity } from '@/components/chat/chat-key';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, IconButton } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -170,6 +171,11 @@ export default function Settings() {
           <PrivacyBadge privacy="private" partnerName={partner.display_name} />
           <PrivacyBadge privacy="private-until-reveal" partnerName={partner.display_name} />
         </View>
+      </View>
+
+      <View className="gap-3">
+        <Display className="text-heading">Chat security</Display>
+        <ChatSecurity meId={me.id} partnerName={partner.display_name} />
       </View>
 
       <View className="gap-3">
