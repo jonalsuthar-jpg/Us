@@ -20,6 +20,11 @@ export interface RtcAdapter {
    * renegotiates. Without it, a share is picture only.
    */
   mixAudio?: (tracks: MediaStreamTrack[]) => { track: MediaStreamTrack; close: () => void };
+  /**
+   * Web: whether this captured system sound really leaves out the call's own
+   * audio. Without that, a screen or window share goes out with no sound.
+   */
+  canExcludeOwnAudio?: (sound: MediaStreamTrack) => Promise<boolean>;
   /** Mobile: point an existing camera track at the front or back camera, in place. */
   switchCamera?: (track: MediaStreamTrack, facing: CameraFacing) => void | Promise<void>;
   /** Web: the cameras on this device, so calls can offer a flip when there's more than one. */
@@ -143,6 +148,10 @@ export interface CallState {
    * source, or my speakers changed under it. Sharing again picks it back up.
    */
   shareSoundLost: boolean;
+  /** The sound I'm sharing is the system's (a screen or window), not just a tab's. */
+  shareSoundIsSystem: boolean;
+  /** My screen or window share goes out without sound, as my partner would hear their own voice in it. */
+  shareSoundBlocked: boolean;
   /** Bumped whenever tracks on either stream change, so views can re-bind. */
   revision: number;
 }
@@ -166,6 +175,8 @@ const INITIAL: CallState = {
   micDeviceId: null,
   shareSound: false,
   shareSoundLost: false,
+  shareSoundIsSystem: false,
+  shareSoundBlocked: false,
   revision: 0,
 };
 
@@ -535,17 +546,37 @@ export class CallManager {
     this.screenTrack = track;
     this.cameraEncoding = { ...(this.videoTx?.sender.getParameters?.().encodings?.[0] ?? {}) };
     const sound = display.getAudioTracks()[0];
+    const surface = (track.getSettings?.() as { displaySurface?: string } | undefined)?.displaySurface;
     if (!this.shareModePicked) {
       // A tab or anything with sound is usually a video playing; a window or screen is usually text.
-      const surface = (track.getSettings?.() as { displaySurface?: string } | undefined)?.displaySurface;
       this.set({ shareMode: sound || surface === 'browser' ? 'smooth' : 'sharp' });
     }
     await this.videoTx?.sender.replaceTrack(track);
     await this.applyShareQuality();
     const mic = this.state.localStream?.getAudioTracks()[0];
-    if (sound && mic && this.opts.rtc.mixAudio) await this.mixInSound(sound, mic);
-    else sound?.stop();
+    // A screen or window can carry all the system's sound, my partner's voice included.
+    const system = surface === 'monitor' || surface === 'window';
+    if (sound && mic && this.opts.rtc.mixAudio) {
+      if (system && !(await this.ownAudioExcluded(sound))) {
+        sound.stop();
+        this.set({ shareSoundBlocked: true });
+      } else {
+        await this.mixInSound(sound, mic);
+        if (system) this.set({ shareSoundIsSystem: true });
+      }
+    } else {
+      sound?.stop();
+    }
     this.setLocal({ screen: true });
+  }
+
+  private async ownAudioExcluded(sound: MediaStreamTrack) {
+    try {
+      return (await this.opts.rtc.canExcludeOwnAudio?.(sound)) === true;
+    } catch (e) {
+      this.log('could not check the shared sound', e);
+      return false;
+    }
   }
 
   /** Mix shared sound with my mic onto the one audio sender, with room for music. */
@@ -660,7 +691,9 @@ export class CallManager {
     this.audioMix?.close();
     this.screenAudio?.stop();
     this.audioMix = this.screenAudio = null;
-    if (this.state.shareSound || this.state.shareSoundLost) this.set({ shareSound: false, shareSoundLost: false });
+    if (this.state.shareSound || this.state.shareSoundLost || this.state.shareSoundBlocked) {
+      this.set({ shareSound: false, shareSoundLost: false, shareSoundIsSystem: false, shareSoundBlocked: false });
+    }
   }
 
   /** The track to show as my self-view (screen while sharing, else camera). */

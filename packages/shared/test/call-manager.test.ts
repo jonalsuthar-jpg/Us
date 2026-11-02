@@ -390,6 +390,61 @@ describe('CallManager', () => {
     expect(alice.getState()).toMatchObject({ shareSound: false, shareSoundLost: false });
   });
 
+  describe('system sound from a shared screen or window', () => {
+    async function share(surface: string, canExcludeOwnAudio?: () => Promise<boolean>) {
+      const w = makeWorld();
+      const video = new FakeTrack('video');
+      video.displaySurface = surface;
+      const sound = new FakeTrack('audio');
+      const mixAudio = vi.fn(() => ({ track: new FakeTrack('audio'), close: vi.fn() }));
+      const alice = w.manager('alice', 'bob', {
+        rtc: { getDisplayMedia: async () => new FakeStream([video, sound]), mixAudio, canExcludeOwnAudio } as never,
+      });
+      const bob = w.manager('bob', 'alice');
+      await alice.startCall('audio');
+      await until(bob, 'incoming');
+      await bob.accept();
+      await until(alice, 'connected');
+      await alice.startScreenShare();
+      return { alice, sound, mixAudio, canExcludeOwnAudio };
+    }
+
+    it('goes out mixed when the call’s own audio is left out, until the share stops', async () => {
+      const { alice, sound, mixAudio } = await share('monitor', async () => true);
+      expect(mixAudio).toHaveBeenCalledOnce();
+      expect(sound.stopped).toBe(false);
+      expect(alice.getState()).toMatchObject({ shareSound: true, shareSoundIsSystem: true, shareSoundBlocked: false });
+      await alice.stopScreenShare();
+      expect(alice.getState()).toMatchObject({ shareSound: false, shareSoundIsSystem: false, shareSoundBlocked: false });
+    });
+
+    it.each(['monitor', 'window'])('is held back from a %s share when it would carry my partner’s voice', async (surface) => {
+      const { alice, sound, mixAudio } = await share(surface, async () => false);
+      expect(mixAudio).not.toHaveBeenCalled();
+      expect(sound.stopped).toBe(true);
+      expect(alice.getState()).toMatchObject({ shareSound: false, shareSoundIsSystem: false, shareSoundBlocked: true, local: { screen: true } });
+      await alice.stopScreenShare();
+      expect(alice.getState()).toMatchObject({ shareSoundBlocked: false, local: { screen: false } });
+    });
+
+    it('is held back when the check fails or the platform has none', async () => {
+      const failed = await share('monitor', async () => {
+        throw new Error('no client hints');
+      });
+      expect(failed.alice.getState().shareSoundBlocked).toBe(true);
+      const missing = await share('monitor');
+      expect(missing.alice.getState().shareSoundBlocked).toBe(true);
+    });
+
+    it('a tab’s sound goes out without the check', async () => {
+      const canExclude = vi.fn(async () => false);
+      const { alice, mixAudio } = await share('browser', canExclude);
+      expect(canExclude).not.toHaveBeenCalled();
+      expect(mixAudio).toHaveBeenCalledOnce();
+      expect(alice.getState()).toMatchObject({ shareSound: true, shareSoundIsSystem: false, shareSoundBlocked: false });
+    });
+  });
+
   it('a share goes out smooth by default, switches to sharp, and gives the camera its settings back', async () => {
     const w = makeWorld();
     const screen = new FakeStream([new FakeTrack('video'), new FakeTrack('audio')]);

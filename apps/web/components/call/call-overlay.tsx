@@ -186,7 +186,8 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.4 } }}
     >
-      <StreamAudio stream={state.remoteStream} revision={state.revision} sinkId={sinkId} />
+      {/* Sharing system sound: call audio stays on the default output, as echo-free sharing expects. */}
+      <StreamAudio stream={state.remoteStream} revision={state.revision} sinkId={state.shareSoundIsSystem ? '' : sinkId} />
 
       {/* While ringing on a video call, my own camera glows faintly behind the veil. */}
       {ringing && isVideo && state.localStream && (
@@ -351,6 +352,13 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
               </button>
             </div>
           ) : null}
+          {state.shareSoundBlocked ? (
+            <div role="status" className="flex items-center gap-2 rounded-full bg-gold-50 px-3 py-1 text-micro text-gold-800">
+              <VolumeX className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Your screen&apos;s sound isn&apos;t being shared, because {partner.display_name} would hear their own voice. Share a browser tab to include sound, or
+              update your browser or system.
+            </div>
+          ) : null}
           {shareStats?.height ? (
             <p className="text-micro tabular-nums text-paper/70" aria-live="polite">
               {`${shareStats.height}p · ${Math.round(shareStats.fps ?? 0)} fps`}
@@ -459,8 +467,12 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
               onPick={(id) => void m.setMicrophone(id === 'default' ? null : id)}
             />
           ) : null}
-          {outputs.length > 1 ? <DevicePicker label="Hear the call through" devices={outputs} selected={currentOutput} onPick={setSinkId} /> : null}
-          {state.local.screen ? (
+          {outputs.length > 1 && !state.shareSoundIsSystem ? (
+            <DevicePicker label="Hear the call through" devices={outputs} selected={currentOutput} onPick={setSinkId} />
+          ) : null}
+          {state.shareSoundIsSystem ? (
+            <p className="text-micro text-ink-muted">The call plays through your system&apos;s default speakers while you share your screen&apos;s sound.</p>
+          ) : state.local.screen ? (
             <p className="text-micro text-ink-muted">Changing your speakers while you share sound? If {partner.display_name} stops hearing it, share again.</p>
           ) : null}
         </div>
