@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDuration, type CallState, type ScreenStats, type ShareMode } from '@us/shared';
+import { formatDuration, isWideVideo, selfViewAspect, type CallState, type ScreenStats, type ShareMode, type VideoSize } from '@us/shared';
 import { useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -112,6 +112,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
   const [audioPicker, setAudioPicker] = useState(false);
   // undefined = the browser's default output.
   const [sinkId, setSinkId] = useState<string | undefined>(undefined);
+  const [selfSize, setSelfSize] = useState<VideoSize | null>(null);
   const elapsed = useElapsed(state.connectedAt);
   const primary = useRef<HTMLButtonElement>(null);
 
@@ -207,7 +208,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
             transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="h-full w-full" onDoubleClick={watchingShare ? toggleFull : undefined}>
-              <StreamVideo stream={state.remoteStream} revision={state.revision} fit={state.remote.screen ? 'contain' : 'cover'} />
+              <StreamVideo stream={state.remoteStream} revision={state.revision} fit={state.remote.screen ? 'contain' : 'auto'} />
             </div>
             {full && (
               <div className="absolute right-4 top-4 opacity-30 transition-opacity hover:opacity-100 focus-within:opacity-100">
@@ -302,13 +303,14 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
       {/* Self view */}
       {live && !full && (state.local.camera || state.local.screen) && (
         <div
+          style={{ aspectRatio: selfViewAspect(selfSize) }}
           className={cn(
-            'absolute bottom-32 right-4 z-20 aspect-[3/4] overflow-hidden rounded-[18px] border border-white/15 bg-plum-900 shadow-2xl sm:bottom-36 sm:right-8 [@media(max-height:500px)]:bottom-24',
+            'absolute bottom-32 right-4 z-20 max-h-[45dvh] overflow-hidden rounded-[18px] border border-white/15 bg-plum-900 shadow-2xl sm:bottom-36 sm:right-8 [@media(max-height:500px)]:bottom-24',
             // Smaller while their screen is up, so it covers less of it.
-            watchingShare ? 'w-20 sm:w-28' : 'w-28 sm:w-40',
+            isWideVideo(selfSize) ? (watchingShare ? 'w-28 sm:w-40' : 'w-40 sm:w-64') : watchingShare ? 'w-20 sm:w-28' : 'w-28 sm:w-40',
           )}
         >
-          <SelfView state={state} />
+          <SelfView state={state} onSize={setSelfSize} />
           <span className="sr-only">Your camera</span>
         </div>
       )}
@@ -519,14 +521,22 @@ function DevicePicker({ label, devices, selected, onPick }: { label: string; dev
   );
 }
 
-function SelfView({ state }: { state: CallState }) {
+function SelfView({ state, onSize }: { state: CallState; onSize: (size: VideoSize) => void }) {
   const m = useCallManager();
   const [stream, setStream] = useState<MediaStream | null>(null);
   useEffect(() => {
     const track = m.selfViewTrack;
     setStream(track ? new MediaStream([track]) : null);
   }, [m, state.revision, state.local.camera, state.local.screen]);
-  return <StreamVideo stream={stream} revision={state.revision} mirrored={!state.local.screen && state.facing === 'user'} />;
+  return (
+    <StreamVideo
+      stream={stream}
+      revision={state.revision}
+      mirrored={!state.local.screen && state.facing === 'user'}
+      fit={state.local.screen ? 'contain' : 'cover'}
+      onSize={onSize}
+    />
+  );
 }
 
 function ControlStack({ label, children }: { label: string; children: React.ReactNode }) {

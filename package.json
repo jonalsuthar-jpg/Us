@@ -12,6 +12,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "postinstall": "patch-package",
     "dev": "turbo run dev",
     "dev:web": "npm run dev -w @us/web",
     "dev:mobile": "npm run start -w @us/mobile",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",
+    "patch-package": "^8.0.1",
     "supabase": "2.121.0",
     "turbo": "2.11.9",
     "typescript": "5.9.3"

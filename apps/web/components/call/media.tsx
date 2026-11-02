@@ -1,36 +1,76 @@
 'use client';
 
+import { videoFit, type VideoSize } from '@us/shared';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 
-/** Binds a MediaStream to a <video>. `revision` re-binds when tracks change. */
+const sameSize = (a: VideoSize | null, b: VideoSize) => a?.width === b.width && a?.height === b.height;
+
+/**
+ * Binds a MediaStream to a <video>. `revision` re-binds when tracks change.
+ * `auto` fills the box or shows the whole picture, whichever suits their shapes.
+ */
 export function StreamVideo({
   stream,
   revision,
   mirrored,
   fit = 'cover',
+  onSize,
   className,
 }: {
   stream: MediaStream | null;
   revision: number;
   mirrored?: boolean;
-  fit?: 'cover' | 'contain';
+  fit?: 'cover' | 'contain' | 'auto';
+  onSize?: (size: VideoSize) => void;
   className?: string;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const [video, setVideo] = useState<VideoSize | null>(null);
+  const [box, setBox] = useState<VideoSize | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     if (el.srcObject !== stream) el.srcObject = stream;
     if (stream) void el.play().catch(() => {});
   }, [stream, revision]);
+  // The picture's shape changes with a camera flip or a phone turned sideways.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const next = { width: el.videoWidth, height: el.videoHeight };
+      setVideo((prev) => (sameSize(prev, next) ? prev : next));
+    };
+    measure();
+    el.addEventListener('loadedmetadata', measure);
+    el.addEventListener('resize', measure);
+    return () => {
+      el.removeEventListener('loadedmetadata', measure);
+      el.removeEventListener('resize', measure);
+    };
+  }, []);
+  useEffect(() => {
+    if (video && video.width > 0 && video.height > 0) onSize?.(video);
+  }, [video, onSize]);
+  useEffect(() => {
+    const el = ref.current;
+    if (fit !== 'auto' || !el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      const next = { width: el.clientWidth, height: el.clientHeight };
+      setBox((prev) => (sameSize(prev, next) ? prev : next));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fit]);
+  const resolved = fit === 'auto' ? videoFit(video, box) : fit;
   return (
     <video
       ref={ref}
       autoPlay
       playsInline
       muted // audio plays through <StreamAudio>, so hiding video never silences it
-      className={cn('h-full w-full', fit === 'cover' ? 'object-cover' : 'object-contain', mirrored && '-scale-x-100', className)}
+      className={cn('h-full w-full', resolved === 'cover' ? 'object-cover' : 'object-contain', mirrored && '-scale-x-100', className)}
     />
   );
 }

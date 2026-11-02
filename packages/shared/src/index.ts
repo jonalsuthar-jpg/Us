@@ -32,6 +32,7 @@ export * from './api/stickers';
 
 export * from './webrtc/signals';
 export * from './webrtc/call-manager';
+export * from './webrtc/video-fit';
 
 export * from './modules';
 export * from './features';

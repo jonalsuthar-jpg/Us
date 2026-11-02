@@ -1,9 +1,9 @@
-import { formatDuration, type CallState } from '@us/shared';
+import { formatDuration, isWideVideo, selfViewAspect, videoFit, type CallState, type VideoSize } from '@us/shared';
 import { useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { Bluetooth, Check, ChevronDown, Ear, Headphones, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StatusBar, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Modal, Pressable, StatusBar, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -33,13 +33,18 @@ import { Display, Text } from '../ui/text';
 export function CallScreen() {
   const state = useCallState();
   const [minimised, setMinimised] = useState(false);
-  // Watching their shared screen full screen, turned sideways.
+  // Watching their shared screen or a wide camera full screen, turned sideways.
   const [full, setFull] = useState(false);
-  const sharing = (state.phase === 'connected' || state.phase === 'reconnecting') && state.remote.screen && !!state.remoteStream;
+  // The shape of the picture they're sending, once its first frame arrives.
+  const [remoteSize, setRemoteSize] = useState<VideoSize | null>(null);
+  const onRemoteSize = useVideoSize(setRemoteSize);
+  useEffect(() => setRemoteSize(null), [state.remoteStream]);
+  const live = (state.phase === 'connected' || state.phase === 'reconnecting') && !!state.remoteStream;
+  const canGoFull = live && (state.remote.screen || (state.remote.camera && isWideVideo(remoteSize)));
   useCallAudio(state);
   useEffect(() => {
-    if (!sharing) setFull(false);
-  }, [sharing]);
+    if (!canGoFull) setFull(false);
+  }, [canGoFull]);
   useEffect(() => {
     if (!full) return;
     void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
@@ -68,10 +73,16 @@ export function CallScreen() {
         onRequestClose={full ? () => setFull(false) : minimise}
       >
         {state.phase !== 'idle' &&
-          (full && sharing ? (
-            <FullScreenShare state={state} onExit={() => setFull(false)} />
+          (full && canGoFull ? (
+            <FullScreenVideo state={state} onSize={onRemoteSize} onExit={() => setFull(false)} />
           ) : (
-            <Surface state={state} onMinimise={canMinimise ? minimise : undefined} onFullScreen={sharing ? () => setFull(true) : undefined} />
+            <Surface
+              state={state}
+              remoteSize={remoteSize}
+              onRemoteSize={onRemoteSize}
+              onMinimise={canMinimise ? minimise : undefined}
+              onFullScreen={canGoFull ? () => setFull(true) : undefined}
+            />
           ))}
       </Modal>
       {minimised && <CallBar state={state} onExpand={() => setMinimised(false)} />}
@@ -79,11 +90,22 @@ export function CallScreen() {
   );
 }
 
+type DimensionsEvent = { nativeEvent: VideoSize };
+
+/** Keeps a video's size from its view's events, skipping the ones that change nothing. */
+function useVideoSize(set: React.Dispatch<React.SetStateAction<VideoSize | null>>) {
+  return useCallback(
+    ({ nativeEvent: { width, height } }: DimensionsEvent) =>
+      set((prev) => (prev?.width === width && prev?.height === height ? prev : { width, height })),
+    [set],
+  );
+}
+
 /**
- * Their shared screen and nothing else, sideways. A tap brings up exit and
- * hang-up for a few seconds.
+ * Their shared screen or wide camera and nothing else, sideways. A tap brings
+ * up exit and hang-up for a few seconds.
  */
-function FullScreenShare({ state, onExit }: { state: CallState; onExit: () => void }) {
+function FullScreenVideo({ state, onSize, onExit }: { state: CallState; onSize: (e: DimensionsEvent) => void; onExit: () => void }) {
   const m = useCallManager();
   const [controls, setControls] = useState(true);
   useEffect(() => {
@@ -93,7 +115,7 @@ function FullScreenShare({ state, onExit }: { state: CallState; onExit: () => vo
   }, [controls]);
   return (
     <Pressable accessibilityLabel="Show call controls" onPress={() => setControls((v) => !v)} className="flex-1 bg-black">
-      <RTCView streamURL={(state.remoteStream as unknown as MediaStream).toURL()} objectFit="contain" style={{ flex: 1 }} />
+      <RTCView streamURL={(state.remoteStream as unknown as MediaStream).toURL()} objectFit="contain" onDimensionsChange={onSize} style={{ flex: 1 }} />
       {controls ? (
         <Animated.View entering={FadeIn.duration(200)} className="absolute right-5 top-5 flex-row gap-3">
           <IconButton label="Exit full screen" tone="night" onPress={onExit}>
@@ -210,10 +232,25 @@ function useElapsed(start: number | null) {
   return start ? now - start : 0;
 }
 
-function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMinimise?: () => void; onFullScreen?: () => void }) {
+function Surface({
+  state,
+  remoteSize,
+  onRemoteSize,
+  onMinimise,
+  onFullScreen,
+}: {
+  state: CallState;
+  remoteSize: VideoSize | null;
+  onRemoteSize: (e: DimensionsEvent) => void;
+  onMinimise?: () => void;
+  onFullScreen?: () => void;
+}) {
   const m = useCallManager();
   const { partner, partnerSlot } = useCouple();
   const insets = useSafeAreaInsets();
+  const screen = useWindowDimensions();
+  const [selfSize, setSelfSize] = useState<VideoSize | null>(null);
+  const onSelfSize = useVideoSize(setSelfSize);
   const elapsed = useElapsed(state.connectedAt);
   const [nudge, setNudge] = useState(false);
   const canDraw = useFeature('draw');
@@ -261,7 +298,8 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
         <Animated.View entering={FadeIn.duration(900)} className="absolute inset-0">
           <RTCView
             streamURL={(state.remoteStream as unknown as MediaStream).toURL()}
-            objectFit={state.remote.screen ? 'contain' : 'cover'}
+            objectFit={state.remote.screen ? 'contain' : videoFit(remoteSize, screen)}
+            onDimensionsChange={onRemoteSize}
             style={{ flex: 1 }}
           />
         </Animated.View>
@@ -293,6 +331,11 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
         ) : (
           <View className="flex-1" />
         )}
+        {remoteVideo && !state.remote.screen && onFullScreen ? (
+          <IconButton label="Full screen" tone="night" size="sm" onPress={onFullScreen}>
+            <Maximize size={18} color="#FCFAFB" />
+          </IconButton>
+        ) : null}
         {live && state.route === 'relay' && (
           <View className="flex-row items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1">
             <Radio size={13} color="#EBE1F4" />
@@ -321,13 +364,17 @@ function Surface({ state, onMinimise, onFullScreen }: { state: CallState; onMini
 
       {live && state.local.camera && selfTrack && (
         <View
-          style={{ bottom: controlsHeight + 12 }}
-          className={cn('absolute right-4 overflow-hidden rounded-[18px] border border-white/15', state.remote.screen ? 'h-28 w-20' : 'h-44 w-32')}
+          style={{ bottom: controlsHeight + 12, aspectRatio: selfViewAspect(selfSize) }}
+          className={cn(
+            'absolute right-4 overflow-hidden rounded-[18px] border border-white/15',
+            isWideVideo(selfSize) ? (state.remote.screen ? 'w-28' : 'w-44') : state.remote.screen ? 'w-20' : 'w-32',
+          )}
         >
           <RTCView
             streamURL={new MediaStream([selfTrack as never]).toURL()}
             objectFit="cover"
             mirror={state.facing === 'user'}
+            onDimensionsChange={onSelfSize}
             zOrder={1}
             style={{ flex: 1 }}
           />
