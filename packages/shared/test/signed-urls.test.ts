@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isVideoPath } from '../src/api/chat-video';
 import { forgetSignedUrl, signedUrls } from '../src/api/signed-urls';
 import { clearDataCache } from '../src/react/data-cache';
 import type { UsClient } from '../src/supabase';
@@ -56,5 +57,15 @@ describe('signedUrls', () => {
     await signedUrls(sb, 'b', ['a']);
     forgetSignedUrl('b', 'a');
     expect(await signedUrls(sb, 'b', ['a'])).toEqual({ a: 'a#2' });
+  });
+});
+
+describe('isVideoPath', () => {
+  it('only matches encrypted files in a couple’s video folder', () => {
+    expect(isVideoPath('c1/video/0b6c2a52-6f1e-4a8e-9a3e-1f2d3c4b5a69.enc')).toBe(true);
+    expect(isVideoPath('c1/0b6c2a52.enc')).toBe(false);
+    expect(isVideoPath('c1/video/x.mp4')).toBe(false);
+    expect(isVideoPath('c1/video/a/b.enc')).toBe(false);
+    expect(isVideoPath(null)).toBe(false);
   });
 });

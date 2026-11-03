@@ -202,6 +202,22 @@ export function Bubble({
             )
           ) : null}
 
+          {message.media_kind === 'video' ? (
+            url ? (
+              <video
+                controls
+                playsInline
+                preload="metadata"
+                src={url}
+                className="block max-h-96 w-72 max-w-full rounded-[14px] bg-black"
+                style={message.media_meta?.width && message.media_meta?.height ? { aspectRatio: `${message.media_meta.width} / ${message.media_meta.height}` } : undefined}
+                aria-label={`Video, ${formatVoiceLength(message.media_meta?.duration_ms)}`}
+              />
+            ) : (
+              <span className="block h-48 w-64 animate-pulse rounded-[14px] bg-black/20" aria-label="Video loading" />
+            )
+          ) : null}
+
           {message.media_kind === 'audio' ? (
             <span className="flex min-w-[220px] flex-col gap-1 py-0.5">
               {url ? (

@@ -2,6 +2,7 @@ import { isEncryptedReaction, type ChatCipher } from '../crypto/chat-cipher';
 import type { MediaKind, MediaMeta, Message, MessageRow, MessageStatus } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
+import { isVideoPath, uploadChatVideo, videoUrls } from './chat-video';
 import { signedUrls } from './signed-urls';
 
 const SELECT = '*, call:calls(*)';
@@ -37,7 +38,7 @@ export interface DraftExtras {
     meta?: MediaMeta | null;
     /** Shown immediately while the file uploads. */
     localUri?: string;
-    /** Photos and voice notes; GIFs and stickers are links and upload nothing. */
+    /** Photos, voice notes and videos; GIFs and stickers are links and upload nothing. */
     upload?: { body: Blob | ArrayBuffer | Uint8Array; contentType: string };
     /** A file already in our folder (one of our saved stickers): nothing to upload. */
     path?: string;
@@ -85,7 +86,10 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
 export async function sendMessage(sb: UsClient, draft: Message, cipher?: ChatCipher | null): Promise<MessageRow> {
   let mediaPath = draft.media_path;
   if (!mediaPath && draft.upload && draft.media_kind) {
-    mediaPath = await uploadChatMedia(sb, draft.couple_id, draft.id, draft.upload.body, draft.upload.contentType, cipher);
+    mediaPath =
+      draft.media_kind === 'video'
+        ? await uploadChatVideo(sb, draft.id, await toBytes(draft.upload.body), cipher)
+        : await uploadChatMedia(sb, draft.couple_id, draft.id, draft.upload.body, draft.upload.contentType, cipher);
   }
   const linked = isLinkedMedia(draft.media_kind);
   const body = draft.body?.trim() ? draft.body : null;
@@ -185,9 +189,12 @@ export async function uploadChatMedia(
   return path;
 }
 
-/** Signed URLs for chat media, keyed by path (reused while they last; see signed-urls). */
-export function chatMediaUrls(sb: UsClient, paths: string[], expiresIn?: number): Promise<Record<string, string>> {
-  return signedUrls(sb, CHAT_BUCKET, paths, expiresIn);
+/** Signed URLs for chat media, keyed by path (reused while they last; see signed-urls). Videos are signed for R2. */
+export async function chatMediaUrls(sb: UsClient, paths: string[], expiresIn?: number): Promise<Record<string, string>> {
+  const videos = paths.filter(isVideoPath);
+  const files = paths.filter((p) => !isVideoPath(p));
+  const [a, b] = await Promise.all([signedUrls(sb, CHAT_BUCKET, files, expiresIn), videoUrls(sb, videos)]);
+  return { ...a, ...b };
 }
 
 /** "0:42" */
@@ -203,6 +210,7 @@ export function messagePreview(m: Pick<Message, 'body' | 'media_kind' | 'kind' |
   if (m.e2ee === 'failed') return '🔒 Couldn’t open this message';
   if (m.media_kind === 'image') return '📷 Photo';
   if (m.media_kind === 'audio') return '🎤 Voice note';
+  if (m.media_kind === 'video') return '🎥 Video';
   if (m.media_kind === 'gif') return 'GIF';
   if (m.media_kind === 'sticker') return 'Sticker';
   return m.kind === 'call' ? 'Call' : '';

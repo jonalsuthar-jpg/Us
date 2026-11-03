@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
     // An encrypted message has no body here: only what kind of message it is.
     content = truncate(
       msg.body?.trim() ||
-        ({ image: '📷 Photo', audio: '🎤 Voice note', gif: 'GIF', sticker: 'Sticker' } as Record<string, string>)[msg.media_kind ?? ''] ||
+        ({ image: '📷 Photo', audio: '🎤 Voice note', video: '🎥 Video', gif: 'GIF', sticker: 'Sticker' } as Record<string, string>)[msg.media_kind ?? ''] ||
         'New message',
       160,
     );

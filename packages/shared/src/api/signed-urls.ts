@@ -17,11 +17,30 @@ const keyFor = (bucket: string) => `signed:${bucket}`;
  * again. Kept links go through data-cache, so they survive a cold start on
  * the phone and are wiped with it on sign-out.
  */
-export async function signedUrls(sb: UsClient, bucket: string, paths: string[], expiresIn = LINK_LIFETIME_S): Promise<Record<string, string>> {
+export function signedUrls(sb: UsClient, bucket: string, paths: string[], expiresIn = LINK_LIFETIME_S): Promise<Record<string, string>> {
+  return keptLinks(bucket, paths, expiresIn, async (missing) => {
+    const { data, error } = await sb.storage.from(bucket).createSignedUrls(missing, expiresIn);
+    if (error) throw error;
+    const out: Record<string, string> = {};
+    for (const row of data ?? []) if (row.path && row.signedUrl) out[row.path] = row.signedUrl;
+    return out;
+  });
+}
+
+/**
+ * The reuse behind signedUrls, for any signer: `sign` is only asked for the
+ * paths without a usable kept link, and must sign them for `expiresIn`.
+ */
+export async function keptLinks(
+  store: string,
+  paths: string[],
+  expiresIn: number,
+  sign: (missing: string[]) => Promise<Record<string, string>>,
+): Promise<Record<string, string>> {
   const unique = [...new Set(paths.filter(Boolean))];
   if (!unique.length) return {};
   const now = Date.now();
-  const kept = readCache<Kept>(keyFor(bucket)) ?? {};
+  const kept = readCache<Kept>(keyFor(store)) ?? {};
   const out: Record<string, string> = {};
   const missing: string[] = [];
   for (const p of unique) {
@@ -31,16 +50,14 @@ export async function signedUrls(sb: UsClient, bucket: string, paths: string[], 
     else missing.push(p);
   }
   if (!missing.length) return out;
-  const { data, error } = await sb.storage.from(bucket).createSignedUrls(missing, expiresIn);
-  if (error) throw error;
+  const signed = await sign(missing);
   const next: Kept = {};
-  for (const [p, k] of Object.entries(readCache<Kept>(keyFor(bucket)) ?? {})) if (k.until > now) next[p] = k;
-  for (const row of data ?? []) {
-    if (!row.path || !row.signedUrl) continue;
-    out[row.path] = row.signedUrl;
-    next[row.path] = { url: row.signedUrl, until: now + expiresIn * 1000 };
+  for (const [p, k] of Object.entries(readCache<Kept>(keyFor(store)) ?? {})) if (k.until > now) next[p] = k;
+  for (const [p, url] of Object.entries(signed)) {
+    out[p] = url;
+    next[p] = { url, until: now + expiresIn * 1000 };
   }
-  writeCache(keyFor(bucket), next);
+  writeCache(keyFor(store), next);
   return out;
 }
 

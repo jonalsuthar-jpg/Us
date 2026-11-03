@@ -1,4 +1,4 @@
-import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
+import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
 import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -30,6 +30,7 @@ import { Display, Text } from '@/components/ui/text';
 import { usePalette } from '@/components/ui/palette';
 import { FormSheet } from '@/components/ui/form-sheet';
 import { PhotoViewer } from '@/components/ui/photo-viewer';
+import { VideoViewer } from '@/components/chat/video-viewer';
 import { cn } from '@/components/ui/cn';
 
 type Row =
@@ -101,6 +102,7 @@ function Thread() {
   const [acting, setActing] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [video, setVideo] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [panel, setPanel] = useState<'search' | 'pins' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -154,6 +156,25 @@ function Thread() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, allowsMultipleSelection: true, selectionLimit: 10 });
     if (res.canceled) return;
     for (const a of res.assets) await sendImage(await preparePhoto(a.uri, a.width, a.height), '');
+  }
+
+  /** One video from the gallery, up to a minute; it's encrypted and sent to R2. */
+  async function sendVideo() {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], videoMaxDuration: VIDEO_MAX_MS / 1000, quality: 1 });
+    if (res.canceled || !res.assets[0]) return;
+    const a = res.assets[0];
+    if ((a.duration ?? 0) > VIDEO_MAX_MS + 1000) throw new Error('Videos can be up to a minute long.');
+    if ((a.fileSize ?? 0) > VIDEO_MAX_BYTES) throw new VideoTooBigError();
+    const bytes = await (await fetch(a.uri)).arrayBuffer();
+    if (bytes.byteLength > VIDEO_MAX_BYTES) throw new VideoTooBigError();
+    sendWithReply('', {
+      media: {
+        kind: 'video',
+        meta: { width: a.width, height: a.height, duration_ms: Math.round(a.duration ?? 0) },
+        localUri: a.uri,
+        upload: { body: bytes, contentType: a.mimeType ?? 'video/mp4' },
+      },
+    });
   }
 
   async function sendVoice(uri: string, durationMs: number) {
@@ -282,6 +303,7 @@ function Thread() {
           onReact={onReact}
           onReply={onReply}
           onOpenPhoto={setPhoto}
+          onOpenVideo={setVideo}
           onJumpTo={onJumpTo}
         />
       ),
@@ -301,6 +323,7 @@ function Thread() {
   const attachOptions: AttachOption[] = [
     { key: 'gallery', label: 'Gallery', icon: ATTACH_ICONS.gallery, tint: ATTACH_TINTS.gallery, onPress: () => void sendFromGallery().catch(fail) },
     { key: 'camera', label: 'Camera', icon: ATTACH_ICONS.camera, tint: ATTACH_TINTS.camera, onPress: () => setCamera(true) },
+    { key: 'video', label: 'Video', icon: ATTACH_ICONS.video, tint: ATTACH_TINTS.video, onPress: () => void sendVideo().catch(fail) },
     ...(draw ? [{ key: 'draw', label: 'Draw', icon: ATTACH_ICONS.draw, tint: ATTACH_TINTS.draw, onPress: () => setDoodle(true) }] : []),
     ...(env.giphyKey ? [{ key: 'gif', label: 'GIF', icon: ATTACH_ICONS.gif, tint: ATTACH_TINTS.gif, onPress: () => setGifs(true) }] : []),
     ...(stickersOn ? [{ key: 'sticker', label: 'New sticker', icon: ATTACH_ICONS.sticker, tint: ATTACH_TINTS.sticker, onPress: () => setStickerMaker(true) }] : []),
@@ -509,6 +532,7 @@ function Thread() {
         {panel === 'pins' ? <MessageList items={pins.data ?? []} empty="Nothing pinned." onPick={pick} authorOf={authorOf} /> : null}
       </FormSheet>
       <PhotoViewer uri={photo} label="Photo" onClose={() => setPhoto(null)} />
+      <VideoViewer uri={video} onClose={() => setVideo(null)} />
       <GifPicker
         open={gifs}
         onClose={() => setGifs(false)}

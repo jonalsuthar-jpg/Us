@@ -3,6 +3,7 @@ import { MEMORY_BUCKET } from './memory';
 import { CHAT_BUCKET } from './messages';
 import { SNAPS_BUCKET } from './snaps';
 import { DRAW_BUCKET } from './draw';
+import { removeCoupleVideos } from './chat-video';
 
 /** Buckets that keep files under "<couple_id>/". */
 export const COUPLE_BUCKETS = [MEMORY_BUCKET, CHAT_BUCKET, SNAPS_BUCKET, DRAW_BUCKET];
@@ -34,6 +35,7 @@ export async function removeCouplePhotos(sb: UsClient, coupleId: string): Promis
  */
 export async function unpair(sb: UsClient, coupleId: string): Promise<void> {
   await removeCouplePhotos(sb, coupleId);
+  await removeCoupleVideos(sb);
   const { error } = await sb.rpc('unpair');
   if (error) throw error;
 }

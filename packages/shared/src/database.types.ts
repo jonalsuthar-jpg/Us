@@ -10,8 +10,8 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 /** audio / video calls. listen / watch are retired session kinds, kept for older call-log rows. */
 export type CallMedia = 'audio' | 'video' | 'listen' | 'watch';
-/** image / audio live in our chat folder; gif / sticker are GIPHY links (media_meta.url). */
-export type MediaKind = 'image' | 'audio' | 'gif' | 'sticker';
+/** image / audio live in our chat folder, video in R2 (see chat-video); gif / sticker are GIPHY links (media_meta.url). */
+export type MediaKind = 'image' | 'audio' | 'video' | 'gif' | 'sticker';
 /** Small, optional hints for rendering before the file loads. */
 export interface MediaMeta {
   width?: number;

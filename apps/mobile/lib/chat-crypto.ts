@@ -30,6 +30,10 @@ const EXT: Record<string, string> = {
   'audio/aac': 'aac',
   'audio/mpeg': 'mp3',
   'audio/wav': 'wav',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+  'video/3gpp': '3gp',
 };
 
 const folder = () => new Directory(Paths.cache, 'chat-media');

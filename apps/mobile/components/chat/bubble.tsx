@@ -3,7 +3,7 @@ import { Image as AnimatedImage } from 'expo-image';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Headphones, Pause, Phone, PhoneMissed, Pin, Play, Tv, Video } from 'lucide-react-native';
 import { memo, useEffect, useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { cn } from '../ui/cn';
 import { Text } from '../ui/text';
 import { Ticks } from '../ui/ticks';
@@ -38,6 +38,7 @@ export const Bubble = memo(function Bubble({
   onLongPress,
   onReact,
   onOpenPhoto,
+  onOpenVideo,
   onJumpTo,
   animate = true,
 }: {
@@ -56,6 +57,7 @@ export const Bubble = memo(function Bubble({
   onLongPress?: (m: Message) => void;
   onReact?: (m: Message, emoji: string | null) => void;
   onOpenPhoto?: (url: string) => void;
+  onOpenVideo?: (url: string) => void;
   onJumpTo?: (id: string) => void;
   /** GIFs and stickers play; off while the chat isn't on screen. */
   animate?: boolean;
@@ -161,6 +163,28 @@ export const Bubble = memo(function Bubble({
           ) : null}
 
           {message.media_kind === 'audio' ? <VoiceNote url={url} durationMs={meta?.duration_ms} mine={mine} /> : null}
+
+          {message.media_kind === 'video' ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={url ? `Play video, ${formatVoiceLength(meta?.duration_ms)}` : 'Video, opening'}
+              disabled={!url}
+              onPress={() => url && onOpenVideo?.(url)}
+              onLongPress={longPress}
+              style={{ width: 220, aspectRatio: Math.min(Math.max(photoAspect(meta), 0.75), 1.6) }}
+              className="items-center justify-center overflow-hidden rounded-[14px] bg-plum-900"
+            >
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-white/20">
+                {url ? <Play size={26} color="#fff" fill="#fff" /> : <ActivityIndicator color="#fff" />}
+              </View>
+              {meta?.duration_ms ? (
+                <View className="absolute bottom-2 left-2 flex-row items-center gap-1 rounded-full bg-black/45 px-2 py-0.5">
+                  <Video size={12} color="#fff" />
+                  <Text className="text-micro text-white">{formatVoiceLength(meta.duration_ms)}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          ) : null}
 
           {hasText ? <Text className={cn('text-ink', photo && url && 'px-2.5 pt-1.5')}>{message.body}</Text> : null}
           {/* Encrypted, and this phone can't open it (yet). */}

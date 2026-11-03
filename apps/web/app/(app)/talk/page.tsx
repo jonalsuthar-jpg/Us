@@ -1,6 +1,6 @@
 'use client';
 
-import { clusters, formatDay, groupByDay, keepSticker, listPinned, messagePreview, searchMessages, snapReplyQuote, STICKERS_TOPIC, type Message, type Sticker } from '@us/shared';
+import { clusters, formatDay, groupByDay, keepSticker, listPinned, messagePreview, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, type Message, type Sticker } from '@us/shared';
 import { useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import { ChatKeyBanner } from '@/components/chat/chat-key';
 import { ChevronsDown, Phone, Pin, Search, Video } from 'lucide-react';
@@ -97,6 +97,7 @@ function Thread() {
   }
 
   async function sendPhoto(file: File, caption: string) {
+    if (file.type.startsWith('video/')) return sendVideo(file, caption);
     const { blob, type } = await shrinkPhoto(file);
     let meta: { width: number; height: number } | null = null;
     try {
@@ -107,6 +108,24 @@ function Thread() {
       // size is only a layout hint
     }
     sendWithReply(caption, { media: { kind: 'image', meta, localUri: URL.createObjectURL(blob), upload: { body: blob, contentType: type } } });
+  }
+
+  /** Up to a minute; it's encrypted and sent to R2. */
+  async function sendVideo(file: File, caption: string) {
+    if (file.size > VIDEO_MAX_BYTES) throw new VideoTooBigError();
+    const localUri = URL.createObjectURL(file);
+    const meta = await new Promise<{ width: number; height: number; duration_ms: number } | null>((resolve) => {
+      const v = document.createElement('video');
+      v.preload = 'metadata';
+      v.onloadedmetadata = () => resolve({ width: v.videoWidth, height: v.videoHeight, duration_ms: Math.round(v.duration * 1000) });
+      v.onerror = () => resolve(null);
+      v.src = localUri;
+    });
+    if (meta && meta.duration_ms > VIDEO_MAX_MS + 1000) {
+      URL.revokeObjectURL(localUri);
+      throw new Error('Videos can be up to a minute long.');
+    }
+    sendWithReply(caption, { media: { kind: 'video', meta, localUri, upload: { body: file, contentType: file.type || 'video/mp4' } } });
   }
 
   function sendVoice(blob: Blob, durationMs: number) {

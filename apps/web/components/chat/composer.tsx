@@ -168,7 +168,7 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
             <>
               <button
                 type="button"
-                aria-label="Send a photo"
+                aria-label="Send a photo or video"
                 onClick={() => fileInput.current?.click()}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-paper-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
               >
@@ -177,7 +177,7 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
               <input
                 ref={fileInput}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 className="sr-only"
                 tabIndex={-1}
                 aria-hidden
