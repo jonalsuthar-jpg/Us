@@ -1,5 +1,5 @@
 import { fromBase64, MIN_PIN_LENGTH, shortCode } from '@us/shared';
-import { useChatKey } from '@us/shared/react';
+import { useChatKey, useCouple } from '@us/shared/react';
 import { Lock } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
@@ -85,13 +85,20 @@ export function PinSheet({ mode, open, onClose }: { mode: 'set' | 'unlock'; open
  * a PIN backup and doesn't yet. Old messages being encrypted shows here too.
  */
 export function ChatKeyBanner() {
-  const { status, myCode, hasBackup, migrating, refresh } = useChatKey();
+  const { status, myCode, hasBackup, migrating, refresh, waitingFor } = useChatKey();
+  const { partner } = useCouple();
   const c = usePalette();
   const [sheet, setSheet] = useState<'set' | 'unlock' | null>(null);
 
   let banner: { text: string; action?: string; mode?: 'set' | 'unlock' | 'retry' } | null = null;
   if (status === 'unavailable') {
     banner = { text: 'Encryption isn’t working on this phone yet, so messages are sent as before.', action: 'Retry', mode: 'retry' };
+  } else if (status === 'waiting' && waitingFor === 'partner') {
+    // My first device: my partner's app shares the key with it the next time it's open.
+    banner = {
+      text: `Waiting for ${partner.display_name} to open Us, so their app can share the key with this phone.`,
+      ...(hasBackup ? { action: 'Use chat PIN', mode: 'unlock' as const } : null),
+    };
   } else if (status === 'waiting') {
     banner = {
       text: `Open Us on another device you’re signed in on and allow this phone. Code ${myCode ?? ''}.`,

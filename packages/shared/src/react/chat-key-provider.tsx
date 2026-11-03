@@ -6,10 +6,12 @@ import {
   ensureChatDevice,
   fetchChatKeyState,
   openMyWrap,
+  partnerDevicesToShare,
   restoreChatKeyBackup,
   revokeChatDevice,
   saveChatKeyBackup,
   shareChatKey,
+  waitingFor as whoToWaitFor,
   type ChatKeyState,
 } from '../api/chat-keys';
 import { encryptLegacyBatch, encryptLegacyStickers } from '../api/legacy-encryption';
@@ -71,6 +73,8 @@ export interface ChatKeyValue {
   migrating: boolean;
   /** Why the last check failed (shown with 'unavailable'), or null. */
   error: string | null;
+  /** While waiting: one of my other devices can approve this one, or it's my partner's app that will share the key. */
+  waitingFor: 'my-device' | 'partner' | null;
 }
 
 const Ctx = createContext<ChatKeyValue | null>(null);
@@ -103,6 +107,8 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
   const onKey = cacheKey(couple.id, 'chat:e2ee');
   const [partnerSeen, setPartnerSeen] = useState(() => readCache<boolean>(onKey) === true);
   const partnerSeenRef = useRef(partnerSeen);
+  const lastPing = useRef(0);
+  const lastLoad = useRef(0);
 
   // The same key keeps the same cipher, so messages already opened stay opened.
   const adoptKey = useCallback((k: Uint8Array | null) => {
@@ -112,7 +118,8 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
   const load = useCallback(() => {
     loadingRef.current ??= (async () => {
       try {
-        const mine = await ensureChatDevice(sb, me.id, LABELS[platform] ?? platform);
+        lastLoad.current = Date.now();
+        const { device: mine, created } = await ensureChatDevice(sb, me.id, LABELS[platform] ?? platform);
         setDevice(mine);
         let current = await fetchChatKeyState(sb, couple.id);
         let k = (await loadChatKey(couple.id, CHAT_KEY_VERSION)) ?? (current.exists ? openMyWrap(mine, current.wraps) : null);
@@ -125,15 +132,20 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
         if (k) {
           await saveChatKey(couple.id, CHAT_KEY_VERSION, k);
           // My partner's first device has nobody of theirs to approve it.
-          const holders = new Set(current.wraps.map((w) => w.device_id));
-          const theirs = current.devices.filter((d) => d.user_id === partner.id);
-          if (theirs.length && !theirs.some((d) => holders.has(d.id))) {
-            for (const to of theirs) await shareChatKey(sb, { coupleId: couple.id, key: k, from: mine, to });
+          const share = partnerDevicesToShare(current, partner.id);
+          if (share.length) {
+            for (const to of share) await shareChatKey(sb, { coupleId: couple.id, key: k, from: mine, to });
             current = await fetchChatKeyState(sb, couple.id);
             channel.sendChanged(CHAT_KEYS_TOPIC);
           }
         }
         if (current.devices.some((d) => d.user_id === partner.id)) partnerSeenRef.current = true;
+        // Tell our other devices about this one: a new device, or one still
+        // waiting (now and then), so whoever can share the key does it now.
+        if (created || (!k && Date.now() - lastPing.current > 60_000)) {
+          lastPing.current = Date.now();
+          channel.sendChanged(CHAT_KEYS_TOPIC);
+        }
         setState(current);
         adoptKey(k);
         setStatus(k ? 'ready' : 'waiting');
@@ -185,10 +197,12 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
   // Read at send time, after `settled()`, so it never lags a render behind.
   const sealer = useCallback(async () => {
     await settled();
+    // No partner device seen yet: check again (now and then) rather than send plaintext on old news.
+    if (!partnerSeenRef.current && Date.now() - lastLoad.current > 30_000) await load();
     // The key state set by that load lands on the next render.
     await new Promise((r) => setTimeout(r, 0));
     return partnerSeenRef.current ? cipherRef.current : null;
-  }, [settled]);
+  }, [settled, load]);
 
   // Once both of us can read encrypted chat, everything from before gets encrypted too.
   const [migrating, setMigrating] = useState(false);
@@ -292,8 +306,9 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
       sealer,
       migrating,
       error,
+      waitingFor: status === 'waiting' && state ? whoToWaitFor(state, me.id) : null,
     }),
-    [status, cipher, device, state, partnerReady, pending, approve, dismiss, setPin, unlockWithPin, revoke, refresh, settled, sealer, migrating, error],
+    [status, cipher, device, state, partnerReady, pending, approve, dismiss, setPin, unlockWithPin, revoke, refresh, settled, sealer, migrating, error, me.id],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

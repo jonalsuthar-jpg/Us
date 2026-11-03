@@ -1,7 +1,7 @@
 'use client';
 
 import { fromBase64, MIN_PIN_LENGTH, shortCode } from '@us/shared';
-import { useChatKey } from '@us/shared/react';
+import { useChatKey, useCouple } from '@us/shared/react';
 import { Lock } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
@@ -70,12 +70,19 @@ export function PinDialog({ mode, open, onClose }: { mode: 'set' | 'unlock'; ope
  * have a PIN backup and don't yet. Old messages being encrypted shows here too.
  */
 export function ChatKeyBanner() {
-  const { status, myCode, hasBackup, migrating, refresh } = useChatKey();
+  const { status, myCode, hasBackup, migrating, refresh, waitingFor } = useChatKey();
+  const { partner } = useCouple();
   const [dialog, setDialog] = useState<'set' | 'unlock' | null>(null);
 
   let banner: { text: string; action?: string; mode?: 'set' | 'unlock' | 'retry' } | null = null;
   if (status === 'unavailable') {
     banner = { text: 'Encryption isn’t working on this browser yet, so messages are sent as before.', action: 'Retry', mode: 'retry' };
+  } else if (status === 'waiting' && waitingFor === 'partner') {
+    // My first device: my partner's app shares the key with it the next time it's open.
+    banner = {
+      text: `Waiting for ${partner.display_name} to open Us, so their app can share the key with this browser.`,
+      ...(hasBackup ? { action: 'Use chat PIN', mode: 'unlock' as const } : null),
+    };
   } else if (status === 'waiting') {
     banner = {
       text: `Open Us on another device you’re signed in on and allow this browser. Code ${myCode ?? ''}.`,

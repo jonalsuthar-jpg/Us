@@ -18,22 +18,44 @@ const isDuplicate = (e: unknown) => (e as { code?: string } | null)?.code === '2
 
 /**
  * This device's chat identity: the one saved on it, or a new key pair
- * registered now. A saved one the server no longer knows (revoked, or the
- * account was reset) is replaced.
+ * registered now (`created`, so the app can tell our other devices). A saved
+ * one the server no longer knows (revoked, or the account was reset) is
+ * replaced.
  */
-export async function ensureChatDevice(sb: UsClient, userId: string, label: string): Promise<StoredDevice> {
+export async function ensureChatDevice(sb: UsClient, userId: string, label: string): Promise<{ device: StoredDevice; created: boolean }> {
   const saved = await loadDevice(userId);
   if (saved) {
     const { data, error } = await sb.from('chat_devices').select('*').eq('id', saved.id).maybeSingle();
     if (error) throw error;
-    if (data && !data.revoked_at) return saved;
+    if (data && !data.revoked_at) return { device: saved, created: false };
   }
   const keys = generateDeviceKeys();
   const { data: row, error } = await sb.from('chat_devices').insert({ public_key: toBase64(keys.publicKey), label }).select('*').single();
   if (error || !row) throw error ?? new Error('device_not_saved');
   const device = { id: row.id, ...keys };
   await saveDevice(userId, device);
-  return device;
+  return { device, created: true };
+}
+
+/**
+ * My partner's devices I should seal the key to without asking: all of
+ * theirs, while none of them holds it yet (their first device has nobody of
+ * theirs to approve it). Once one does, their own devices approve the rest.
+ */
+export function partnerDevicesToShare(state: Pick<ChatKeyState, 'devices' | 'wraps'>, partnerId: string): ChatDevice[] {
+  const holders = new Set(state.wraps.map((w) => w.device_id));
+  const theirs = state.devices.filter((d) => d.user_id === partnerId);
+  return theirs.some((d) => holders.has(d.id)) ? [] : theirs;
+}
+
+/**
+ * Who a device without the key is waiting for: one of my other devices to
+ * approve it, or (while none of mine holds the key) my partner's app to
+ * share it.
+ */
+export function waitingFor(state: Pick<ChatKeyState, 'devices' | 'wraps'>, myId: string): 'my-device' | 'partner' {
+  const holders = new Set(state.wraps.map((w) => w.device_id));
+  return state.devices.some((d) => d.user_id === myId && holders.has(d.id)) ? 'my-device' : 'partner';
 }
 
 export interface ChatKeyState {

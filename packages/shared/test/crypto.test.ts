@@ -16,6 +16,7 @@ import {
   wrapWithPin,
 } from '../src/crypto';
 import { draftMessage, messagePreview, openMessage } from '../src/api/messages';
+import { partnerDevicesToShare, waitingFor } from '../src/api/chat-keys';
 
 // Small enough for tests to run quickly; the real parameters are stored with each backup.
 const FAST = { N: 2 ** 10, r: 8, p: 1 };
@@ -162,5 +163,26 @@ describe('random numbers on a phone', () => {
     const row = { couple_id: 'c', id: 'm', sender_id: 'u' };
     const c = new FreshCipher(1, key);
     expect(c.decryptMessage(row, c.encryptMessage(row, { body: 'hi' })).body).toBe('hi');
+  });
+});
+
+describe('who gets the chat key', () => {
+  const dev = (id: string, user_id: string) => ({ id, user_id, public_key: '', label: 'Phone', created_at: '', revoked_at: null });
+  const wrap = (device_id: string) => ({ couple_id: 'c', key_version: 1, device_id, wrapped_key: '', wrapped_by: null, created_at: '' });
+
+  it("seals to my partner's first device without asking", () => {
+    const state = { devices: [dev('my-web', 'me'), dev('my-phone', 'me'), dev('their-phone', 'them')], wraps: [wrap('my-web'), wrap('my-phone')] };
+    expect(partnerDevicesToShare(state, 'them').map((d) => d.id)).toEqual(['their-phone']);
+    expect(waitingFor(state, 'them')).toBe('partner');
+  });
+
+  it('leaves their next devices, and mine, to be approved by their owner', () => {
+    const state = {
+      devices: [dev('my-phone', 'me'), dev('my-web', 'me'), dev('their-phone', 'them'), dev('their-web', 'them')],
+      wraps: [wrap('my-phone'), wrap('their-phone')],
+    };
+    expect(partnerDevicesToShare(state, 'them')).toEqual([]);
+    expect(waitingFor(state, 'me')).toBe('my-device');
+    expect(waitingFor(state, 'them')).toBe('my-device');
   });
 });
