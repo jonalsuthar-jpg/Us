@@ -1,18 +1,12 @@
 import { setKeyStore, setMediaVault, type KeyStore, type MediaVault } from '@us/shared';
-import { getRandomValues } from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
 /**
- * Encrypted chat on the phone: random numbers from the OS, the device key and
- * chat key in the Keychain / Keystore (this device only, never in backups),
- * and opened photos and voice notes in the cache folder.
+ * Encrypted chat on the phone: the device key and chat key in the Keychain /
+ * Keystore (this device only, never in backups), and opened photos and voice
+ * notes in the cache folder. Random numbers come from lib/random-polyfill.
  */
-
-// Hermes has no Web Crypto; the encryption code only needs getRandomValues.
-const g = globalThis as { crypto?: Partial<Crypto> };
-g.crypto ??= {};
-if (!g.crypto.getRandomValues) g.crypto.getRandomValues = getRandomValues as Crypto['getRandomValues'];
 
 const SECURE = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY };
 

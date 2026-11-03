@@ -1,7 +1,7 @@
 import { xchacha20poly1305 } from '@noble/ciphers/chacha';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha2';
-import { randomBytes } from '@noble/hashes/utils';
+import { randomBytes } from './random';
 import type { MediaMeta } from '../database.types';
 import { concat, fromBase64, toBase64, utf8Decode, utf8Encode } from './encoding';
 

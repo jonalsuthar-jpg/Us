@@ -3,7 +3,7 @@ import { x25519 } from '@noble/curves/ed25519';
 import { hkdf } from '@noble/hashes/hkdf';
 import { scryptAsync } from '@noble/hashes/scrypt';
 import { sha256 } from '@noble/hashes/sha2';
-import { randomBytes } from '@noble/hashes/utils';
+import { randomBytes } from './random';
 import { concat, fromBase64, toBase64, utf8Encode } from './encoding';
 
 /**
@@ -20,7 +20,8 @@ export interface DeviceKeys {
 }
 
 export function generateDeviceKeys(): DeviceKeys {
-  const secretKey = x25519.utils.randomPrivateKey();
+  // x25519 clamps any 32 random bytes into a valid secret.
+  const secretKey = randomBytes(32);
   return { secretKey, publicKey: x25519.getPublicKey(secretKey) };
 }
 

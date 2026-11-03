@@ -69,6 +69,8 @@ export interface ChatKeyValue {
   sealer: () => Promise<ChatCipher | null>;
   /** Messages from before encryption are being encrypted in the background. */
   migrating: boolean;
+  /** Why the last check failed (shown with 'unavailable'), or null. */
+  error: string | null;
 }
 
 const Ctx = createContext<ChatKeyValue | null>(null);
@@ -94,6 +96,7 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
   const [device, setDevice] = useState<StoredDevice | null>(null);
   const [state, setState] = useState<ChatKeyState | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+  const [error, setError] = useState<string | null>(null);
   const loadingRef = useRef<Promise<void> | null>(null);
   const firstLoad = useRef<Promise<void> | null>(null);
   // Once my partner could read encrypted chat, a slow or offline start never goes back to plaintext.
@@ -134,8 +137,11 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
         setState(current);
         adoptKey(k);
         setStatus(k ? 'ready' : 'waiting');
-      } catch {
-        // No key store, or offline: a saved key still works.
+        setError(null);
+      } catch (e) {
+        // No key store, no secure random numbers, or offline: a saved key still works.
+        console.warn('[chat-key]', e);
+        setError((e as Error)?.message ?? String(e));
         const k = await loadChatKey(couple.id, CHAT_KEY_VERSION).catch(() => null);
         if (k) {
           adoptKey(k);
@@ -285,8 +291,9 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
       settled,
       sealer,
       migrating,
+      error,
     }),
-    [status, cipher, device, state, partnerReady, pending, approve, dismiss, setPin, unlockWithPin, revoke, refresh, settled, sealer, migrating],
+    [status, cipher, device, state, partnerReady, pending, approve, dismiss, setPin, unlockWithPin, revoke, refresh, settled, sealer, migrating, error],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

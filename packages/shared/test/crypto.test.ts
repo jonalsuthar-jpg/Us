@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ChatCipher,
   fileKeyVersion,
@@ -145,5 +145,22 @@ describe('openMessage', () => {
   it('passes plain rows through unchanged', () => {
     const plain = { ...base, body: 'hi' };
     expect(openMessage(plain, cipher)).toBe(plain);
+  });
+});
+
+describe('random numbers on a phone', () => {
+  it('works when getRandomValues is installed after the crypto code loaded (Hermes + polyfill)', async () => {
+    vi.resetModules();
+    vi.stubGlobal('crypto', undefined);
+    const keys = await import('../src/crypto/keys');
+    const { ChatCipher: FreshCipher } = await import('../src/crypto/chat-cipher');
+    expect(() => keys.generateChatKey()).toThrow('no_secure_random');
+    vi.unstubAllGlobals();
+    const phone = keys.generateDeviceKeys();
+    const key = keys.generateChatKey();
+    expect(keys.openSealedKey(keys.sealKey(key, phone.publicKey), phone)).toEqual(key);
+    const row = { couple_id: 'c', id: 'm', sender_id: 'u' };
+    const c = new FreshCipher(1, key);
+    expect(c.decryptMessage(row, c.encryptMessage(row, { body: 'hi' })).body).toBe('hi');
   });
 });

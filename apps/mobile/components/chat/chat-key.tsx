@@ -85,18 +85,20 @@ export function PinSheet({ mode, open, onClose }: { mode: 'set' | 'unlock'; open
  * a PIN backup and doesn't yet. Old messages being encrypted shows here too.
  */
 export function ChatKeyBanner() {
-  const { status, myCode, hasBackup, migrating, partnerReady } = useChatKey();
+  const { status, myCode, hasBackup, migrating, refresh } = useChatKey();
   const c = usePalette();
   const [sheet, setSheet] = useState<'set' | 'unlock' | null>(null);
 
-  let banner: { text: string; action?: string; mode?: 'set' | 'unlock' } | null = null;
-  if (status === 'waiting') {
+  let banner: { text: string; action?: string; mode?: 'set' | 'unlock' | 'retry' } | null = null;
+  if (status === 'unavailable') {
+    banner = { text: 'Encryption isn’t working on this phone yet, so messages are sent as before.', action: 'Retry', mode: 'retry' };
+  } else if (status === 'waiting') {
     banner = {
       text: `Open Us on another device you’re signed in on and allow this phone. Code ${myCode ?? ''}.`,
       action: 'Use chat PIN',
       mode: 'unlock',
     };
-  } else if (status === 'ready' && partnerReady && !hasBackup) {
+  } else if (status === 'ready' && !hasBackup) {
     banner = { text: 'Your chat is end-to-end encrypted. Set a PIN so you can read it on a new device.', action: 'Set PIN', mode: 'set' };
   } else if (migrating) {
     banner = { text: 'Encrypting your earlier messages…' };
@@ -109,7 +111,7 @@ export function ChatKeyBanner() {
           <Lock size={15} color={c.ink} />
           <Text className="flex-1 text-small">{banner.text}</Text>
           {banner.action ? (
-            <Pressable accessibilityRole="button" onPress={() => setSheet(banner!.mode!)} hitSlop={8}>
+            <Pressable accessibilityRole="button" onPress={() => (banner!.mode === 'retry' ? refresh() : setSheet(banner!.mode as 'set' | 'unlock'))} hitSlop={8}>
               <Text className="font-sans-medium text-small text-rose-700">{banner.action}</Text>
             </Pressable>
           ) : null}

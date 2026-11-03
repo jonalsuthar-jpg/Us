@@ -70,17 +70,19 @@ export function PinDialog({ mode, open, onClose }: { mode: 'set' | 'unlock'; ope
  * have a PIN backup and don't yet. Old messages being encrypted shows here too.
  */
 export function ChatKeyBanner() {
-  const { status, myCode, hasBackup, migrating, partnerReady } = useChatKey();
+  const { status, myCode, hasBackup, migrating, refresh } = useChatKey();
   const [dialog, setDialog] = useState<'set' | 'unlock' | null>(null);
 
-  let banner: { text: string; action?: string; mode?: 'set' | 'unlock' } | null = null;
-  if (status === 'waiting') {
+  let banner: { text: string; action?: string; mode?: 'set' | 'unlock' | 'retry' } | null = null;
+  if (status === 'unavailable') {
+    banner = { text: 'Encryption isn’t working on this browser yet, so messages are sent as before.', action: 'Retry', mode: 'retry' };
+  } else if (status === 'waiting') {
     banner = {
       text: `Open Us on another device you’re signed in on and allow this browser. Code ${myCode ?? ''}.`,
       action: 'Use chat PIN',
       mode: 'unlock',
     };
-  } else if (status === 'ready' && partnerReady && !hasBackup) {
+  } else if (status === 'ready' && !hasBackup) {
     banner = { text: 'Your chat is end-to-end encrypted. Set a PIN so you can read it on a new device.', action: 'Set PIN', mode: 'set' };
   } else if (migrating) {
     banner = { text: 'Encrypting your earlier messages…' };
@@ -93,7 +95,7 @@ export function ChatKeyBanner() {
           <Lock className="h-4 w-4 shrink-0" aria-hidden />
           <p className="flex-1">{banner.text}</p>
           {banner.action ? (
-            <button type="button" onClick={() => setDialog(banner!.mode!)} className="font-medium text-rose-700 underline-offset-4 hover:underline">
+            <button type="button" onClick={() => (banner!.mode === 'retry' ? refresh() : setDialog(banner!.mode as 'set' | 'unlock'))} className="font-medium text-rose-700 underline-offset-4 hover:underline">
               {banner.action}
             </button>
           ) : null}
