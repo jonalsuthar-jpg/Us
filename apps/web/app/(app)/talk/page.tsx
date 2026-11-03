@@ -1,6 +1,6 @@
 'use client';
 
-import { clusters, formatDay, groupByDay, keepSticker, listPinned, messagePreview, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, type Message, type Sticker } from '@us/shared';
+import { clusters, formatDay, groupByDay, keepSticker, listPinned, messagePreview, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type Message, type Sticker } from '@us/shared';
 import { useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import { ChatKeyBanner } from '@/components/chat/chat-key';
 import { ChevronsDown, Phone, Pin, Search, Video } from 'lucide-react';
@@ -123,7 +123,7 @@ function Thread() {
     });
     if (meta && meta.duration_ms > VIDEO_MAX_MS + 1000) {
       URL.revokeObjectURL(localUri);
-      throw new Error('Videos can be up to a minute long.');
+      throw new VideoTooLongError();
     }
     sendWithReply(caption, { media: { kind: 'video', meta, localUri, upload: { body: file, contentType: file.type || 'video/mp4' } } });
   }

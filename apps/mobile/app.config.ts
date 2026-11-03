@@ -69,10 +69,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-camera',
       {
-        cameraPermission: 'Us uses your camera for video calls and to take photos you send in chat.',
-        microphonePermission: 'Us uses your microphone for calls and voice notes.',
-        recordAudioAndroid: false,
-        // We only take photos; no QR codes, so ML Kit's barcode model stays out.
+        cameraPermission: 'Us uses your camera for video calls and to take photos and videos you send in chat.',
+        microphonePermission: 'Us uses your microphone for calls, voice notes and the sound in videos you record.',
+        recordAudioAndroid: true,
+        // No QR codes, so ML Kit's barcode model stays out.
         barcodeScannerEnabled: false,
       },
     ],

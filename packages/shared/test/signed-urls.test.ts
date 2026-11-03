@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isVideoPath } from '../src/api/chat-video';
+import { isVideoPath, VIDEO_MAX_BYTES, VIDEO_TARGET, videoPlan } from '../src/api/chat-video';
 import { forgetSignedUrl, signedUrls } from '../src/api/signed-urls';
 import { clearDataCache } from '../src/react/data-cache';
 import type { UsClient } from '../src/supabase';
@@ -67,5 +67,27 @@ describe('isVideoPath', () => {
     expect(isVideoPath('c1/video/x.mp4')).toBe(false);
     expect(isVideoPath('c1/video/a/b.enc')).toBe(false);
     expect(isVideoPath(null)).toBe(false);
+  });
+});
+
+describe('videoPlan', () => {
+  const MB = 1024 * 1024;
+  it('sends what already fits', () => {
+    expect(videoPlan(10 * MB, 30_000)).toEqual({ action: 'send' });
+  });
+  it('compresses a big minute to a bitrate that lands under the limit', () => {
+    const plan = videoPlan(80 * MB, 60_000);
+    expect(plan.action).toBe('compress');
+    if (plan.action !== 'compress') return;
+    expect(((plan.videoBitrate + plan.audioBitrate) * 60) / 8).toBeLessThan(VIDEO_MAX_BYTES);
+    expect(plan.maxHeight).toBe(720);
+  });
+  it('caps the bitrate for short clips', () => {
+    const plan = videoPlan(40 * MB, 10_000);
+    expect(plan).toMatchObject({ action: 'compress', videoBitrate: VIDEO_TARGET.maxVideoBitrate, maxHeight: 720 });
+  });
+  it('drops to 480p, then refuses, as the clip gets longer', () => {
+    expect(videoPlan(200 * MB, 180_000)).toMatchObject({ action: 'compress', maxHeight: 480 });
+    expect(videoPlan(500 * MB, 600_000)).toEqual({ action: 'too_large' });
   });
 });

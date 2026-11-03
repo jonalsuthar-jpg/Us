@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.usvideo'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.usvideo"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  // Google's on-device re-encoder (uses the phone's hardware encoders).
+  implementation 'androidx.media3:media3-transformer:1.8.0'
+  implementation 'androidx.media3:media3-effect:1.8.0'
+  implementation 'androidx.media3:media3-common:1.8.0'
+}

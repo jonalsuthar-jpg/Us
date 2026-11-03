@@ -20,9 +20,45 @@ const STORE = 'r2:video';
 
 export const isVideoPath = (path: string | null | undefined): path is string => !!path && /^[^/]+\/video\/[^/]+\.enc$/.test(path);
 
+/** How a video that's too big is made smaller (see videoPlan). */
+export const VIDEO_TARGET = {
+  /** Kept below the limit, for the container and the encoder overshooting. */
+  fill: 0.88,
+  /** Budgeted generously: the phone may keep the original sound as it is. */
+  audioBitrate: 192_000,
+  maxVideoBitrate: 2_500_000,
+  /** Below this a 720p picture breaks up, so it drops to 480p. */
+  hdFloor: 1_200_000,
+  /** Below this it's too blurry to be worth sending. */
+  minVideoBitrate: 400_000,
+} as const;
+
+export type VideoPlan = { action: 'send' } | { action: 'compress'; videoBitrate: number; audioBitrate: number; maxHeight: number } | { action: 'too_large' };
+
+/** What to do with a video of this size and length so it fits under VIDEO_MAX_BYTES. */
+export function videoPlan(sizeBytes: number, durationMs: number): VideoPlan {
+  if (sizeBytes > 0 && sizeBytes <= VIDEO_MAX_BYTES) return { action: 'send' };
+  const seconds = Math.max(1, durationMs / 1000);
+  const total = (VIDEO_MAX_BYTES * VIDEO_TARGET.fill * 8) / seconds;
+  const videoBitrate = Math.min(VIDEO_TARGET.maxVideoBitrate, Math.floor(total - VIDEO_TARGET.audioBitrate));
+  if (videoBitrate < VIDEO_TARGET.minVideoBitrate) return { action: 'too_large' };
+  return { action: 'compress', videoBitrate, audioBitrate: VIDEO_TARGET.audioBitrate, maxHeight: videoBitrate >= VIDEO_TARGET.hdFloor ? 720 : 480 };
+}
+
 export class VideoTooBigError extends Error {
+  /** `compressed`: it was made smaller and still didn't fit. */
+  constructor(compressed = false) {
+    super(
+      compressed
+        ? 'This video is too large to send, even after making it smaller. Try a shorter clip.'
+        : `This video is too large to send (max ${VIDEO_MAX_BYTES / 1024 / 1024} MB). Try a shorter clip.`,
+    );
+  }
+}
+
+export class VideoTooLongError extends Error {
   constructor() {
-    super('That video is too big to send. Try a shorter one (up to a minute).');
+    super(`Videos can be up to ${VIDEO_MAX_MS / 60_000 === 1 ? 'a minute' : `${VIDEO_MAX_MS / 60_000} minutes`} long.`);
   }
 }
 

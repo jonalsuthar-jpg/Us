@@ -1,4 +1,4 @@
-import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
+import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
 import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -11,7 +11,9 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachSheet, ATTACH_ICONS, ATTACH_TINTS, type AttachOption } from '@/components/chat/attach-sheet';
 import { Bubble, CallEntry, type ReplyQuote } from '@/components/chat/bubble';
-import { CameraSheet } from '@/components/chat/camera-sheet';
+import { CameraSheet, type CameraClip } from '@/components/chat/camera-sheet';
+import { fitVideo } from '@/modules/us-video';
+import { File as DeviceFile } from 'expo-file-system';
 import { ChatKeyBanner } from '@/components/chat/chat-key';
 import { Composer } from '@/components/chat/composer';
 import { SwipeableRow } from '@/components/chat/swipeable-row';
@@ -106,6 +108,8 @@ function Thread() {
   const [highlight, setHighlight] = useState<string | null>(null);
   const [panel, setPanel] = useState<'search' | 'pins' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** 0–1 while a video is being made smaller. */
+  const [shrinking, setShrinking] = useState<number | null>(null);
   const [gifs, setGifs] = useState(false);
   const [attach, setAttach] = useState(false);
   const [camera, setCamera] = useState(false);
@@ -158,21 +162,47 @@ function Thread() {
     for (const a of res.assets) await sendImage(await preparePhoto(a.uri, a.width, a.height), '');
   }
 
-  /** One video from the gallery, up to a minute; it's encrypted and sent to R2. */
+  /** One video from the gallery, up to a minute. */
   async function sendVideo() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], videoMaxDuration: VIDEO_MAX_MS / 1000, quality: 1 });
     if (res.canceled || !res.assets[0]) return;
     const a = res.assets[0];
-    if ((a.duration ?? 0) > VIDEO_MAX_MS + 1000) throw new Error('Videos can be up to a minute long.');
-    if ((a.fileSize ?? 0) > VIDEO_MAX_BYTES) throw new VideoTooBigError();
-    const bytes = await (await fetch(a.uri)).arrayBuffer();
-    if (bytes.byteLength > VIDEO_MAX_BYTES) throw new VideoTooBigError();
-    sendWithReply('', {
+    await sendClip({ uri: a.uri, durationMs: Math.round(a.duration ?? 0), width: a.width, height: a.height, fileSize: a.fileSize, mimeType: a.mimeType }, '');
+  }
+
+  /**
+   * Recorded or picked: made smaller on the phone if it's over the limit,
+   * then encrypted and sent to R2 like any other file.
+   */
+  async function sendClip(clip: CameraClip, caption: string) {
+    if (shrinking !== null) throw new Error('Wait for the last video to finish first.');
+    if (clip.durationMs > VIDEO_MAX_MS + 1000) throw new VideoTooLongError();
+    let size = clip.fileSize ?? 0;
+    if (!size) {
+      try {
+        size = new DeviceFile(clip.uri).size ?? 0;
+      } catch {
+        // Unknown: read it below and check then.
+      }
+    }
+    let ready = clip;
+    if (size > VIDEO_MAX_BYTES) {
+      setShrinking(0);
+      try {
+        ready = await fitVideo(clip, size, setShrinking);
+      } finally {
+        setShrinking(null);
+      }
+    }
+    const bytes = await (await fetch(ready.uri)).arrayBuffer();
+    if (bytes.byteLength > VIDEO_MAX_BYTES) throw new VideoTooBigError(ready !== clip);
+    sendWithReply(caption, {
       media: {
         kind: 'video',
-        meta: { width: a.width, height: a.height, duration_ms: Math.round(a.duration ?? 0) },
-        localUri: a.uri,
-        upload: { body: bytes, contentType: a.mimeType ?? 'video/mp4' },
+        meta: { width: ready.width, height: ready.height, duration_ms: Math.round(ready.durationMs) },
+        localUri: ready.uri,
+        // Re-encoded videos are always mp4.
+        upload: { body: bytes, contentType: ready === clip ? (clip.mimeType ?? 'video/mp4') : 'video/mp4' },
       },
     });
   }
@@ -457,6 +487,9 @@ function Thread() {
       </View>
 
       <View style={{ paddingBottom: insets.bottom + 8 }} className="px-2 pt-1">
+        {shrinking !== null ? (
+          <Text className="mb-2 px-2 text-small text-ink-soft">Making the video smaller… {Math.round(shrinking * 100)}%</Text>
+        ) : null}
         {notice ? <Text className="mb-2 px-2 text-small text-rose-700">{notice}</Text> : null}
         <Composer
           partnerName={partner.display_name}
@@ -490,7 +523,12 @@ function Thread() {
       </View>
 
       <AttachSheet open={attach} onClose={() => setAttach(false)} options={attachOptions} />
-      <CameraSheet open={camera} onClose={() => setCamera(false)} onSend={(p, caption) => void sendImage(p, caption).catch(fail)} />
+      <CameraSheet
+        open={camera}
+        onClose={() => setCamera(false)}
+        onSend={(p, caption) => void sendImage(p, caption).catch(fail)}
+        onSendVideo={(clip, caption) => void sendClip(clip, caption).catch(fail)}
+      />
       <MessageActions
         message={acting}
         myId={me.id}
