@@ -16,9 +16,7 @@ export default function ConnectPage() {
   const mod = moduleById('connect');
   const daily = useFeature('daily_question');
   const draw = useFeature('draw');
-  const games = useFeature('games');
   const quizzes = useFeature('quizzes');
-  const play = games || quizzes;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-5 py-8 sm:space-y-8 sm:px-10 sm:py-12">
@@ -47,7 +45,7 @@ export default function ConnectPage() {
         </>
       ) : null}
       <PlaySection />
-      {daily ? <DailyQuestion /> : draw || play ? null : <FeatureOff />}
+      {daily ? <DailyQuestion /> : draw || quizzes ? null : <FeatureOff />}
     </div>
   );
 }

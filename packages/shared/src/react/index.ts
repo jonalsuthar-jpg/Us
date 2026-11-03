@@ -11,4 +11,4 @@ export * from './use-foreground-tick';
 export * from './access-provider';
 export * from './use-draw';
 export * from './data-cache';
-export * from './use-games';
+export * from './use-play';

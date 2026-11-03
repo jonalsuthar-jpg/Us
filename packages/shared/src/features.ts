@@ -18,7 +18,6 @@ export type FeatureKey =
   | 'letters'
   | 'jokes'
   | 'draw'
-  | 'games'
   | 'quizzes'
   | 'call_cards'
   | 'calendar'
@@ -52,7 +51,6 @@ export const FEATURES: FeatureInfo[] = [
   { key: 'letters', label: 'Future letters', group: 'connect' },
   { key: 'jokes', label: 'Inside jokes', group: 'connect' },
   { key: 'draw', label: 'Draw together', group: 'connect' },
-  { key: 'games', label: 'Games', group: 'connect' },
   { key: 'quizzes', label: 'Couple quizzes', group: 'connect' },
   { key: 'calendar', label: 'Calendar', group: 'plan' },
   { key: 'lists', label: 'Lists', group: 'plan' },

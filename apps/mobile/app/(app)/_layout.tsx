@@ -117,7 +117,6 @@ export default function AppLayout() {
           <Stack.Screen name="draw/guess" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="draw/daily" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="draw/[id]" options={{ animation: 'fade_from_bottom' }} />
-          <Stack.Screen name="play/[id]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="play/quiz/[id]" options={{ animation: 'slide_from_right' }} />
         </Stack>
         <TapHeart />

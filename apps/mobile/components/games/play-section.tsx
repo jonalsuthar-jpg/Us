@@ -1,5 +1,5 @@
-import { GAME_INFO, QUIZ_INFO, quizState, type GameKind, type QuizKind } from '@us/shared';
-import { useCouple, useFeature, useGames, useQuizzes } from '@us/shared/react';
+import { QUIZ_INFO, quizState, type QuizKind } from '@us/shared';
+import { useCouple, useFeature, useQuizzes } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -8,35 +8,28 @@ import { cn } from '../ui/cn';
 import { FormSheet } from '../ui/form-sheet';
 import { Display, Text } from '../ui/text';
 
-const GAME_TINT: Record<GameKind, string> = {
-  tictactoe: 'border-rose-100 bg-rose-50',
-  connect4: 'border-plum-100 bg-plum-50',
-  wordchain: 'border-gold-100 bg-gold-50',
-};
 const QUIZ_TINT: Record<QuizKind, string> = {
   know_me: 'border-teal-100 bg-teal-50',
   this_or_that: 'border-sage-100 bg-sage-50',
 };
 
-/** Connect's Play area: the games and quizzes, what's waiting on me, and our score. */
+/** Connect's quizzes: the two to start, and any round waiting on one of us. */
 export function PlaySection() {
-  const gamesOn = useFeature('games');
-  const quizzesOn = useFeature('quizzes');
+  const on = useFeature('quizzes');
   const { me, partner } = useCouple();
-  const games = useGames(gamesOn);
-  const quizzes = useQuizzes(quizzesOn);
+  const quizzes = useQuizzes(on);
   const [busy, setBusy] = useState(false);
   const [knowMe, setKnowMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!gamesOn && !quizzesOn) return null;
+  if (!on) return null;
 
-  const run = async (go: () => Promise<string>) => {
+  const openQuiz = async (kind: QuizKind, subject?: string) => {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      router.push((await go()) as never);
+      router.push(`/play/quiz/${await quizzes.start(kind, subject)}` as never);
     } catch {
       setError('Couldn’t start that. Try again.');
     } finally {
@@ -44,97 +37,52 @@ export function PlaySection() {
     }
   };
 
-  const openGame = (kind: GameKind) => {
-    const going = games.active.find((g) => g.kind === kind);
-    if (going) return router.push(`/play/${going.id}` as never);
-    void run(async () => `/play/${(await games.start(kind)).id}`);
-  };
-  const openQuiz = (kind: QuizKind, subject?: string) => void run(async () => `/play/quiz/${await quizzes.start(kind, subject)}`);
-
-  const waiting = [
-    ...games.active.map((g) => ({
-      key: g.id,
-      href: `/play/${g.id}`,
-      title: `${GAME_INFO[g.kind].emoji} ${GAME_INFO[g.kind].title}`,
-      line: g.turn === me.id ? 'Your move' : `${partner.display_name}’s move`,
-      mine: g.turn === me.id,
-      at: g.updated_at,
-    })),
-    ...quizzes.rounds
-      .filter((r) => quizState(r) !== 'revealed')
-      .map((r) => ({
-        key: r.id,
-        href: `/play/quiz/${r.id}`,
-        title: `${QUIZ_INFO[r.kind].emoji} ${r.kind === 'know_me' ? 'Know me' : 'This or that'}`,
-        line: quizState(r) === 'mine' ? 'Your turn to answer' : `Waiting for ${partner.display_name}`,
-        mine: quizState(r) === 'mine',
-        at: r.created_at,
-      })),
-  ].sort((a, b) => Number(b.mine) - Number(a.mine) || b.at.localeCompare(a.at));
-  const { me: myWins, partner: theirWins } = games.score;
-
-  const tiles: { key: string; tint: string; emoji: string; title: string; line: string; hot?: boolean; onPress: () => void }[] = [
-    ...(gamesOn
-      ? (Object.keys(GAME_INFO) as GameKind[]).map((kind) => {
-          const hot = games.active.some((g) => g.kind === kind && g.turn === me.id);
-          return { key: kind, tint: GAME_TINT[kind], emoji: GAME_INFO[kind].emoji, title: GAME_INFO[kind].title, line: hot ? 'Your move' : GAME_INFO[kind].blurb, hot, onPress: () => openGame(kind) };
-        })
-      : []),
-    ...(quizzesOn
-      ? (Object.keys(QUIZ_INFO) as QuizKind[]).map((kind) => ({
-          key: kind,
-          tint: QUIZ_TINT[kind],
-          emoji: QUIZ_INFO[kind].emoji,
-          title: kind === 'know_me' ? 'Know me?' : QUIZ_INFO[kind].title,
-          line: QUIZ_INFO[kind].blurb,
-          onPress: () => (kind === 'know_me' ? setKnowMe(true) : openQuiz(kind)),
-        }))
-      : []),
-  ];
+  const waiting = quizzes.rounds
+    .filter((r) => quizState(r) !== 'revealed')
+    .map((r) => ({ round: r, mine: quizState(r) === 'mine' }))
+    .sort((a, b) => Number(b.mine) - Number(a.mine) || b.round.created_at.localeCompare(a.round.created_at));
 
   return (
     <View className="gap-3">
-      <View className="flex-row items-baseline justify-between">
-        <Display className="text-heading">Play</Display>
-        {gamesOn && myWins + theirWins > 0 ? <Text className="text-small text-ink-soft">{`You ${myWins} · ${theirWins} ${partner.display_name}`}</Text> : null}
-      </View>
+      <Display className="text-heading">Quizzes</Display>
 
       {waiting.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2.5">
-          {waiting.slice(0, 8).map((w) => (
+          {waiting.slice(0, 8).map(({ round: r, mine }) => (
             <Pressable
-              key={w.key}
+              key={r.id}
               accessibilityRole="button"
-              onPress={() => router.push(w.href as never)}
-              className={cn('rounded-[18px] border px-3.5 py-2.5 active:opacity-80', w.mine ? 'border-rose-200 bg-rose-50' : 'border-paper-edge bg-paper-raised')}
+              onPress={() => router.push(`/play/quiz/${r.id}` as never)}
+              className={cn('rounded-[18px] border px-3.5 py-2.5 active:opacity-80', mine ? 'border-rose-200 bg-rose-50' : 'border-paper-edge bg-paper-raised')}
             >
-              <Text className="font-sans-semibold text-small text-ink">{w.title}</Text>
-              <Text className={cn('text-micro', w.mine ? 'font-sans-semibold text-rose-700' : 'text-ink-soft')}>{w.line}</Text>
+              <Text className="font-sans-semibold text-small text-ink">{`${QUIZ_INFO[r.kind].emoji} ${r.kind === 'know_me' ? 'Know me' : 'This or that'}`}</Text>
+              <Text className={cn('text-micro', mine ? 'font-sans-semibold text-rose-700' : 'text-ink-soft')}>{mine ? 'Your turn to answer' : `Waiting for ${partner.display_name}`}</Text>
             </Pressable>
           ))}
         </ScrollView>
       ) : null}
 
-      <View className="flex-row flex-wrap justify-between gap-y-3">
-        {tiles.map((t) => (
+      <View className="flex-row justify-between">
+        {(Object.keys(QUIZ_INFO) as QuizKind[]).map((kind) => (
           <Pressable
-            key={t.key}
+            key={kind}
             accessibilityRole="button"
-            accessibilityLabel={`${t.title}. ${t.line}`}
+            accessibilityLabel={`${QUIZ_INFO[kind].title}. ${QUIZ_INFO[kind].blurb}`}
             disabled={busy}
             onPress={() => {
               void Haptics.selectionAsync().catch(() => {});
-              t.onPress();
+              if (kind === 'know_me') setKnowMe(true);
+              else void openQuiz(kind);
             }}
-            className={cn('h-[124px] w-[48.5%] justify-between rounded-[24px] border p-4 active:scale-[0.98]', t.tint, busy && 'opacity-60')}
+            className={cn('h-[124px] w-[48.5%] justify-between rounded-[24px] border p-4 active:scale-[0.98]', QUIZ_TINT[kind], busy && 'opacity-60')}
           >
-            <Text className="text-[28px] leading-[34px]">{t.emoji}</Text>
+            <Text className="text-[28px] leading-[34px]">{QUIZ_INFO[kind].emoji}</Text>
             <View className="gap-0.5">
               <Display className="text-[17px] leading-[21px]" numberOfLines={1}>
-                {t.title}
+                {kind === 'know_me' ? 'Know me?' : QUIZ_INFO[kind].title}
               </Display>
-              <Text className={cn('text-micro', t.hot ? 'font-sans-semibold text-rose-700' : 'text-ink-soft')} numberOfLines={1}>
-                {t.line}
+              <Text className="text-micro text-ink-soft" numberOfLines={1}>
+                {QUIZ_INFO[kind].blurb}
               </Text>
             </View>
           </Pressable>
@@ -154,7 +102,7 @@ export function PlaySection() {
               accessibilityRole="button"
               onPress={() => {
                 setKnowMe(false);
-                openQuiz('know_me', o.subject);
+                void openQuiz('know_me', o.subject);
               }}
               className="rounded-[18px] border-2 border-paper-edge px-4 py-3 active:border-teal-400 active:bg-teal-50"
             >

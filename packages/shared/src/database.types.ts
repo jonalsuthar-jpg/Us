@@ -555,24 +555,6 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
-      games: {
-        Row: {
-          id: string;
-          couple_id: string;
-          kind: 'tictactoe' | 'connect4' | 'wordchain';
-          created_by: string;
-          state: Json;
-          turn: string | null;
-          status: 'active' | 'won' | 'draw' | 'abandoned';
-          winner: string | null;
-          version: number;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: { id?: string; couple_id: string; kind: 'tictactoe' | 'connect4' | 'wordchain'; created_by: string; state: Json; turn: string };
-        Update: never;
-        Relationships: [];
-      };
       quiz_rounds: {
         Row: { id: string; couple_id: string; kind: 'know_me' | 'this_or_that'; created_by: string; subject_id: string | null; questions: string[]; created_at: string };
         Insert: { id?: string; couple_id: string; kind: 'know_me' | 'this_or_that'; created_by: string; subject_id?: string | null; questions: string[] };
@@ -670,11 +652,6 @@ export type Database = {
         Args: { p_id: string; p_played: number; p_score: number; p_solved: number; p_best_word: string | null; p_best_ms: number | null };
         Returns: Database['public']['Tables']['draw_games']['Row'];
       };
-      game_move: {
-        Args: { p_id: string; p_version: number; p_state: Json; p_status: 'active' | 'won' | 'draw'; p_winner: string | null };
-        Returns: Database['public']['Tables']['games']['Row'];
-      };
-      game_resign: { Args: { p_id: string }; Returns: Database['public']['Tables']['games']['Row'] };
       quiz_history: {
         Args: { p_limit?: number };
         Returns: {
@@ -732,7 +709,6 @@ export type DrawWord = Tables['draw_words']['Row'];
 export type ChatDevice = Tables['chat_devices']['Row'];
 export type ChatKeyWrap = Tables['chat_key_wraps']['Row'];
 export type DrawGame = Tables['draw_games']['Row'];
-export type GameRow = Tables['games']['Row'];
 export type QuizRound = Database['public']['Functions']['quiz_history']['Returns'][number];
 export type DailyEntry = Database['public']['Functions']['daily_history']['Returns'][number];
 

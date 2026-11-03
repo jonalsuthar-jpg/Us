@@ -19,7 +19,6 @@ export default function Connect() {
   const daily = useDaily();
   const on = useFeature('daily_question');
   const draw = useFeature('draw');
-  const games = useFeature('games');
   const quizzes = useFeature('quizzes');
 
   return (
@@ -62,7 +61,7 @@ export default function Connect() {
           <DailyQuestion daily={daily} />
           <AnswersCard daily={daily} />
         </View>
-      ) : draw || games || quizzes ? null : (
+      ) : draw || quizzes ? null : (
         <FeatureOff />
       )}
     </ScrollView>

@@ -1120,37 +1120,6 @@ await test('stats, people and audit', async () => {
   assert.ok(log.some((r) => r.action === 'feature_switch'));
 });
 
-await test('games: turns, stale boards, and outsiders', async () => {
-  const founders = await one(`select id from public.couples where user_a_id = $1`, [jonal]);
-  const g = await as(jonal, () =>
-    one(`insert into public.games (couple_id, kind, created_by, state, turn) values ($1, 'tictactoe', $2, '{"cells":[]}', $2) returning *`, [founders.id, jonal]),
-  );
-  await rejects(
-    as(jonal, () => q(`insert into public.games (couple_id, kind, created_by, state, turn) values ($1, 'tictactoe', $2, '{}', $3)`, [founders.id, jonal, erin])),
-    /row-level security/,
-    'turn for an outsider',
-  );
-  assert.equal((await as(erin, () => q(`select * from public.games`))).length, 0, 'outsider sees no games');
-  await rejects(as(parul, () => q(`select public.game_move($1, 0, '{"cells":[1]}', 'active', null)`, [g.id])), /not_your_turn/, 'out of turn');
-  await rejects(as(jonal, () => q(`select public.game_move($1, 5, '{"cells":[1]}', 'active', null)`, [g.id])), /game_moved_on/, 'stale board');
-  await rejects(as(jonal, () => q(`select public.game_move($1, 0, '{}', 'won', $2)`, [g.id, erin])), /bad_move/, 'outsider winner');
-  await rejects(as(erin, () => q(`select public.game_move($1, 0, '{}', 'active', null)`, [g.id])), /game_not_found/, 'outsider move');
-  await rejects(as(jonal, () => q(`update public.games set status = 'won', winner = $2, turn = null where id = $1`, [g.id, jonal])), /permission denied/, 'direct update');
-  const moved = await as(jonal, () => one(`select * from public.game_move($1, 0, '{"cells":[1]}', 'active', null)`, [g.id]));
-  assert.equal(moved.turn, parul);
-  assert.equal(moved.version, 1);
-  const won = await as(parul, () => one(`select * from public.game_move($1, 1, '{"cells":[1,2]}', 'won', $2)`, [g.id, parul]));
-  assert.equal(won.status, 'won');
-  assert.equal(won.turn, null);
-  await rejects(as(jonal, () => q(`select public.game_move($1, 2, '{}', 'active', null)`, [g.id])), /game_over/, 'after the end');
-  const g2 = await as(parul, () =>
-    one(`insert into public.games (couple_id, kind, created_by, state, turn) values ($1, 'connect4', $2, '{}', $3) returning id`, [founders.id, parul, jonal]),
-  );
-  const gave = await as(parul, () => one(`select * from public.game_resign($1)`, [g2.id]));
-  assert.equal(gave.status, 'abandoned');
-  assert.equal(gave.winner, jonal, 'the other one wins');
-});
-
 await test('quizzes: answers stay private until we have both answered', async () => {
   const founders = await one(`select id from public.couples where user_a_id = $1`, [jonal]);
   const r = await as(jonal, () =>
