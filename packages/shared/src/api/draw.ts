@@ -5,6 +5,7 @@ import type { Difficulty, PackId } from '../draw/words';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
 import { createMemory, uploadMemoryPhoto } from './memory';
+import { forgetSignedUrl, signedUrls } from './signed-urls';
 
 export const DRAW_BUCKET = 'drawings';
 /** "Something changed in our drawings" ping on the couple channel. */
@@ -90,31 +91,35 @@ export async function getDrawing(sb: UsClient, id: string): Promise<Drawing | nu
 }
 
 /**
- * A file from our drawings folder, fetched through a short-lived link. (The
+ * A file from our drawings folder, fetched through its signed link. (The
  * Storage download hands back a Blob, and a phone's Blob can't be read as
- * text or bytes, so both apps fetch instead.)
+ * text or bytes, so both apps fetch instead.) The link is the one the
+ * gallery already uses, so the browser can answer from its cache.
  */
 async function fetchDrawingFile(sb: UsClient, path: string): Promise<Response> {
-  const { data, error } = await sb.storage.from(DRAW_BUCKET).createSignedUrl(path, 120);
-  if (error || !data?.signedUrl) throw error ?? new Error('Drawing not found');
-  const res = await fetch(data.signedUrl);
+  const url = (await drawingUrls(sb, [path]))[path];
+  if (!url) throw new Error('Drawing not found');
+  const res = await fetch(url);
   if (!res.ok) throw new Error('Drawing not found');
   return res;
 }
 
-export async function loadStrokes(sb: UsClient, path: string): Promise<DrawingFile> {
-  return decodeDrawing(await (await fetchDrawingFile(sb, path)).json());
+// A saved drawing's strokes never change, so each file is fetched once per session.
+const strokes = new Map<string, Promise<DrawingFile>>();
+
+export function loadStrokes(sb: UsClient, path: string): Promise<DrawingFile> {
+  let file = strokes.get(path);
+  if (!file) {
+    file = fetchDrawingFile(sb, path).then(async (res) => decodeDrawing(await res.json()));
+    file.catch(() => strokes.delete(path));
+    strokes.set(path, file);
+  }
+  return file;
 }
 
-/** Short-lived links to drawing pictures, keyed by path. */
-export async function drawingUrls(sb: UsClient, paths: string[], expiresIn = 3600): Promise<Record<string, string>> {
-  const unique = [...new Set(paths.filter(Boolean))];
-  if (!unique.length) return {};
-  const { data, error } = await sb.storage.from(DRAW_BUCKET).createSignedUrls(unique, expiresIn);
-  if (error) throw error;
-  const out: Record<string, string> = {};
-  for (const row of data ?? []) if (row.path && row.signedUrl) out[row.path] = row.signedUrl;
-  return out;
+/** Signed links to drawing files, keyed by path (reused while they last; see signed-urls). */
+export function drawingUrls(sb: UsClient, paths: string[], expiresIn?: number): Promise<Record<string, string>> {
+  return signedUrls(sb, DRAW_BUCKET, paths, expiresIn);
 }
 
 /** A drawing's picture as bytes (to keep in Memories or use as our photo). */
@@ -129,6 +134,7 @@ export async function renameDrawing(sb: UsClient, id: string, title: string | nu
 export async function deleteDrawing(sb: UsClient, d: Pick<Drawing, 'id' | 'strokes_path' | 'png_path'>): Promise<void> {
   unwrap(await sb.from('drawings').delete().eq('id', d.id));
   await sb.storage.from(DRAW_BUCKET).remove([d.strokes_path, d.png_path]).catch(() => {});
+  forgetSignedUrl(DRAW_BUCKET, d.png_path);
 }
 
 /** Keep a drawing in Memories: its picture becomes the memory's photo. */

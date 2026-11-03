@@ -4,6 +4,7 @@ import {
   DrawSession,
   saveDrawing,
   signedPhotoUrls,
+  signedUrls,
   type DrawBackground,
   type Drawing,
   type SaveDrawing,
@@ -27,8 +28,8 @@ export function useBgPhotoUrl(bg: DrawBackground | null | undefined): string | n
         const urls = await signedPhotoUrls(sb, [path]);
         if (live) setUrl(urls[path] ?? null);
       } else {
-        const { data } = await sb.storage.from(bucket).createSignedUrl(path, 3600);
-        if (live) setUrl(data?.signedUrl ?? null);
+        const urls = await signedUrls(sb, bucket, [path]);
+        if (live) setUrl(urls[path] ?? null);
       }
     })().catch(() => {});
     return () => {

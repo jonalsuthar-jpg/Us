@@ -2,6 +2,7 @@ import { isEncryptedReaction, type ChatCipher } from '../crypto/chat-cipher';
 import type { MediaKind, MediaMeta, Message, MessageRow, MessageStatus } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
+import { signedUrls } from './signed-urls';
 
 const SELECT = '*, call:calls(*)';
 
@@ -184,15 +185,9 @@ export async function uploadChatMedia(
   return path;
 }
 
-/** Short-lived URLs for chat media, keyed by path. */
-export async function chatMediaUrls(sb: UsClient, paths: string[], expiresIn = 6 * 3600): Promise<Record<string, string>> {
-  const unique = [...new Set(paths.filter(Boolean))];
-  if (!unique.length) return {};
-  const { data, error } = await sb.storage.from(CHAT_BUCKET).createSignedUrls(unique, expiresIn);
-  if (error) throw error;
-  const out: Record<string, string> = {};
-  for (const row of data ?? []) if (row.path && row.signedUrl) out[row.path] = row.signedUrl;
-  return out;
+/** Signed URLs for chat media, keyed by path (reused while they last; see signed-urls). */
+export function chatMediaUrls(sb: UsClient, paths: string[], expiresIn?: number): Promise<Record<string, string>> {
+  return signedUrls(sb, CHAT_BUCKET, paths, expiresIn);
 }
 
 /** "0:42" */

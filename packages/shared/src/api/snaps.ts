@@ -6,6 +6,7 @@ import { MEMORY_BUCKET } from './memory';
 import { draftMessage, sendMessage } from './messages';
 import { toDateKey } from './plan';
 import { notifyPartner } from './push';
+import { forgetSignedUrl, signedUrls } from './signed-urls';
 
 /**
  * Snaps: photos that last 24 hours. RLS stops returning a snap the moment it
@@ -57,14 +58,13 @@ export async function listSnaps(sb: UsClient, coupleId: string, myId: string, no
       .gt('expires_at', now.toISOString())
       .order('created_at', { ascending: true }),
   );
-  const urls: Record<string, string> = {};
+  let urls: Record<string, string> = {};
   if (rows.length) {
     // One link lifetime for the batch: the soonest expiry, between a minute and an hour.
+    // Kept links were signed the same way, so none outlives its snap.
     const soonest = Math.min(...rows.map((r) => Date.parse(r.expires_at)));
     const expiresIn = Math.max(60, Math.min(3600, Math.floor((soonest - now.getTime()) / 1000)));
-    const { data, error } = await sb.storage.from(SNAPS_BUCKET).createSignedUrls(rows.map((r) => r.photo_path), expiresIn);
-    if (error) throw error;
-    for (const row of data ?? []) if (row.path && row.signedUrl) urls[row.path] = row.signedUrl;
+    urls = await signedUrls(sb, SNAPS_BUCKET, rows.map((r) => r.photo_path), expiresIn);
   }
   const snaps = rows.map((r) => ({ ...r, caption: openSnapCaption(r, cipher), url: urls[r.photo_path] ?? null }));
   return { mine: snaps.filter((s) => s.author_id === myId), partner: snaps.filter((s) => s.author_id !== myId) };
@@ -120,6 +120,7 @@ export async function reactToSnap(sb: UsClient, id: string, emoji: string | null
 export async function deleteSnap(sb: UsClient, snap: Pick<SnapRow, 'id' | 'photo_path'>): Promise<void> {
   const { error } = await sb.storage.from(SNAPS_BUCKET).remove([snap.photo_path]);
   if (error) throw error;
+  forgetSignedUrl(SNAPS_BUCKET, snap.photo_path);
   unwrap(await sb.from('snaps').delete().eq('id', snap.id));
 }
 

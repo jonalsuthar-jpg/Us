@@ -1,6 +1,7 @@
 import type { Database, Memory, MemoryRating } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
+import { forgetSignedUrl, signedUrls } from './signed-urls';
 
 type Insert<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert'];
 type Update<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update'];
@@ -57,17 +58,12 @@ export async function uploadMemoryPhoto(
 export async function removeMemoryPhoto(sb: UsClient, path: string): Promise<void> {
   const { error } = await sb.storage.from(MEMORY_BUCKET).remove([path]);
   if (error) throw error;
+  forgetSignedUrl(MEMORY_BUCKET, path);
 }
 
-/** Short-lived URLs for private photos, keyed by path. */
-export async function signedPhotoUrls(sb: UsClient, paths: string[], expiresIn = 3600): Promise<Record<string, string>> {
-  const unique = [...new Set(paths.filter(Boolean))];
-  if (!unique.length) return {};
-  const { data, error } = await sb.storage.from(MEMORY_BUCKET).createSignedUrls(unique, expiresIn);
-  if (error) throw error;
-  const out: Record<string, string> = {};
-  for (const row of data ?? []) if (row.path && row.signedUrl) out[row.path] = row.signedUrl;
-  return out;
+/** Signed URLs for private photos, keyed by path (reused while they last; see signed-urls). */
+export function signedPhotoUrls(sb: UsClient, paths: string[], expiresIn?: number): Promise<Record<string, string>> {
+  return signedUrls(sb, MEMORY_BUCKET, paths, expiresIn);
 }
 
 // ---------------------------------------------------------------- ratings ---
