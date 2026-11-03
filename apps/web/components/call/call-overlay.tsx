@@ -1,10 +1,11 @@
 'use client';
 
 import { formatDuration, isWideVideo, selfViewAspect, type CallState, type ScreenStats, type ShareMode, type VideoSize } from '@us/shared';
-import { useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
+import { useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronDown,
+  Layers,
   Maximize,
   Mic,
   MicOff,
@@ -28,6 +29,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
 import { useElapsed } from '@/lib/hooks';
 import { LiveCanvas } from '@/components/draw/live-canvas';
+import { CallCards } from './call-cards';
 import { StreamAudio, StreamVideo, useAudioDevices, type AudioDevice } from './media';
 
 /**
@@ -109,6 +111,9 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
   const [shareNudge, setShareNudge] = useState(false);
   const canDraw = useFeature('draw');
   const [drawing, setDrawing] = useState(false);
+  const cardsOn = useFeature('call_cards');
+  const cards = useCallCards();
+  const [pickingDeck, setPickingDeck] = useState(false);
   const [audioPicker, setAudioPicker] = useState(false);
   // undefined = the browser's default output.
   const [sinkId, setSinkId] = useState<string | undefined>(undefined);
@@ -440,6 +445,17 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
                 {state.local.screen ? <MonitorX className="h-6 w-6" /> : <MonitorUp className="h-6 w-6" />}
               </IconButton>
             )}
+            {live && cardsOn && (
+              <IconButton
+                label="Talk cards"
+                pressed={pickingDeck || !!cards.table}
+                tone={pickingDeck || cards.table ? 'nightOff' : 'night'}
+                size="lg"
+                onClick={() => (cards.table || pickingDeck ? (setPickingDeck(false), cards.close()) : setPickingDeck(true))}
+              >
+                <Layers className="h-6 w-6" />
+              </IconButton>
+            )}
             {live && canDraw && (
               <IconButton label="Draw together" pressed={drawing} tone={drawing ? 'nightOff' : 'night'} size="lg" onClick={() => setDrawing((d) => !d)}>
                 <PenLine className="h-6 w-6" />
@@ -451,6 +467,8 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
           </>
         )}
       </footer>
+
+      {live && cardsOn ? <CallCards cards={cards} picking={pickingDeck} onPicking={setPickingDeck} partnerName={partner.display_name} /> : null}
 
       {/* Draw together over the call: a panel on the right (a sheet from the bottom on phones). Audio carries on. */}
       {drawing && live ? (

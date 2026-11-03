@@ -33,7 +33,9 @@ export * from './realtime/couple-channel';
 export * from './realtime/typing';
 
 export * from './draw';
+export * from './games';
 export * from './api/draw';
+export * from './api/games';
 export * from './api/stickers';
 
 export * from './webrtc/signals';

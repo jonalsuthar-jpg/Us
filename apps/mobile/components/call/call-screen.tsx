@@ -1,7 +1,7 @@
 import { formatDuration, isWideVideo, selfViewAspect, videoFit, type CallState, type VideoSize } from '@us/shared';
-import { useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
+import { useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { Bluetooth, Check, ChevronDown, Ear, Headphones, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
+import { Bluetooth, Check, ChevronDown, Ear, Headphones, Layers, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StatusBar, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -22,6 +22,7 @@ import { cancelIncomingRing, setShowWhenLocked, startCallService, stopCallServic
 import { Avatar } from '../ui/avatar';
 import { cn } from '../ui/cn';
 import { LiveBoard } from '../draw/live-board';
+import { CallCards } from './call-cards';
 import { Button, IconButton } from '../ui/button';
 import { Display, Text } from '../ui/text';
 
@@ -255,6 +256,10 @@ function Surface({
   const [nudge, setNudge] = useState(false);
   const canDraw = useFeature('draw');
   const [drawing, setDrawing] = useState(false);
+  const cardsOn = useFeature('call_cards');
+  const cards = useCallCards();
+  const [pickingDeck, setPickingDeck] = useState(false);
+  const cardsUp = pickingDeck || !!cards.table;
   // Where the sound goes. Android reports the devices (earpiece, speaker, wired,
   // Bluetooth); elsewhere it's a plain speaker toggle that starts at the default.
   const [routes, setRoutes] = useState<{ available: AudioRoute[]; selected: AudioRoute | null }>({ available: [], selected: null });
@@ -432,6 +437,21 @@ function Surface({
                   <MonitorUp size={20} color="#FCFAFB" />
                 </IconButton>
               )}
+              {live && cardsOn && (
+                <IconButton
+                  label="Talk cards"
+                  selected={cardsUp}
+                  tone={cardsUp ? 'nightOff' : 'night'}
+                  onPress={() => {
+                    if (cardsUp) {
+                      setPickingDeck(false);
+                      cards.close();
+                    } else setPickingDeck(true);
+                  }}
+                >
+                  <Layers size={20} color={cardsUp ? '#241933' : '#FCFAFB'} />
+                </IconButton>
+              )}
               {live && canDraw && (
                 <IconButton label="Draw together" tone="night" onPress={() => setDrawing(true)}>
                   <PenLine size={20} color="#FCFAFB" />
@@ -464,6 +484,8 @@ function Surface({
           </View>
         )}
       </View>
+
+      {live && cardsOn && !drawing ? <CallCards cards={cards} picking={pickingDeck} onPicking={setPickingDeck} partnerName={partner.display_name} /> : null}
 
       {/* Draw together over the call: a strip with the call on top, the canvas in a sheet below. Audio carries on. */}
       {drawing && live ? (

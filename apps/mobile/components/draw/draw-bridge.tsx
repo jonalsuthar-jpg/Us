@@ -17,7 +17,8 @@ export function DrawBridge() {
 }
 
 /** Web links in notifications (/connect/draw…) to the app's screens (/draw…). */
-export const drawRoute = (url: string) => url.replace(/^\/connect\/draw/, '/draw');
+/** A web link from a push, as this app's route (Connect's sub-pages sit at the top level here). */
+export const drawRoute = (url: string) => url.replace(/^\/connect\/draw/, '/draw').replace(/^\/connect\/play/, '/play');
 
 function Bridge() {
   useDrawHub();

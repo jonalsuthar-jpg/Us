@@ -31,7 +31,9 @@ type Category =
   | 'snap_reaction'
   | 'draw_invite'
   | 'doodle'
-  | 'guess_turn';
+  | 'guess_turn'
+  | 'game_turn'
+  | 'quiz_ready';
 
 /** The feature our couple needs for each push (see public.features). */
 const FEATURE: Record<Category, string> = {
@@ -49,6 +51,8 @@ const FEATURE: Record<Category, string> = {
   draw_invite: 'draw',
   doodle: 'draw',
   guess_turn: 'draw',
+  game_turn: 'games',
+  quiz_ready: 'quizzes',
 };
 
 interface Style {
@@ -92,6 +96,8 @@ const CATEGORIES: Record<Category, Style> = {
   draw_invite: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', ttl: 300, threadId: 'draw' },
   doodle: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'draw' },
   guess_turn: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'draw' },
+  game_turn: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'games' },
+  quiz_ready: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'games' },
 };
 
 Deno.serve(async (req) => {
@@ -281,6 +287,41 @@ Deno.serve(async (req) => {
       collapseId = `guess-${d.id}`;
       data = { category, url: '/connect/draw/guess', drawingId: d.id };
     }
+  } else if (body.category === 'game_turn') {
+    const { data: g } = await admin.from('games').select('id, couple_id, kind, status, turn, winner, updated_at').eq('id', body.gameId).maybeSingle();
+    if (!g || g.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
+    // Only right after I moved (it's my partner's turn) or the game just ended.
+    if (g.status === 'active' ? g.turn !== partnerId : false) return json({ error: 'forbidden' }, 403);
+    if (Date.now() - Date.parse(g.updated_at) > 10 * 60_000) return json({ skipped: 'stale' });
+    const title = ({ tictactoe: 'Tic-tac-toe', connect4: 'Connect Four', wordchain: 'Word chain' } as Record<string, string>)[g.kind] ?? 'our game';
+    category = 'game_turn';
+    content =
+      g.status === 'active'
+        ? `made their move in ${title}. Your turn!`
+        : g.status === 'draw'
+          ? g.kind === 'wordchain'
+            ? 'You finished the word chain together 🎉'
+            : `It’s a draw at ${title}. Rematch?`
+          : g.winner === userId
+            ? `won ${title} 🏆 Rematch?`
+            : g.status === 'abandoned'
+              ? `gave up at ${title}. You win 🏆`
+              : `lost ${title}. You win 🏆`;
+    collapseId = `game-${g.id}`;
+    data = { category, url: `/connect/play/${g.id}` };
+  } else if (body.category === 'quiz_ready') {
+    const { data: r } = await admin.from('quiz_rounds').select('id, couple_id, kind').eq('id', body.roundId).maybeSingle();
+    if (!r || r.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
+    const { data: answers } = await admin.from('quiz_answers').select('user_id, created_at').eq('round_id', r.id);
+    const mine = (answers ?? []).find((a) => a.user_id === userId);
+    if (!mine) return json({ error: 'forbidden' }, 403);
+    if (Date.now() - Date.parse(mine.created_at) > 10 * 60_000) return json({ skipped: 'stale' });
+    const both = (answers ?? []).some((a) => a.user_id === partnerId);
+    const title = r.kind === 'know_me' ? 'How well do you know me?' : 'This or that';
+    category = 'quiz_ready';
+    content = both ? `finished ${title}. See how you did 👀` : `answered ${title}. Your turn to play`;
+    collapseId = `quiz-${r.id}`;
+    data = { category, url: `/connect/play/quiz/${r.id}` };
   } else {
     return json({ error: 'unknown_category' }, 400);
   }

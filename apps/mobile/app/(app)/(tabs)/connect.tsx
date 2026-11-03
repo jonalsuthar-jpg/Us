@@ -7,6 +7,7 @@ import { CLEAR_CHAT_FAB } from '@/components/chat/chat-fab';
 import { AnswersCard, DailyQuestion, useDaily } from '@/components/connect/daily-question';
 import { DailyDoodleCard, DrawingsStrip, DrawTiles } from '@/components/draw/connect-draw';
 import { FeatureOff } from '@/components/feature-off';
+import { PlaySection } from '@/components/games/play-section';
 import { IconButton } from '@/components/ui/button';
 import { usePalette } from '@/components/ui/palette';
 import { Display } from '@/components/ui/text';
@@ -18,6 +19,8 @@ export default function Connect() {
   const daily = useDaily();
   const on = useFeature('daily_question');
   const draw = useFeature('draw');
+  const games = useFeature('games');
+  const quizzes = useFeature('quizzes');
 
   return (
     <ScrollView
@@ -52,12 +55,14 @@ export default function Connect() {
         </>
       ) : null}
 
+      <PlaySection />
+
       {on ? (
         <View className="gap-3">
           <DailyQuestion daily={daily} />
           <AnswersCard daily={daily} />
         </View>
-      ) : draw ? null : (
+      ) : draw || games || quizzes ? null : (
         <FeatureOff />
       )}
     </ScrollView>

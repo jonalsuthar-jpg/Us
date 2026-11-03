@@ -20,7 +20,9 @@ export type PushCategory =
   | 'plant' // evening nudge: only my partner watered our plant today (sent by a schedule)
   | 'draw_invite' // come and draw with me (or play Draw & Guess)
   | 'doodle' // my partner left me a doodle
-  | 'guess_turn'; // my partner drew their Draw & Guess turn
+  | 'guess_turn' // my partner drew their Draw & Guess turn
+  | 'game_turn' // my partner moved in one of our games (or it ended)
+  | 'quiz_ready'; // my partner started a quiz for me, or finished one
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }
@@ -32,7 +34,9 @@ export type PushRequest =
   | { category: 'new_snap' | 'snap_reaction'; snapId: string }
   | { category: 'draw_invite'; game?: boolean }
   | { category: 'doodle'; drawingId: string }
-  | { category: 'guess_turn'; drawingId: string };
+  | { category: 'guess_turn'; drawingId: string }
+  | { category: 'game_turn'; gameId: string }
+  | { category: 'quiz_ready'; roundId: string };
 
 /** Payload attached to every notification (`data`) for deep-link routing. */
 export interface PushData {

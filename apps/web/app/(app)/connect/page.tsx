@@ -6,6 +6,7 @@ import { FeatureOff } from '@/components/app/feature-off';
 import { MobileSettingsLink } from '@/components/app/app-shell';
 import { DailyQuestion } from '@/components/connect/daily-question';
 import { DailyDoodleCard, DrawingsStrip, DrawTiles } from '@/components/draw/connect-draw';
+import { PlaySection } from '@/components/games/play-section';
 import { Avatar } from '@/components/ui/avatar';
 
 // TODO(phase-3): Fight Translator (Edge Function supabase/functions/fight-translator), Future Letters, Inside Jokes.
@@ -15,6 +16,9 @@ export default function ConnectPage() {
   const mod = moduleById('connect');
   const daily = useFeature('daily_question');
   const draw = useFeature('draw');
+  const games = useFeature('games');
+  const quizzes = useFeature('quizzes');
+  const play = games || quizzes;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-5 py-8 sm:space-y-8 sm:px-10 sm:py-12">
@@ -42,7 +46,8 @@ export default function ConnectPage() {
           <DailyDoodleCard />
         </>
       ) : null}
-      {daily ? <DailyQuestion /> : draw ? null : <FeatureOff />}
+      <PlaySection />
+      {daily ? <DailyQuestion /> : draw || play ? null : <FeatureOff />}
     </div>
   );
 }

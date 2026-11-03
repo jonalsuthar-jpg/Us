@@ -2,6 +2,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Call, MessageRow } from '../database.types';
 import type { UsClient } from '../supabase';
 import type { DrawEvent } from '../draw/session';
+import type { CardEvent } from '../games/cards';
 import type { SignalEvent } from '../webrtc/signals';
 
 type Listener<T> = (value: T) => void;
@@ -55,6 +56,8 @@ export class CoupleChannel {
   readonly changes = new Emitter<ChangedEvent>();
   /** Draw together: strokes, cursors and Draw & Guess moves (see draw/session.ts). */
   readonly draw = new Emitter<DrawEvent>();
+  /** Talk cards on a call: which card is up (see games/cards.ts). */
+  readonly cards = new Emitter<CardEvent>();
 
   private live?: RealtimeChannel;
   private db?: RealtimeChannel;
@@ -88,6 +91,7 @@ export class CoupleChannel {
       .on('broadcast', { event: 'signal' }, ({ payload }) => this.signals.emit(payload as SignalEnvelope))
       .on('broadcast', { event: 'changed' }, ({ payload }) => this.changes.emit(payload as ChangedEvent))
       .on('broadcast', { event: 'draw' }, ({ payload }) => this.draw.emit(payload as DrawEvent))
+      .on('broadcast', { event: 'cards' }, ({ payload }) => this.cards.emit(payload as CardEvent))
       .on('presence', { event: 'sync' }, () => {
         const state = this.live?.presenceState() ?? {};
         this.online = new Set(Object.keys(state));
@@ -133,6 +137,11 @@ export class CoupleChannel {
   /** A drawing event for my partner's open canvas. Best effort, like typing. */
   sendDraw(event: DrawEvent) {
     void this.live?.send({ type: 'broadcast', event: 'draw', payload: event });
+  }
+
+  /** Show a talk card (or put them away) on my partner's call screen too. */
+  sendCards(table: CardEvent['table']) {
+    void this.live?.send({ type: 'broadcast', event: 'cards', payload: { from: this.userId, table } satisfies CardEvent });
   }
 
   async sendSignal(event: SignalEvent) {

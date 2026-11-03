@@ -18,6 +18,9 @@ export type FeatureKey =
   | 'letters'
   | 'jokes'
   | 'draw'
+  | 'games'
+  | 'quizzes'
+  | 'call_cards'
   | 'calendar'
   | 'lists'
   | 'decide'
@@ -37,6 +40,7 @@ export const FEATURES: FeatureInfo[] = [
   { key: 'chat', label: 'Chat', group: 'talk' },
   { key: 'calls', label: 'Calls', group: 'talk' },
   { key: 'stickers', label: 'Stickers', group: 'talk' },
+  { key: 'call_cards', label: 'Cards on calls', group: 'talk' },
   { key: 'snaps', label: 'Snaps', group: 'home' },
   { key: 'taps', label: 'Thinking of you', group: 'home' },
   { key: 'countdowns', label: 'Countdowns', group: 'home' },
@@ -48,6 +52,8 @@ export const FEATURES: FeatureInfo[] = [
   { key: 'letters', label: 'Future letters', group: 'connect' },
   { key: 'jokes', label: 'Inside jokes', group: 'connect' },
   { key: 'draw', label: 'Draw together', group: 'connect' },
+  { key: 'games', label: 'Games', group: 'connect' },
+  { key: 'quizzes', label: 'Couple quizzes', group: 'connect' },
   { key: 'calendar', label: 'Calendar', group: 'plan' },
   { key: 'lists', label: 'Lists', group: 'plan' },
   { key: 'decide', label: 'Decision picker', group: 'plan' },
