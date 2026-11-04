@@ -13,7 +13,7 @@ import {
   type PartnerSlot,
   type Status,
 } from '@us/shared';
-import { useAccess, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
+import { useAccess, useBirthday, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bootHome, saveHome } from '@/lib/boot-cache';
+import { BirthdayBanner } from '../birthday/birthday-banner';
 import { CLEAR_CHAT_FAB } from '../chat/chat-fab';
 import { ErrorNote } from '../module-screen';
 import { PlantCard } from '../plant/plant-card';
@@ -54,6 +55,7 @@ export function HomeScreen() {
   const calls = useCallManager();
   const has = useFeatures();
   const announcement = useAccess()?.announcement;
+  const birthday = useBirthday();
   const [saved] = useState(() => {
     const h = bootHome();
     return h?.couple.id === couple.id ? h : undefined;
@@ -150,6 +152,8 @@ export function HomeScreen() {
           <Settings size={19} color={c.inkSoft} />
         </IconButton>
       </View>
+
+      <BirthdayBanner b={birthday} />
 
       {has('draw') && <DrawingBanner />}
 
@@ -303,7 +307,7 @@ export function HomeScreen() {
             checkPlant();
           }}
         >
-          <PlantCard animate={focused && plantInView} />
+          <PlantCard animate={focused && plantInView} party={birthday.room && birthday.phase === 'day' ? `🥳 ${birthday.room.name}’s birthday` : undefined} />
         </View>
       ) : null}
 

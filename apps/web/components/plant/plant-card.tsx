@@ -11,7 +11,7 @@ import { PlantArt } from './plant-art';
 const WATERS = ['📸 A snap', '💗 Thinking of you', '💬 A message', '❓ Today’s question', '📞 A call you both pick up'];
 
 /** Our little plant: grows on days we both show up for each other. */
-export function PlantCard() {
+export function PlantCard({ party }: { /** A birthday today: bunting over the plant. */ party?: string } = {}) {
   const { couple, partner, mySlot, partnerSlot } = useCouple();
   const { state } = usePlant();
   const [open, setOpen] = useState(false);
@@ -47,6 +47,7 @@ export function PlantCard() {
           <div className={cn(grew && 'animate-[us-grow_1.2s_ease-out]')} style={{ transformOrigin: '50% 70%' }}>
             <PlantArt scene={scene} pouring={pouring} title={title} className="block aspect-[8/5] w-full" />
           </div>
+          {party ? <Bunting label={party} /> : null}
           {grew ? <Burst label={`It grew! Now ${state.stage.name}`} /> : null}
         </div>
         <div className="flex flex-col justify-center gap-3 p-6">
@@ -189,4 +190,20 @@ function useStageUp(coupleId: string, state: PlantState | undefined) {
     return () => clearTimeout(t);
   }, [coupleId, level]);
   return grew;
+}
+
+const FLAGS = ['#E46B8A', '#F3B33D', '#3FA6A0', '#8E6BB8', '#7FB069'];
+
+/** Party bunting strung across the top of the plant, and who it's for. */
+function Bunting({ label }: { label: string }) {
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 flex flex-col items-center">
+      <span className="flex w-full justify-around border-t-2 border-plum-300/60 px-2">
+        {Array.from({ length: 13 }, (_, i) => (
+          <span key={i} className="h-0 w-0 border-x-[9px] border-t-[15px] border-x-transparent" style={{ borderTopColor: FLAGS[i % FLAGS.length] }} />
+        ))}
+      </span>
+      <span className="mt-2 rounded-full bg-paper-raised/90 px-3 py-1 text-micro font-semibold text-ink">{label}</span>
+    </span>
+  );
 }

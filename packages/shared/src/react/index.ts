@@ -12,3 +12,4 @@ export * from './access-provider';
 export * from './use-draw';
 export * from './data-cache';
 export * from './use-play';
+export * from './use-birthday';

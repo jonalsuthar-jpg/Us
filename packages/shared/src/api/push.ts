@@ -21,7 +21,8 @@ export type PushCategory =
   | 'draw_invite' // come and draw with me (or play Draw & Guess)
   | 'doodle' // my partner left me a doodle
   | 'guess_turn' // my partner drew their Draw & Guess turn
-  | 'quiz_ready'; // my partner started a quiz for me, or finished one
+  | 'quiz_ready' // my partner started a quiz for me, or finished one
+  | 'birthday'; // midnight on my birthday: a room is waiting (sent by a schedule)
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }

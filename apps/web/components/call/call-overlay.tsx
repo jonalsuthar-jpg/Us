@@ -1,7 +1,7 @@
 'use client';
 
 import { formatDuration, isWideVideo, selfViewAspect, type CallState, type ScreenStats, type ShareMode, type VideoSize } from '@us/shared';
-import { useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
+import { useBirthday, useCallCake, useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronDown,
@@ -29,6 +29,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
 import { useElapsed } from '@/lib/hooks';
 import { LiveCanvas } from '@/components/draw/live-canvas';
+import { CallCake } from './call-cake';
 import { CallCards } from './call-cards';
 import { StreamAudio, StreamVideo, useAudioDevices, type AudioDevice } from './media';
 
@@ -114,6 +115,9 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
   const cardsOn = useFeature('call_cards');
   const cards = useCallCards();
   const [pickingDeck, setPickingDeck] = useState(false);
+  // The birthday cake: there when there's a birthday room I can see.
+  const birthday = useBirthday();
+  const cake = useCallCake();
   const [audioPicker, setAudioPicker] = useState(false);
   // undefined = the browser's default output.
   const [sinkId, setSinkId] = useState<string | undefined>(undefined);
@@ -125,6 +129,12 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
   const ringing = state.phase === 'outgoing' || state.phase === 'incoming' || state.phase === 'connecting';
   const remoteVideo = live && (state.remote.camera || state.remote.screen);
   const watchingShare = !!remoteVideo && state.remote.screen;
+  const { takeRequest, putAway } = cake;
+  const cakeOut = !!cake.cake;
+  useEffect(() => {
+    if (live && birthday.room) takeRequest();
+    else if (!live && cakeOut) putAway();
+  }, [live, birthday.room, cakeOut, takeRequest, putAway]);
 
   // Full screen for watching their shared screen: just the video, nothing over it.
   const root = useRef<HTMLDivElement>(null);
@@ -456,6 +466,11 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
                 <Layers className="h-6 w-6" />
               </IconButton>
             )}
+            {live && birthday.room && (
+              <IconButton label="Birthday cake" pressed={cakeOut} tone={cakeOut ? 'nightOff' : 'night'} size="lg" onClick={() => (cakeOut ? cake.putAway() : cake.bringOut())}>
+                <span className="text-[22px] leading-none">🎂</span>
+              </IconButton>
+            )}
             {live && canDraw && (
               <IconButton label="Draw together" pressed={drawing} tone={drawing ? 'nightOff' : 'night'} size="lg" onClick={() => setDrawing((d) => !d)}>
                 <PenLine className="h-6 w-6" />
@@ -468,7 +483,8 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
         )}
       </footer>
 
-      {live && cardsOn ? <CallCards cards={cards} picking={pickingDeck} onPicking={setPickingDeck} partnerName={partner.display_name} /> : null}
+      {live && birthday.room ? <CallCake cake={cake} name={birthday.room.name} /> : null}
+      {live && cardsOn && !cakeOut ? <CallCards cards={cards} picking={pickingDeck} onPicking={setPickingDeck} partnerName={partner.display_name} /> : null}
 
       {/* Draw together over the call: a panel on the right (a sheet from the bottom on phones). Audio carries on. */}
       {drawing && live ? (

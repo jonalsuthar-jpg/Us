@@ -18,7 +18,7 @@ const WATERS = ['📸 A snap', '💗 Thinking of you', '💬 A message', '❓ To
  * Our little plant: grows on days we both show up for each other.
  * `animate` is off while the card can't be seen; moving it costs a redraw every frame.
  */
-export function PlantCard({ animate = true }: { animate?: boolean }) {
+export function PlantCard({ animate = true, party }: { animate?: boolean; /** A birthday today: bunting over the plant. */ party?: string }) {
   const { couple, partner, mySlot, partnerSlot } = useCouple();
   const { state } = usePlant();
   const [open, setOpen] = useState(false);
@@ -52,6 +52,7 @@ export function PlantCard({ animate = true }: { animate?: boolean }) {
       >
         <View>
           <PlantArt scene={scene} title={title} still={!animate || open} />
+          {party ? <Bunting label={party} /> : null}
           {grew ? (
             <Animated.View entering={ZoomIn.springify()} exiting={FadeOut} className="absolute inset-0 items-center justify-center">
               <Text className="overflow-hidden rounded-full bg-paper-raised/90 px-4 py-1.5 font-sans-medium text-small">It grew! Now {state.stage.name} 🌸</Text>
@@ -196,4 +197,32 @@ function useStageUp(coupleId: string, state: PlantState | undefined) {
     };
   }, [coupleId, level]);
   return grew;
+}
+
+const FLAGS = ['#E46B8A', '#F3B33D', '#3FA6A0', '#8E6BB8', '#7FB069'];
+
+/** Party bunting strung across the top of the plant, and who it's for. */
+function Bunting({ label }: { label: string }) {
+  return (
+    <View pointerEvents="none" className="absolute inset-x-0 top-0 items-center">
+      <View className="w-full flex-row justify-around border-t-2 border-plum-300/60 px-2">
+        {Array.from({ length: 11 }, (_, i) => (
+          <View
+            key={i}
+            style={{
+              width: 0,
+              height: 0,
+              borderLeftWidth: 9,
+              borderRightWidth: 9,
+              borderTopWidth: 15,
+              borderLeftColor: 'transparent',
+              borderRightColor: 'transparent',
+              borderTopColor: FLAGS[i % FLAGS.length],
+            }}
+          />
+        ))}
+      </View>
+      <Text className="mt-2 overflow-hidden rounded-full bg-paper-raised/90 px-3 py-1 font-sans-semibold text-micro">{label}</Text>
+    </View>
+  );
 }

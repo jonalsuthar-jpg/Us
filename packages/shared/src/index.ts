@@ -37,6 +37,8 @@ export * from './games';
 export * from './api/draw';
 export * from './api/quizzes';
 export * from './api/stickers';
+export * from './api/birthday';
+export * from './birthday';
 
 export * from './webrtc/signals';
 export * from './webrtc/call-manager';

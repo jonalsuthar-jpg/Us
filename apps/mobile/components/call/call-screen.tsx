@@ -1,5 +1,5 @@
 import { formatDuration, isWideVideo, selfViewAspect, videoFit, type CallState, type VideoSize } from '@us/shared';
-import { useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
+import { useBirthday, useCallCake, useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { Bluetooth, Check, ChevronDown, Ear, Headphones, Layers, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -22,6 +22,7 @@ import { cancelIncomingRing, setShowWhenLocked, startCallService, stopCallServic
 import { Avatar } from '../ui/avatar';
 import { cn } from '../ui/cn';
 import { LiveBoard } from '../draw/live-board';
+import { CallCake } from './call-cake';
 import { CallCards } from './call-cards';
 import { Button, IconButton } from '../ui/button';
 import { Display, Text } from '../ui/text';
@@ -260,6 +261,9 @@ function Surface({
   const cards = useCallCards();
   const [pickingDeck, setPickingDeck] = useState(false);
   const cardsUp = pickingDeck || !!cards.table;
+  // The birthday cake: there when there's a birthday room I can see.
+  const birthday = useBirthday();
+  const cake = useCallCake();
   // Where the sound goes. Android reports the devices (earpiece, speaker, wired,
   // Bluetooth); elsewhere it's a plain speaker toggle that starts at the default.
   const [routes, setRoutes] = useState<{ available: AudioRoute[]; selected: AudioRoute | null }>({ available: [], selected: null });
@@ -279,6 +283,12 @@ function Surface({
   const [controlsHeight, setControlsHeight] = useState(208);
 
   const live = state.phase === 'connected' || state.phase === 'reconnecting';
+  const { takeRequest, putAway } = cake;
+  const cakeOut = !!cake.cake;
+  useEffect(() => {
+    if (live && birthday.room) takeRequest();
+    else if (!live && cakeOut) putAway();
+  }, [live, birthday.room, cakeOut, takeRequest, putAway]);
   const ringing = state.phase === 'outgoing' || state.phase === 'incoming' || state.phase === 'connecting';
   // A shared screen arrives on the camera's track, so show it even with their camera off.
   const remoteVideo = live && (state.remote.camera || state.remote.screen) && state.remoteStream;
@@ -452,6 +462,11 @@ function Surface({
                   <Layers size={20} color={cardsUp ? '#241933' : '#FCFAFB'} />
                 </IconButton>
               )}
+              {live && birthday.room && (
+                <IconButton label="Birthday cake" selected={!!cake.cake} tone={cake.cake ? 'nightOff' : 'night'} onPress={() => (cake.cake ? cake.putAway() : cake.bringOut())}>
+                  <Text className="text-[19px] leading-[24px]">🎂</Text>
+                </IconButton>
+              )}
               {live && canDraw && (
                 <IconButton label="Draw together" tone="night" onPress={() => setDrawing(true)}>
                   <PenLine size={20} color="#FCFAFB" />
@@ -485,7 +500,8 @@ function Surface({
         )}
       </View>
 
-      {live && cardsOn && !drawing ? <CallCards cards={cards} picking={pickingDeck} onPicking={setPickingDeck} partnerName={partner.display_name} /> : null}
+      {live && birthday.room && !drawing ? <CallCake cake={cake} name={birthday.room.name} /> : null}
+      {live && cardsOn && !drawing && !cake.cake ? <CallCards cards={cards} picking={pickingDeck} onPicking={setPickingDeck} partnerName={partner.display_name} /> : null}
 
       {/* Draw together over the call: a strip with the call on top, the canvas in a sheet below. Audio carries on. */}
       {drawing && live ? (

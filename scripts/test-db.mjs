@@ -1144,5 +1144,47 @@ await test('quizzes: answers stay private until we have both answered', async ()
   assert.equal((await as(erin, () => q(`select * from public.quiz_history()`))).length, 0, 'outsider');
 });
 
+await test('birthday room: Jonal always, Parul only from midnight, nobody else ever', async () => {
+  const room = await one(`select * from public.birthday_rooms`);
+  assert.equal(room.from_id, jonal);
+  assert.equal(room.for_id, parul);
+  assert.equal(room.name, 'Parul');
+  assert.equal(new Date(room.unlock_at).toISOString(), '2026-11-09T18:30:00.000Z', 'midnight in India');
+  assert.equal(new Date(room.ends_at).toISOString(), '2026-11-10T18:30:00.000Z');
+
+  // Before midnight: the maker previews, the birthday person sees nothing at all.
+  await q(`update public.birthday_rooms set unlock_at = now() + interval '1 hour', ends_at = now() + interval '1 day'`);
+  assert.equal((await as(jonal, () => q(`select id from public.birthday_rooms`))).length, 1);
+  assert.equal((await as(parul, () => q(`select id from public.birthday_rooms`))).length, 0, 'no peeking');
+  assert.equal((await as(erin, () => q(`select id from public.birthday_rooms`))).length, 0, 'outsider');
+  await rejects(as(parul, () => q(`select public.birthday_open($1)`, [room.id])), /room_not_found/, 'open early');
+  await rejects(as(jonal, () => q(`select public.birthday_open($1)`, [room.id])), /room_not_found/, 'maker isn’t the birthday person');
+  assert.equal((await as(parul, () => one(`select public.birthday_totals() as t`))).t, null, 'no totals before midnight');
+  assert.ok((await as(jonal, () => one(`select public.birthday_totals() as t`))).t.messages >= 1);
+
+  // Only the maker edits, and only the story.
+  await as(jonal, () => q(`update public.birthday_rooms set content = content || '{"drafts": []}' where id = $1`, [room.id]));
+  await rejects(as(jonal, () => q(`update public.birthday_rooms set unlock_at = now() where id = $1`, [room.id])), /permission denied/, 'maker moves the lock');
+  await rejects(as(parul, () => q(`update public.birthday_rooms set unlock_at = now() where id = $1`, [room.id])), /permission denied/, 'she moves the lock');
+  await rejects(as(parul, () => q(`delete from public.birthday_rooms`)), /permission denied/, 'delete');
+
+  // Midnight.
+  await q(`update public.birthday_rooms set unlock_at = now() - interval '1 minute'`);
+  const seen = await as(parul, () => one(`select * from public.birthday_rooms`));
+  assert.deepEqual(seen.content.drafts, []);
+  assert.equal((await as(parul, () => q(`update public.birthday_rooms set content = '{}' returning id`))).length, 0, 'she can’t rewrite it');
+  const opened = await as(parul, () => one(`select (public.birthday_open($1)).*`, [room.id]));
+  assert.ok(opened.opened_at);
+  const marked = await as(parul, () => one(`select (public.birthday_mark($1, 2, true)).*`, [room.id]));
+  assert.deepEqual(marked.marks, { 2: true });
+  await rejects(as(parul, () => q(`select public.birthday_mark($1, 99, true)`, [room.id])), /bad_question/, 'out of range');
+  const kept = await as(parul, () => one(`select (public.birthday_keep($1)).*`, [room.id]));
+  const again = await as(parul, () => one(`select (public.birthday_keep($1)).*`, [room.id]));
+  assert.equal(kept.memory_id, again.memory_id, 'kept once');
+  const memory = await as(jonal, () => one(`select * from public.memories where id = $1`, [kept.memory_id]));
+  assert.equal(memory.created_by, parul);
+  assert.equal((await as(erin, () => q(`select id from public.birthday_rooms`))).length, 0, 'outsider after midnight');
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 await db.close();

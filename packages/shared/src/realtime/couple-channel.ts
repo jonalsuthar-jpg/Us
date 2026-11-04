@@ -3,6 +3,7 @@ import type { Call, MessageRow } from '../database.types';
 import type { UsClient } from '../supabase';
 import type { DrawEvent } from '../draw/session';
 import type { CardEvent } from '../games/cards';
+import type { CakeEvent } from '../birthday/cake';
 import type { SignalEvent } from '../webrtc/signals';
 
 type Listener<T> = (value: T) => void;
@@ -58,6 +59,8 @@ export class CoupleChannel {
   readonly draw = new Emitter<DrawEvent>();
   /** Talk cards on a call: which card is up (see games/cards.ts). */
   readonly cards = new Emitter<CardEvent>();
+  /** The birthday cake on a call: how far the knife is (see birthday/cake.ts). */
+  readonly cake = new Emitter<CakeEvent>();
 
   private live?: RealtimeChannel;
   private db?: RealtimeChannel;
@@ -92,6 +95,7 @@ export class CoupleChannel {
       .on('broadcast', { event: 'changed' }, ({ payload }) => this.changes.emit(payload as ChangedEvent))
       .on('broadcast', { event: 'draw' }, ({ payload }) => this.draw.emit(payload as DrawEvent))
       .on('broadcast', { event: 'cards' }, ({ payload }) => this.cards.emit(payload as CardEvent))
+      .on('broadcast', { event: 'cake' }, ({ payload }) => this.cake.emit(payload as CakeEvent))
       .on('presence', { event: 'sync' }, () => {
         const state = this.live?.presenceState() ?? {};
         this.online = new Set(Object.keys(state));
@@ -142,6 +146,11 @@ export class CoupleChannel {
   /** Show a talk card (or put them away) on my partner's call screen too. */
   sendCards(table: CardEvent['table']) {
     void this.live?.send({ type: 'broadcast', event: 'cards', payload: { from: this.userId, table } satisfies CardEvent });
+  }
+
+  /** Bring the cake out (or put it away) on my partner's call screen, knife and all. */
+  sendCake(cake: CakeEvent['cake']) {
+    void this.live?.send({ type: 'broadcast', event: 'cake', payload: { from: this.userId, cake } satisfies CakeEvent });
   }
 
   async sendSignal(event: SignalEvent) {
