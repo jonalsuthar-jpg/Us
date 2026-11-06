@@ -6,8 +6,8 @@
  *       mistaken sign-up). Paired and protected accounts are refused, so an
  *       admin can never take a couple's shared space away.
  *
- * If the caller is paired, the couple's Storage folders ("<couple_id>/" in the
- * memories, chat and snaps buckets, and the chat videos in R2) are removed first, because SQL cascades can't reach Storage.
+ * If the caller is paired, the couple's files in R2 (every "<bucket>/<couple_id>/"
+ * folder, and the chat videos) are removed first, because SQL cascades can't reach them.
  * Deleting the auth user then cascades through profiles → couples → every
  * couple-scoped table, and every owner-only table.
  *
@@ -16,7 +16,7 @@
 import { cors, json, requireAdmin, requireUser } from '../_shared/auth.ts';
 import { removeFolder } from '../_shared/r2.ts';
 
-const BUCKETS = ['memories', 'chat', 'snaps'];
+const BUCKETS = ['memories', 'chat', 'snaps', 'drawings', 'birthday'];
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -29,22 +29,12 @@ Deno.serve(async (req) => {
   if (user instanceof Response) return user;
   const { admin, userId, coupleId } = user;
 
-  for (const name of coupleId ? BUCKETS : []) {
-    const bucket = admin.storage.from(name);
-    for (let pass = 0; pass < 100; pass++) {
-      const { data, error } = await bucket.list(coupleId!, { limit: 500 });
-      if (error) return json({ error: 'storage_list_failed' }, 500);
-      const paths = (data ?? []).filter((f) => f.id).map((f) => `${coupleId}/${f.name}`);
-      if (!paths.length) break;
-      const { error: removeError } = await bucket.remove(paths);
-      if (removeError) return json({ error: 'storage_remove_failed' }, 500);
-    }
-  }
   if (coupleId) {
     try {
+      for (const name of BUCKETS) await removeFolder(`${name}/${coupleId}/`);
       await removeFolder(`${coupleId}/`);
     } catch (e) {
-      // Only ciphertext is there; don't hold the account hostage to it.
+      // Don't hold the account hostage to a storage hiccup.
       console.error('r2 cleanup failed', e);
     }
   }

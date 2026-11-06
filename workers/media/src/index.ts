@@ -6,9 +6,11 @@
  *
  *   GET    /<path>?exp=…&sig=…   → the file
  *   PUT    /<path>?exp=…&sig=…   → store the request body
- *   DELETE /<prefix>/?exp=…&sig=… → remove everything under the prefix
+ *   DELETE /<path>?exp=…&sig=…   → remove the file (a path ending in "/" removes everything under it)
+ *   POST   /<path>?exp=…&from=<src>&sig=… → copy src to path
  *
- * sig = hex HMAC-SHA256(MEDIA_SIGNING_KEY, "<METHOD>\n<path>\n<exp>")
+ * sig = hex HMAC-SHA256(MEDIA_SIGNING_KEY, "<METHOD>\n<path>\n<exp>"),
+ * or "COPY\n<path>\n<exp>\n<src>" for a copy.
  */
 export interface Env {
   BUCKET: R2Bucket;
@@ -28,7 +30,16 @@ export default {
     const exp = Number(url.searchParams.get('exp'));
     const sig = url.searchParams.get('sig') ?? '';
     if (!path || !Number.isFinite(exp) || exp * 1000 < Date.now()) return text('expired', 403, cors);
-    if (!(await verify(env.MEDIA_SIGNING_KEY, `${req.method}\n${path}\n${exp}`, sig))) return text('forbidden', 403, cors);
+    const from = url.searchParams.get('from');
+    const signed = req.method === 'POST' && from ? `COPY\n${path}\n${exp}\n${from}` : `${req.method}\n${path}\n${exp}`;
+    if (!(await verify(env.MEDIA_SIGNING_KEY, signed, sig))) return text('forbidden', 403, cors);
+
+    if (req.method === 'POST' && from) {
+      const src = await env.BUCKET.get(from);
+      if (!src) return text('not found', 404, cors);
+      await env.BUCKET.put(path, src.body, { httpMetadata: src.httpMetadata });
+      return new Response(null, { status: 200, headers: cors });
+    }
 
     if (req.method === 'GET') {
       const obj = await env.BUCKET.get(path);
@@ -72,7 +83,7 @@ function corsFor(req: Request, env: Env): Record<string, string> {
   if (!origin || !allowed.includes(origin)) return {};
   return {
     'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET, PUT, DELETE, OPTIONS',
+    'access-control-allow-methods': 'GET, PUT, POST, DELETE, OPTIONS',
     'access-control-allow-headers': 'content-type',
     'access-control-max-age': '86400',
     vary: 'origin',

@@ -2,12 +2,13 @@ import type { Database, Json } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
 import { forgetSignedUrl, signedUrls } from './signed-urls';
+import { removeFiles, uploadFile } from './media';
 
 /**
  * A birthday room (see 20261107000000_birthday.sql): a story the maker writes
  * and the birthday person taps through, locked until midnight on the day.
  */
-export const BIRTHDAY_BUCKET = 'birthday';
+export const BIRTHDAY_BUCKET = 'birthday' as const;
 export const BIRTHDAY_TOPIC = 'birthday';
 
 function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
@@ -124,13 +125,12 @@ export async function uploadBirthdayFile(
 ): Promise<string> {
   const type = contentType.split(';')[0]!.trim().toLowerCase();
   const path = `${room.couple_id}/${room.id}/${uuid()}.${EXT[type] ?? 'bin'}`;
-  const { error } = await sb.storage.from(BIRTHDAY_BUCKET).upload(path, body, { contentType: type, upsert: false });
-  if (error) throw error;
+  await uploadFile(sb, BIRTHDAY_BUCKET, path, body, type);
   return path;
 }
 
 export async function removeBirthdayFile(sb: UsClient, path: string): Promise<void> {
-  await sb.storage.from(BIRTHDAY_BUCKET).remove([path]);
+  await removeFiles(sb, BIRTHDAY_BUCKET, [path]);
   forgetSignedUrl(BIRTHDAY_BUCKET, path);
 }
 

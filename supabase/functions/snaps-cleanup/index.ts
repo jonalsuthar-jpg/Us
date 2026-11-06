@@ -9,6 +9,7 @@
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { json } from '../_shared/auth.ts';
+import { removeFile } from '../_shared/r2.ts';
 
 Deno.serve(async (req) => {
   const secret = Deno.env.get('CRON_SECRET');
@@ -27,8 +28,12 @@ Deno.serve(async (req) => {
       .limit(500);
     if (error) return json({ error: 'list_failed', removed }, 500);
     if (!data?.length) break;
-    const { error: storageError } = await admin.storage.from('snaps').remove(data.map((s) => s.photo_path));
-    if (storageError) return json({ error: 'storage_remove_failed', removed }, 500);
+    try {
+      for (const s of data) await removeFile(`snaps/${s.photo_path}`);
+    } catch (e) {
+      console.error('snaps-cleanup', e);
+      return json({ error: 'storage_remove_failed', removed }, 500);
+    }
     const { error: deleteError } = await admin.from('snaps').delete().in('id', data.map((s) => s.id));
     if (deleteError) return json({ error: 'delete_failed', removed }, 500);
     removed += data.length;

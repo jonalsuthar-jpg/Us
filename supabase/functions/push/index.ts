@@ -16,6 +16,7 @@
  *      APP_URL (web origin for click-through, e.g. https://us.example.com)
  */
 import { cors, json, hasFeature, requireCaller } from '../_shared/auth.ts';
+import { presign } from '../_shared/r2.ts';
 
 type Category =
   | 'incoming_call'
@@ -118,7 +119,7 @@ Deno.serve(async (req) => {
   const avatar = me?.avatar_url
     ? /^https?:/.test(me.avatar_url)
       ? me.avatar_url
-      : (await admin.storage.from('memories').createSignedUrl(me.avatar_url, 7 * 24 * 3600)).data?.signedUrl ?? null
+      : await presign('GET', `memories/${me.avatar_url}`, 7 * 24 * 3600).catch(() => null)
     : null;
 
   let category: Category;

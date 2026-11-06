@@ -7,6 +7,7 @@ import {
   saveDrawing,
   signedPhotoUrls,
   signedUrls,
+  uploadFile,
   uuid,
   type DrawBackground,
   type Drawing,
@@ -49,8 +50,7 @@ export async function uploadBackground(sb: ReturnType<typeof useCouple>['sb'], c
   const { blob, type } = await shrinkPhoto(file, 1600);
   const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg';
   const path = `${coupleId}/bg-${uuid()}.${ext}`;
-  const { error } = await sb.storage.from(DRAW_BUCKET).upload(path, blob, { contentType: type });
-  if (error) throw error;
+  await uploadFile(sb, DRAW_BUCKET, path, blob, type);
   return { kind: 'photo', bucket: 'drawings', path };
 }
 

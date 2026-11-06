@@ -3,6 +3,7 @@ import type { Sticker } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
 import { CHAT_BUCKET, ENCRYPTED_MIME, toBytes } from './messages';
+import { removeFiles, uploadFile } from './media';
 
 /** "Our stickers changed" ping on the couple channel. */
 export const STICKERS_TOPIC = 'stickers';
@@ -25,10 +26,8 @@ export async function saveSticker(
   s: { coupleId: string; me: string; png: Blob | ArrayBuffer | Uint8Array; width?: number; height?: number; cipher?: ChatCipher | null },
 ): Promise<Sticker> {
   const path = stickerPath(s.coupleId);
-  const { error } = s.cipher
-    ? await sb.storage.from(CHAT_BUCKET).upload(path, s.cipher.encryptFile(path, await toBytes(s.png)), { contentType: ENCRYPTED_MIME, upsert: false })
-    : await sb.storage.from(CHAT_BUCKET).upload(path, s.png, { contentType: 'image/png', upsert: false });
-  if (error) throw error;
+  if (s.cipher) await uploadFile(sb, CHAT_BUCKET, path, s.cipher.encryptFile(path, await toBytes(s.png)), ENCRYPTED_MIME);
+  else await uploadFile(sb, CHAT_BUCKET, path, s.png, 'image/png');
   try {
     return unwrap(
       await sb
@@ -38,7 +37,7 @@ export async function saveSticker(
         .single(),
     );
   } catch (e) {
-    await sb.storage.from(CHAT_BUCKET).remove([path]).catch(() => {});
+    await removeFiles(sb, CHAT_BUCKET, [path]).catch(() => {});
     throw e;
   }
 }

@@ -7,13 +7,14 @@ import { draftMessage, sendMessage } from './messages';
 import { toDateKey } from './plan';
 import { notifyPartner } from './push';
 import { forgetSignedUrl, signedUrls } from './signed-urls';
+import { copyFile, removeFiles, uploadFile } from './media';
 
 /**
  * Snaps: photos that last 24 hours. RLS stops returning a snap the moment it
  * expires, and the snaps-cleanup function deletes it and its file hourly.
  */
 
-export const SNAPS_BUCKET = 'snaps';
+export const SNAPS_BUCKET = 'snaps' as const;
 /** Broadcast on the couple channel whenever a snap is posted, seen, reacted to or deleted. */
 export const SNAP_TOPIC = 'snaps';
 export const SNAP_REACTIONS = ['❤️', '😂', '😍', '😮', '😢', '🔥'] as const;
@@ -82,8 +83,7 @@ export async function postSnap(
   const path = `${coupleId}/${uuid()}.${EXT[photo.contentType] ?? 'jpg'}`;
   const text = caption?.trim() || null;
   const sealed = text && cipher ? cipher.encryptCaption(path, text) : null;
-  const { error } = await sb.storage.from(SNAPS_BUCKET).upload(path, photo.body, { contentType: photo.contentType, upsert: false });
-  if (error) throw error;
+  await uploadFile(sb, SNAPS_BUCKET, path, photo.body, photo.contentType);
   const { data, error: insertError } = await sb
     .from('snaps')
     .insert({
@@ -97,7 +97,7 @@ export async function postSnap(
     .select('*')
     .single();
   if (insertError) {
-    await sb.storage.from(SNAPS_BUCKET).remove([path]);
+    await removeFiles(sb, SNAPS_BUCKET, [path]).catch(() => {});
     throw insertError;
   }
   void notifyPartner(sb, { category: 'new_snap', snapId: data.id });
@@ -118,8 +118,7 @@ export async function reactToSnap(sb: UsClient, id: string, emoji: string | null
 
 /** Delete one of my snaps before it expires. */
 export async function deleteSnap(sb: UsClient, snap: Pick<SnapRow, 'id' | 'photo_path'>): Promise<void> {
-  const { error } = await sb.storage.from(SNAPS_BUCKET).remove([snap.photo_path]);
-  if (error) throw error;
+  await removeFiles(sb, SNAPS_BUCKET, [snap.photo_path]);
   forgetSignedUrl(SNAPS_BUCKET, snap.photo_path);
   unwrap(await sb.from('snaps').delete().eq('id', snap.id));
 }
@@ -144,8 +143,7 @@ export async function keepSnap(
   const existing = unwrap<Memory | null>(await sb.from('memories').select('*').eq('from_snap', snap.id).maybeSingle());
   if (existing) return existing;
   const path = `${snap.couple_id}/${uuid()}.${snap.photo_path.split('.').pop() ?? 'jpg'}`;
-  const { error } = await sb.storage.from(SNAPS_BUCKET).copy(snap.photo_path, path, { destinationBucket: MEMORY_BUCKET });
-  if (error) throw error;
+  await copyFile(sb, { bucket: SNAPS_BUCKET, path: snap.photo_path }, { bucket: MEMORY_BUCKET, path });
   const { data, error: insertError } = await sb
     .from('memories')
     .insert({
@@ -159,7 +157,7 @@ export async function keepSnap(
     .select('*')
     .single();
   if (insertError) {
-    await sb.storage.from(MEMORY_BUCKET).remove([path]);
+    await removeFiles(sb, MEMORY_BUCKET, [path]).catch(() => {});
     // My partner kept it at the same moment.
     if (insertError.code === '23505') {
       const kept = unwrap<Memory | null>(await sb.from('memories').select('*').eq('from_snap', snap.id).maybeSingle());

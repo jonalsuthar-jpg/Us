@@ -14,6 +14,7 @@ export * from './api/chat-keys';
 export * from './api/chat-media';
 export * from './api/chat-video';
 export * from './api/signed-urls';
+export * from './api/media';
 export * from './api/legacy-encryption';
 export * from './crypto';
 export * from './api/gifs';

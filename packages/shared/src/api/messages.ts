@@ -4,6 +4,7 @@ import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
 import { isVideoPath, uploadChatVideo, videoUrls } from './chat-video';
 import { signedUrls } from './signed-urls';
+import { uploadFile } from './media';
 
 const SELECT = '*, call:calls(*)';
 
@@ -131,7 +132,7 @@ export async function ackMessages(sb: UsClient, status: Exclude<MessageStatus, '
 
 // ------------------------------------------------------------------ media ---
 
-export const CHAT_BUCKET = 'chat';
+export const CHAT_BUCKET = 'chat' as const;
 
 /** GIFs and stickers are GIPHY links rather than files in our folder. */
 export function isLinkedMedia(kind: MediaKind | null | undefined): kind is 'gif' | 'sticker' {
@@ -179,13 +180,11 @@ export async function uploadChatMedia(
   if (cipher) {
     const path = `${coupleId}/${messageId}.enc`;
     const sealed = cipher.encryptFile(path, await toBytes(body));
-    const { error } = await sb.storage.from(CHAT_BUCKET).upload(path, sealed, { contentType: ENCRYPTED_MIME, upsert: true });
-    if (error) throw error;
+    await uploadFile(sb, CHAT_BUCKET, path, sealed, ENCRYPTED_MIME);
     return path;
   }
   const path = `${coupleId}/${messageId}.${MEDIA_EXT[type] ?? 'bin'}`;
-  const { error } = await sb.storage.from(CHAT_BUCKET).upload(path, body, { contentType: type, upsert: true });
-  if (error) throw error;
+  await uploadFile(sb, CHAT_BUCKET, path, body, type);
   return path;
 }
 

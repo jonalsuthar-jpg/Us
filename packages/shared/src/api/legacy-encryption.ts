@@ -3,6 +3,7 @@ import type { MessageRow } from '../database.types';
 import type { UsClient } from '../supabase';
 import { CHAT_BUCKET, chatMediaUrls, ENCRYPTED_MIME } from './messages';
 import { listStickers } from './stickers';
+import { uploadFile } from './media';
 
 const BATCH = 50;
 
@@ -35,8 +36,7 @@ async function sealFileInPlace(sb: UsClient, cipher: ChatCipher, path: string, s
   if (!res.ok) throw new Error(`file_${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (fileKeyVersion(bytes) !== null) return;
-  const { error } = await sb.storage.from(CHAT_BUCKET).upload(path, cipher.encryptFile(path, bytes), { contentType: ENCRYPTED_MIME, upsert: true });
-  if (error) throw error;
+  await uploadFile(sb, CHAT_BUCKET, path, cipher.encryptFile(path, bytes), ENCRYPTED_MIME);
 }
 
 /**

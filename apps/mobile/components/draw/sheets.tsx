@@ -1,4 +1,4 @@
-import { BOARD_H, BOARD_W, COLOURING_PAGES, DRAW_BUCKET, listMemories, PAGE_INK, signedPhotoUrls, uuid, type DrawBackground, type Memory } from '@us/shared';
+import { BOARD_H, BOARD_W, COLOURING_PAGES, DRAW_BUCKET, listMemories, PAGE_INK, signedPhotoUrls, uploadFile, uuid, type DrawBackground, type Memory } from '@us/shared';
 import { useCouple } from '@us/shared/react';
 import * as ImagePicker from 'expo-image-picker';
 import { ImagePlus, X } from 'lucide-react-native';
@@ -148,8 +148,7 @@ export function BackgroundSheet({ open, onClose, current, onPick }: { open: bool
               const bytes = await (await fetch(asset.uri)).arrayBuffer();
               const type = asset.mimeType ?? 'image/jpeg';
               const path = `${couple.id}/bg-${uuid()}.${type === 'image/png' ? 'png' : 'jpg'}`;
-              const { error: e } = await sb.storage.from(DRAW_BUCKET).upload(path, bytes, { contentType: type });
-              if (e) throw e;
+              await uploadFile(sb, DRAW_BUCKET, path, bytes, type);
               pick({ kind: 'photo', bucket: 'drawings', path });
             } catch {
               setError('That photo didn’t upload. Try a smaller one.');

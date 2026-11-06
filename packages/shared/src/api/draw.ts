@@ -6,8 +6,9 @@ import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
 import { createMemory, uploadMemoryPhoto } from './memory';
 import { forgetSignedUrl, signedUrls } from './signed-urls';
+import { removeFiles, uploadFile } from './media';
 
-export const DRAW_BUCKET = 'drawings';
+export const DRAW_BUCKET = 'drawings' as const;
 /** "Something changed in our drawings" ping on the couple channel. */
 export const DRAW_TOPIC = 'draw';
 
@@ -43,14 +44,13 @@ export async function saveDrawing(sb: UsClient, d: SaveDrawing): Promise<Drawing
   const id = uuid();
   const file = encodeDrawing(d.strokes, d.bg ?? null);
   const base = `${d.coupleId}/${id}`;
-  const store = sb.storage.from(DRAW_BUCKET);
   const json = new TextEncoder().encode(JSON.stringify(file));
-  const up1 = await store.upload(`${base}.json`, json, { contentType: 'application/json', upsert: false });
-  if (up1.error) throw up1.error;
-  const up2 = await store.upload(`${base}.png`, d.png, { contentType: 'image/png', upsert: false });
-  if (up2.error) {
-    await store.remove([`${base}.json`]).catch(() => {});
-    throw up2.error;
+  await uploadFile(sb, DRAW_BUCKET, `${base}.json`, json, 'application/json');
+  try {
+    await uploadFile(sb, DRAW_BUCKET, `${base}.png`, d.png, 'image/png');
+  } catch (e) {
+    await removeFiles(sb, DRAW_BUCKET, [`${base}.json`]).catch(() => {});
+    throw e;
   }
   const row: Insert = {
     id,
@@ -75,7 +75,7 @@ export async function saveDrawing(sb: UsClient, d: SaveDrawing): Promise<Drawing
   try {
     return unwrap(await sb.from('drawings').insert(row).select('*').single());
   } catch (e) {
-    await store.remove([row.strokes_path, row.png_path]).catch(() => {});
+    await removeFiles(sb, DRAW_BUCKET, [row.strokes_path, row.png_path]).catch(() => {});
     throw e;
   }
 }
@@ -133,7 +133,7 @@ export async function renameDrawing(sb: UsClient, id: string, title: string | nu
 
 export async function deleteDrawing(sb: UsClient, d: Pick<Drawing, 'id' | 'strokes_path' | 'png_path'>): Promise<void> {
   unwrap(await sb.from('drawings').delete().eq('id', d.id));
-  await sb.storage.from(DRAW_BUCKET).remove([d.strokes_path, d.png_path]).catch(() => {});
+  await removeFiles(sb, DRAW_BUCKET, [d.strokes_path, d.png_path]).catch(() => {});
   forgetSignedUrl(DRAW_BUCKET, d.png_path);
 }
 

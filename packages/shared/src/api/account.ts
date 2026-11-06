@@ -4,28 +4,18 @@ import { CHAT_BUCKET } from './messages';
 import { SNAPS_BUCKET } from './snaps';
 import { DRAW_BUCKET } from './draw';
 import { removeCoupleVideos } from './chat-video';
+import { removeAllFiles } from './media';
 
 /** Buckets that keep files under "<couple_id>/". */
 export const COUPLE_BUCKETS = [MEMORY_BUCKET, CHAT_BUCKET, SNAPS_BUCKET, DRAW_BUCKET];
 
 /**
- * Delete every file in the couple's Storage folders (memories, the photo of
- * us, chat photos and voice notes, snaps). SQL can't reach Storage, so this runs
- * before the couple row goes.
+ * Delete every file in the couple's folders (memories, the photo of us, chat
+ * photos and voice notes, snaps, drawings, birthday). The database can't
+ * reach R2, so this runs before the couple row goes.
  */
-export async function removeCouplePhotos(sb: UsClient, coupleId: string): Promise<void> {
-  for (const name of COUPLE_BUCKETS) {
-    const bucket = sb.storage.from(name);
-    // Each pass lists from the start again, since removed files drop out of the listing.
-    for (let pass = 0; pass < 100; pass++) {
-      const { data, error } = await bucket.list(coupleId, { limit: 500 });
-      if (error) throw error;
-      const paths = (data ?? []).filter((f) => f.id).map((f) => `${coupleId}/${f.name}`);
-      if (!paths.length) break;
-      const { error: removeError } = await bucket.remove(paths);
-      if (removeError) throw removeError;
-    }
-  }
+export async function removeCouplePhotos(sb: UsClient, _coupleId: string): Promise<void> {
+  await removeAllFiles(sb);
 }
 
 /**

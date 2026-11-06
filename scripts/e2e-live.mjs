@@ -225,21 +225,32 @@ await step('plan: pick_decision RPC', async () => {
   return `picked ${pick.label}`;
 });
 
-await step('memory: private photo bucket scoped to the couple', async () => {
+await step('memory: private photos in R2, scoped to the couple', async () => {
   const path = `${coupleId}/e2e-${Date.now()}.png`;
   const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='), (ch) => ch.charCodeAt(0));
-  const { error } = await alice.sb.storage.from('memories').upload(path, png, { contentType: 'image/png' });
-  if (error) throw error;
-  cleanup.push(() => alice.sb.storage.from('memories').remove([path]));
-  const { data: signed, error: e2 } = await bob.sb.storage.from('memories').createSignedUrl(path, 60);
-  if (e2) throw e2;
-  const res = await fetch(signed.signedUrl);
-  if (!res.ok) throw new Error(`partner fetch ${res.status}`);
-  const { error: e3 } = await carol.sb.storage.from('memories').createSignedUrl(path, 60);
-  if (!e3) throw new Error('outsider could read the photo');
-  const { error: e4 } = await carol.sb.storage.from('memories').upload(`${coupleId}/intruder.png`, png, { contentType: 'image/png' });
-  if (!e4) throw new Error('outsider could upload into the couple folder');
-  return 'partner reads, outsider blocked';
+  const media = async (who, body) => {
+    const { data, error } = await who.sb.functions.invoke('media', { body });
+    if (error) return { error };
+    return data;
+  };
+  const up = await media(alice, { action: 'upload', bucket: 'memories', path });
+  if (!up.url) throw new Error(`upload link: ${JSON.stringify(up)}`);
+  const put = await fetch(up.url, { method: 'PUT', body: png, headers: { 'content-type': 'image/png' } });
+  if (!put.ok) throw new Error(`upload ${put.status}`);
+  cleanup.push(() => media(alice, { action: 'remove', bucket: 'memories', paths: [path] }));
+  const { urls } = await media(bob, { action: 'download', bucket: 'memories', paths: [path] });
+  const res = await fetch(urls?.[path]);
+  if (!res.ok || (await res.arrayBuffer()).byteLength !== png.byteLength) throw new Error(`partner fetch ${res.status}`);
+  const outsider = await media(carol, { action: 'download', bucket: 'memories', paths: [path] });
+  if (outsider.urls?.[path]) throw new Error('outsider could read the photo');
+  const intruder = await media(carol, { action: 'upload', bucket: 'memories', path: `${coupleId}/intruder.png` });
+  if (intruder.url) throw new Error('outsider could upload into the couple folder');
+  const kept = await media(alice, { action: 'copy', from: { bucket: 'memories', path }, to: { bucket: 'drawings', path: `${coupleId}/e2e-copy.png` } });
+  if (!kept.ok) throw new Error(`copy: ${JSON.stringify(kept)}`);
+  cleanup.push(() => media(alice, { action: 'remove', bucket: 'drawings', paths: [`${coupleId}/e2e-copy.png`] }));
+  const tampered = await fetch(urls[path].replace('memories/', 'drawings/'));
+  if (tampered.ok) throw new Error('a link worked for another path');
+  return 'partner reads, outsider blocked, copy works, links are bound to their path';
 });
 
 for (const undo of cleanup.reverse()) await undo();

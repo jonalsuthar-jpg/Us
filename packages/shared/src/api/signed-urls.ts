@@ -1,5 +1,6 @@
 import { readCache, writeCache } from '../react/data-cache';
 import type { UsClient } from '../supabase';
+import { signDownloads, type MediaBucket } from './media';
 
 /** Links are signed for this long unless the caller asks otherwise. */
 export const LINK_LIFETIME_S = 6 * 3600;
@@ -17,14 +18,8 @@ const keyFor = (bucket: string) => `signed:${bucket}`;
  * again. Kept links go through data-cache, so they survive a cold start on
  * the phone and are wiped with it on sign-out.
  */
-export function signedUrls(sb: UsClient, bucket: string, paths: string[], expiresIn = LINK_LIFETIME_S): Promise<Record<string, string>> {
-  return keptLinks(bucket, paths, expiresIn, async (missing) => {
-    const { data, error } = await sb.storage.from(bucket).createSignedUrls(missing, expiresIn);
-    if (error) throw error;
-    const out: Record<string, string> = {};
-    for (const row of data ?? []) if (row.path && row.signedUrl) out[row.path] = row.signedUrl;
-    return out;
-  });
+export function signedUrls(sb: UsClient, bucket: MediaBucket, paths: string[], expiresIn = LINK_LIFETIME_S): Promise<Record<string, string>> {
+  return keptLinks(`r2:${bucket}`, paths, expiresIn, (missing) => signDownloads(sb, bucket, missing, expiresIn));
 }
 
 /**
@@ -62,9 +57,10 @@ export async function keptLinks(
 }
 
 /** Forget a file's link (it was deleted or replaced). */
-export function forgetSignedUrl(bucket: string, path: string) {
-  const kept = readCache<Kept>(keyFor(bucket));
+export function forgetSignedUrl(bucket: MediaBucket, path: string) {
+  const store = keyFor(`r2:${bucket}`);
+  const kept = readCache<Kept>(store);
   if (!kept?.[path]) return;
   const { [path]: _gone, ...rest } = kept;
-  writeCache(keyFor(bucket), rest);
+  writeCache(store, rest);
 }

@@ -2,11 +2,12 @@ import type { Database, Memory, MemoryRating } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
 import { forgetSignedUrl, signedUrls } from './signed-urls';
+import { removeFiles, uploadFile } from './media';
 
 type Insert<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert'];
 type Update<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update'];
 
-export const MEMORY_BUCKET = 'memories';
+export const MEMORY_BUCKET = 'memories' as const;
 
 function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
   if (error) throw error;
@@ -50,14 +51,12 @@ export async function uploadMemoryPhoto(
   contentType: string,
 ): Promise<string> {
   const path = `${coupleId}/${uuid()}.${EXT[contentType] ?? 'jpg'}`;
-  const { error } = await sb.storage.from(MEMORY_BUCKET).upload(path, body, { contentType, upsert: false });
-  if (error) throw error;
+  await uploadFile(sb, MEMORY_BUCKET, path, body, contentType);
   return path;
 }
 
 export async function removeMemoryPhoto(sb: UsClient, path: string): Promise<void> {
-  const { error } = await sb.storage.from(MEMORY_BUCKET).remove([path]);
-  if (error) throw error;
+  await removeFiles(sb, MEMORY_BUCKET, [path]);
   forgetSignedUrl(MEMORY_BUCKET, path);
 }
 
