@@ -1,7 +1,8 @@
-import { uploadBirthdayFile, type BirthdayContent, type BirthdayMoment, type BirthdayRoom, type BirthdaySection } from '@us/shared';
+import { BIRTHDAY_SONG_MAX_BYTES, songType, uploadBirthdayFile, type BirthdayContent, type BirthdayMoment, type BirthdayRoom, type BirthdaySection } from '@us/shared';
 import { useCouple } from '@us/shared/react';
+import { File as DeviceFile } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { Plus, Trash2 } from 'lucide-react-native';
+import { Music, Plus, Trash2 } from 'lucide-react-native';
 import { useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
 import { Button, IconButton } from '../ui/button';
@@ -48,6 +49,7 @@ export function BirthdayEditor({
 
 function Form({ room, section, urls, onSave, onClose }: { room: BirthdayRoom; section: BirthdaySection; urls: Record<string, string>; onSave: Save; onClose: () => void }) {
   const { sb } = useCouple();
+  const c = usePalette();
   const content = room.content;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +117,27 @@ function Form({ room, section, urls, onSave, onClose }: { room: BirthdayRoom; se
     });
   }
 
+  /** A song already on the phone: any audio file from Files, Downloads, WhatsApp… */
+  async function pickSong() {
+    let picked: InstanceType<typeof DeviceFile> | null = null;
+    try {
+      const res = await DeviceFile.pickFileAsync({ mimeTypes: ['audio/*'] });
+      picked = res.canceled ? null : res.result;
+    } catch {
+      return setError('Couldn’t open your files. Try again.');
+    }
+    if (!picked) return;
+    const file = picked;
+    const type = songType(file.name, file.type);
+    if (!type) return setError('That isn’t an audio file. Pick an MP3, M4A or similar.');
+    if (file.size > BIRTHDAY_SONG_MAX_BYTES) return setError('That file is over 30 MB. Pick a shorter or smaller one.');
+    await run(async () => {
+      const path = await uploadBirthdayFile(sb, room, await file.bytes(), type);
+      setSong((s) => ({ ...s, audio_path: path, duration_ms: null }));
+      setLocalPhotos((p) => ({ ...p, [path]: file.uri }));
+    });
+  }
+
   async function pickPhoto(i: number) {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.7 });
     const asset = res.canceled ? null : res.assets[0];
@@ -137,13 +160,16 @@ function Form({ room, section, urls, onSave, onClose }: { room: BirthdayRoom; se
 
       {section === 'song' ? (
         <>
-          <Text className="text-small text-ink-soft">Sing “Happy Birthday” (badly is fine). It plays right after she blows out the candles.</Text>
+          <Text className="text-small text-ink-soft">Sing “Happy Birthday” (badly is fine), or upload a recording or song you already have. It plays right after she blows out the candles.</Text>
           {song.audio_path && src(song.audio_path) ? (
             <View className="items-center rounded-[22px] bg-plum-900 py-5">
               <SongPlayer key={song.audio_path} url={src(song.audio_path)!} />
             </View>
           ) : null}
           <VoiceRecorder onDone={(uri, ms) => void recorded(uri, ms)} />
+          <Button variant="secondary" icon={<Music size={18} color={c.ink} />} loading={busy} onPress={() => void pickSong()}>
+            {song.audio_path ? 'Upload a different audio file' : 'Upload an audio file'}
+          </Button>
           <Field label="A line under it" value={line} onChangeText={setLine} maxLength={160} />
         </>
       ) : null}

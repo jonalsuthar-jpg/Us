@@ -1,8 +1,8 @@
 'use client';
 
-import { uploadBirthdayFile, type BirthdayContent, type BirthdayMoment, type BirthdayRoom, type BirthdaySection } from '@us/shared';
+import { BIRTHDAY_SONG_MAX_BYTES, songType, uploadBirthdayFile, type BirthdayContent, type BirthdayMoment, type BirthdayRoom, type BirthdaySection } from '@us/shared';
 import { useCouple } from '@us/shared/react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Music, Plus, Trash2 } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -67,6 +67,7 @@ function Form({ room, section, urls, onSave, onClose }: { room: BirthdayRoom; se
   const [local, setLocal] = useState<Record<string, string>>({});
   const photoFor = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null);
+  const songInput = useRef<HTMLInputElement>(null);
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -118,6 +119,18 @@ function Form({ room, section, urls, onSave, onClose }: { room: BirthdayRoom; se
       setLocal((p) => ({ ...p, [path]: URL.createObjectURL(blob) }));
     });
 
+  /** A song already on this computer or phone. */
+  const pickedSong = (file: File) => {
+    const type = songType(file.name, file.type);
+    if (!type) return setError('That isn’t an audio file. Pick an MP3, M4A or similar.');
+    if (file.size > BIRTHDAY_SONG_MAX_BYTES) return setError('That file is over 30 MB. Pick a shorter or smaller one.');
+    return run(async () => {
+      const path = await uploadBirthdayFile(sb, room, file, type);
+      setSong((s) => ({ ...s, audio_path: path, duration_ms: null }));
+      setLocal((p) => ({ ...p, [path]: URL.createObjectURL(file) }));
+    });
+  };
+
   const photo = (file: File) =>
     run(async () => {
       const { blob, type } = await shrinkPhoto(file);
@@ -137,13 +150,28 @@ function Form({ room, section, urls, onSave, onClose }: { room: BirthdayRoom; se
 
       {section === 'song' ? (
         <>
-          <p className="text-small text-ink-soft">Sing “Happy Birthday” (badly is fine). It plays right after she blows out the candles.</p>
+          <p className="text-small text-ink-soft">Sing “Happy Birthday” (badly is fine), or upload a recording or song you already have. It plays right after she blows out the candles.</p>
           {song.audio_path && src(song.audio_path) ? (
             <div className="rounded-[22px] bg-plum-900 py-5">
               <SongPlayer key={song.audio_path} url={src(song.audio_path)!} />
             </div>
           ) : null}
           <VoiceRecorder onDone={(b, ms) => void recorded(b, ms)} />
+          <Button type="button" variant="secondary" block loading={busy} onClick={() => songInput.current?.click()}>
+            <Music className="h-4 w-4" />
+            {song.audio_path ? 'Upload a different audio file' : 'Upload an audio file'}
+          </Button>
+          <input
+            ref={songInput}
+            type="file"
+            accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = '';
+              if (f) void pickedSong(f);
+            }}
+          />
           <Field label="A line under it" value={line} onChange={(e) => setLine(e.target.value)} maxLength={160} />
         </>
       ) : null}

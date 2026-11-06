@@ -101,7 +101,34 @@ export async function saveBirthdaySection<K extends BirthdaySection>(
   return toRoom(row);
 }
 
+/** Songs picked from the phone or computer: big enough for a few minutes of music. */
+export const BIRTHDAY_SONG_MAX_BYTES = 30 * 1024 * 1024;
+
+const AUDIO_BY_EXT: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  mp4: 'audio/mp4',
+  aac: 'audio/aac',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  opus: 'audio/ogg',
+  webm: 'audio/webm',
+  flac: 'audio/flac',
+};
+
+/**
+ * The type to store a picked audio file as. Pickers often report nothing, or
+ * "application/octet-stream", so the name's extension decides then. null: not
+ * a sound we can play.
+ */
+export function songType(name: string, reported: string | null | undefined): string | null {
+  const type = (reported ?? '').split(';')[0]!.trim().toLowerCase();
+  if (type.startsWith('audio/')) return type === 'audio/x-wav' ? 'audio/wav' : type === 'audio/mp3' ? 'audio/mpeg' : type;
+  return AUDIO_BY_EXT[name.split('.').pop()?.toLowerCase() ?? ''] ?? null;
+}
+
 const EXT: Record<string, string> = {
+  'audio/flac': 'flac',
   'audio/mp4': 'm4a',
   'audio/m4a': 'm4a',
   'audio/x-m4a': 'm4a',

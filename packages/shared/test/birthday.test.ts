@@ -27,3 +27,14 @@ describe('birthday room', () => {
     expect(moveKnife(cake, 0)).toBe(cake);
   });
 });
+
+describe('birthday songs', () => {
+  it('stores picked audio under a type we can play', async () => {
+    const { songType } = await import('../src');
+    expect(songType('song.mp3', '')).toBe('audio/mpeg');
+    expect(songType('Voice 001.m4a', 'application/octet-stream')).toBe('audio/mp4');
+    expect(songType('x', 'audio/mpeg')).toBe('audio/mpeg');
+    expect(songType('x.wav', 'audio/x-wav')).toBe('audio/wav');
+    expect(songType('notes.pdf', 'application/pdf')).toBeNull();
+  });
+});
