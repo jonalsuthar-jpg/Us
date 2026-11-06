@@ -4,7 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { Camera, ChevronLeft } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, AppState, ScrollView, View } from 'react-native';
+import { Alert, AppState, Linking, Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatSecurity } from '@/components/chat/chat-key';
 import { Avatar } from '@/components/ui/avatar';
@@ -202,7 +202,15 @@ export default function Settings() {
         ) : (
           <Text className="text-small text-ink-muted">Push isn’t configured (EXPO_PUBLIC_ONESIGNAL_APP_ID).</Text>
         )}
-        {fullScreen ? null : (
+        {fullScreen ? (
+          <View className="gap-1">
+            <Text className="text-small text-ink-soft">Calls show on your lock screen.</Text>
+            {/* Android 14+ has its own switch for this; older phones allow it already, so the app's page is the place. */}
+            <Button variant="quiet" className="self-start px-0" onPress={() => (Platform.OS === 'android' && Number(Platform.Version) >= 34 ? openFullScreenSettings() : void Linking.openSettings())}>
+              Lock-screen call settings
+            </Button>
+          </View>
+        ) : (
           <>
             <Text className="text-small text-ink-soft">Calls can’t show on your lock screen yet. Allow full-screen notifications for Us.</Text>
             <Button variant="secondary" className="self-start" onPress={openFullScreenSettings}>
