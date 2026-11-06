@@ -7,7 +7,8 @@
  *
  * The old project (wucadjgznsoypbzpaeaq) was cut off for going over the free
  * plan's egress and only answers again once its quota refills (20 Nov 2026).
- * Needs the Supabase CLI logged in and wrangler logged in (see WRANGLER).
+ * Needs the Supabase CLI logged in and wrangler logged in (WRANGLER is its
+ * bin/wrangler.js, run with node so it also works on Windows).
  * Files already in R2 are skipped, so it's safe to run again.
  */
 import { createClient } from '@supabase/supabase-js';
@@ -19,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ref = process.argv[2] ?? 'wucadjgznsoypbzpaeaq';
-const WRANGLER = process.env.WRANGLER ?? 'C:/Users/jonal/AppData/Local/npm-cache/_npx/32026684e21afda6/node_modules/.bin/wrangler';
+const WRANGLER = process.env.WRANGLER ?? 'C:/Users/jonal/AppData/Local/npm-cache/_npx/32026684e21afda6/node_modules/wrangler/bin/wrangler.js';
 const BUCKETS = ['memories', 'chat', 'snaps', 'drawings', 'birthday'];
 
 const secret = JSON.parse(
@@ -42,7 +43,7 @@ async function list(bucket, prefix = '') {
   }
 }
 
-const wrangler = (args) => execFileSync(WRANGLER, args, { cwd: join(root, 'workers/media'), stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+const wrangler = (args) => execFileSync(process.execPath, [WRANGLER, ...args], { cwd: join(root, 'workers/media'), stdio: ['ignore', 'pipe', 'pipe'] }).toString();
 const exists = (key) => {
   try {
     wrangler(['r2', 'object', 'get', `us-media/${key}`, '--remote', '--pipe']);
