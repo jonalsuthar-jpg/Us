@@ -1,52 +1,42 @@
 /**
- * Cloudflare R2 (S3 API): chat videos live here rather than in Supabase
- * Storage, because R2 doesn't charge for downloads. Every file sits under
+ * Cloudflare R2: chat videos live here rather than in Supabase Storage,
+ * because R2 doesn't charge for downloads. Every file sits under
  * "<couple_id>/video/", encrypted on the device like the rest of the chat.
  *
- *   R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+ * The bucket sits behind the us-media Worker (workers/media), which only
+ * honours links signed here with the shared key:
+ *
+ *   MEDIA_URL, MEDIA_SIGNING_KEY
  */
-import { AwsClient } from 'npm:aws4fetch@1.0.20';
-
-let client: AwsClient | null = null;
-
-function r2(): { client: AwsClient; base: string } {
-  const account = Deno.env.get('R2_ACCOUNT_ID');
-  const bucket = Deno.env.get('R2_BUCKET');
-  const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID');
-  const secretAccessKey = Deno.env.get('R2_SECRET_ACCESS_KEY');
-  if (!account || !bucket || !accessKeyId || !secretAccessKey) throw new Error('r2_not_configured');
-  client ??= new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' });
-  return { client, base: `https://${account}.r2.cloudflarestorage.com/${bucket}` };
+function media(): { base: string; key: string } {
+  const base = Deno.env.get('MEDIA_URL');
+  const key = Deno.env.get('MEDIA_SIGNING_KEY');
+  if (!base || !key) throw new Error('r2_not_configured');
+  return { base: base.replace(/\/$/, ''), key };
 }
 
 const encodePath = (path: string) => path.split('/').map(encodeURIComponent).join('/');
 
+let hmacKey: { raw: string; key: CryptoKey } | null = null;
+
+async function sign(method: string, path: string, seconds: number): Promise<string> {
+  const { base, key } = media();
+  if (hmacKey?.raw !== key) {
+    hmacKey = { raw: key, key: await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']) };
+  }
+  const exp = Math.floor(Date.now() / 1000) + seconds;
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', hmacKey.key, new TextEncoder().encode(`${method}\n${path}\n${exp}`)));
+  const sig = [...mac].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `${base}/${encodePath(path)}?exp=${exp}&sig=${sig}`;
+}
+
 /** A link that lets whoever holds it GET or PUT one file, for `seconds`. */
-export async function presign(method: 'GET' | 'PUT', path: string, seconds: number): Promise<string> {
-  const { client, base } = r2();
-  const url = new URL(`${base}/${encodePath(path)}`);
-  url.searchParams.set('X-Amz-Expires', String(seconds));
-  const signed = await client.sign(new Request(url, { method }), { aws: { signQuery: true } });
-  return signed.url;
+export function presign(method: 'GET' | 'PUT', path: string, seconds: number): Promise<string> {
+  return sign(method, path, seconds);
 }
 
 /** Delete everything under a folder ("<couple_id>/"). */
 export async function removeFolder(prefix: string): Promise<void> {
-  const { client, base } = r2();
-  for (let pass = 0; pass < 100; pass++) {
-    const list = new URL(base);
-    list.searchParams.set('list-type', '2');
-    list.searchParams.set('prefix', prefix);
-    list.searchParams.set('max-keys', '500');
-    const res = await client.fetch(list);
-    if (!res.ok) throw new Error(`r2_list_failed ${res.status}`);
-    const keys = [...(await res.text()).matchAll(/<Key>([^<]+)<\/Key>/g)].map((m) => decodeXml(m[1]!));
-    if (!keys.length) return;
-    for (const key of keys) {
-      const del = await client.fetch(`${base}/${encodePath(key)}`, { method: 'DELETE' });
-      if (!del.ok && del.status !== 404) throw new Error(`r2_delete_failed ${del.status}`);
-    }
-  }
+  const res = await fetch(await sign('DELETE', prefix.endsWith('/') ? prefix : `${prefix}/`, 300), { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) throw new Error(`r2_delete_failed ${res.status}`);
 }
-
-const decodeXml = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');

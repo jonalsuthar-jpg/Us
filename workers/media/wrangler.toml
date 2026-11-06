@@ -1,0 +1,11 @@
+name = "us-media"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+account_id = "9fe18948847f988c942fc87d8afbc69c"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "us-media"
+
+[vars]
+ALLOWED_ORIGINS = "https://us-murex-one.vercel.app,http://localhost:3000"
