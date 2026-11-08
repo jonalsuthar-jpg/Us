@@ -1,4 +1,4 @@
-import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
+import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, saveSticker, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
 import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -22,6 +22,8 @@ import { StickerMaker } from '@/components/stickers/maker';
 import { StickerPicker } from '@/components/stickers/picker';
 import { FeatureOff } from '@/components/feature-off';
 import { GifPicker } from '@/components/chat/gif-picker';
+import { KeyboardMediaSheet, type KeyboardSendAs } from '@/components/chat/keyboard-media-sheet';
+import type { RichContent } from '@/modules/us-rich-input';
 import { clearMessageNotifications } from '@/modules/us-call';
 import { env } from '@/lib/env';
 import { preparePhoto, type ReadyPhoto } from '@/lib/photo';
@@ -100,7 +102,7 @@ function Thread() {
   }, [viewing]);
   const { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, react, pin } = useMessages({ viewing });
   const media = useChatMedia(messages);
-  const { cipher } = useChatKey();
+  const { cipher, sealer } = useChatKey();
   const [acting, setActing] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -205,6 +207,22 @@ function Thread() {
         upload: { body: bytes, contentType: ready === clip ? (clip.mimeType ?? 'video/mp4') : 'video/mp4' },
       },
     });
+  }
+
+  /** A GIF or sticker from the keyboard, sent the way it was asked for. */
+  const [fromKeyboard, setFromKeyboard] = useState<RichContent | null>(null);
+  async function sendFromKeyboard(k: RichContent, as: KeyboardSendAs) {
+    setFromKeyboard(null);
+    if (as === 'video') return sendClip({ uri: k.uri, durationMs: k.durationMs, width: k.width, height: k.height, fileSize: k.size, mimeType: k.mime }, '');
+    const bytes = await (await fetch(k.uri)).arrayBuffer();
+    const meta = { width: k.width || 320, height: k.height || 320 };
+    if (as === 'sticker' && isStickerMime(k.mime)) {
+      // Kept in Ours as it came, so it can be sent again.
+      const st = await saveSticker(sb, { coupleId: couple.id, me: me.id, png: bytes, mime: k.mime, ...meta, cipher: await sealer() });
+      channel.sendChanged(STICKERS_TOPIC);
+      return sendSticker(st, k.uri);
+    }
+    sendWithReply('', { media: { kind: 'image', meta, localUri: k.uri, upload: { body: bytes, contentType: k.mime } } });
   }
 
   async function sendVoice(uri: string, durationMs: number) {
@@ -509,6 +527,7 @@ function Thread() {
           onSticker={stickersOn ? () => setStickerPicker(true) : env.giphyKey ? () => setGifs(true) : undefined}
           onAttach={() => setAttach(true)}
           onCamera={() => setCamera(true)}
+          onRichContent={setFromKeyboard}
         />
         {draw ? (
           <DoodleSheet
@@ -571,6 +590,7 @@ function Thread() {
       </FormSheet>
       <PhotoViewer uri={photo} label="Photo" onClose={() => setPhoto(null)} />
       <VideoViewer uri={video} onClose={() => setVideo(null)} />
+      <KeyboardMediaSheet content={fromKeyboard} stickers={stickersOn} onClose={() => setFromKeyboard(null)} onSend={(k, as) => void sendFromKeyboard(k, as).catch(fail)} />
       <GifPicker
         open={gifs}
         onClose={() => setGifs(false)}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { draftMessage, isOurStickerPath, keepSticker, sendMessage, stickerPath, stickerTextBox, STICKER_TEXT_STYLES, type UsClient } from '../src';
+import { draftMessage, isOurStickerPath, keepSticker, sendMessage, stickerMime, stickerPath, stickerTextBox, STICKER_TEXT_STYLES, type UsClient } from '../src';
 
 function fakeSb(log: string[], insertError: unknown = null): UsClient {
   const chain = {
@@ -21,6 +21,17 @@ describe('our stickers', () => {
     expect(isOurStickerPath(p)).toBe(true);
     expect(isOurStickerPath('c1/photo.png')).toBe(false);
     expect(isOurStickerPath(null)).toBe(false);
+  });
+
+  it('keyboard stickers keep their own type, so they stay animated', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const gif = stickerPath('c1', id, 'image/gif');
+    expect(gif).toBe(`c1/sticker-${id}.gif`);
+    expect(isOurStickerPath(gif)).toBe(true);
+    expect(stickerMime(gif)).toBe('image/gif');
+    expect(stickerMime(stickerPath('c1', id, 'image/webp'))).toBe('image/webp');
+    expect(stickerMime(stickerPath('c1', id))).toBe('image/png');
+    expect(isOurStickerPath(`c1/sticker-${id}.mp4`)).toBe(false);
   });
 
   it('sending one points the message at the saved file; nothing is uploaded', async () => {

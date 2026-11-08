@@ -920,6 +920,10 @@ await test('sticker messages: a GIPHY link or one of our sticker files, nothing 
   await rejects(send({ path: `${couple.id}/photo.png` }), /media_shape/, 'not a sticker file');
   await rejects(send({ path: `${otherCouple.id}/sticker-33333333-3333-4333-8333-333333333333.png` }), /media_shape|media_in_couple_folder/, 'other couple');
   await rejects(send({ meta: JSON.stringify({ url: 'https://evil.example.com/x.gif' }) }), /media_shape/, 'other host');
+  // From the keyboard: an animated sticker keeps its type.
+  await send({ path: `${couple.id}/sticker-44444444-4444-4444-8444-444444444444.gif` });
+  await as(alice, () => q(`insert into public.stickers (couple_id, created_by, path) values ($1, $2, $3)`, [couple.id, alice, `${couple.id}/sticker-44444444-4444-4444-8444-444444444444.gif`]));
+  await rejects(send({ path: `${couple.id}/sticker-55555555-5555-4555-8555-555555555555.mp4` }), /media_shape/, 'not a picture');
 });
 
 console.log('\nEncrypted chat');

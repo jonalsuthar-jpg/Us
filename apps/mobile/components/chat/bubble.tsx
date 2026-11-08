@@ -67,6 +67,8 @@ export const Bubble = memo(function Bubble({
   const url = mediaUrl ?? message.localUri;
   const hasText = !!message.body?.trim();
   const photo = message.media_kind === 'image';
+  // A GIF from the keyboard, sent as a picture: it plays like one.
+  const gifPhoto = photo && (message.mime === 'image/gif' || !!message.media_path?.endsWith('.gif'));
   // GIFs and stickers: GIPHY links (animated), or a sticker we made (a file in
   // our chat folder). Stickers float without a bubble.
   const giphy = isLinkedMedia(message.media_kind) && isGiphyUrl(message.media_meta?.url) ? message.media_meta!.url! : null;
@@ -139,7 +141,13 @@ export const Bubble = memo(function Bubble({
                   transition={120}
                   style={{ width: 240, aspectRatio: photoAspect(meta), borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.08)' }}
                   contentFit="cover"
+                  autoplay={animate}
                 />
+                {gifPhoto ? (
+                  <View className="absolute bottom-2 left-2 rounded-full bg-black/45 px-2 py-0.5">
+                    <Text className="font-sans-semibold text-micro text-white">GIF</Text>
+                  </View>
+                ) : null}
               </Pressable>
             ) : (
               <View style={{ width: 240, aspectRatio: photoAspect(meta) }} className="rounded-[14px] bg-black/10" />

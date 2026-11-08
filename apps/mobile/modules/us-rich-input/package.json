@@ -1,0 +1,7 @@
+{
+  "name": "us-rich-input",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Keyboard GIFs and stickers on Android: lets the chat field take the pictures Gboard (and other keyboards) send, and pasted images.",
+  "main": "index.ts"
+}

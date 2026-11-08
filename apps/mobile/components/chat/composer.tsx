@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { Camera, Mic, Paperclip, SendHorizontal, Square, Sticker, Trash2, X } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
+import { useRichContent, type RichContent } from '@/modules/us-rich-input';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withSpring, withTiming, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { usePalette } from '../ui/palette';
 import { Text } from '../ui/text';
@@ -28,6 +29,7 @@ export function Composer({
   onSticker,
   onAttach,
   onCamera,
+  onRichContent,
 }: {
   partnerName: string;
   /** A draft to pick up where you left off. */
@@ -43,6 +45,8 @@ export function Composer({
   onAttach?: () => void;
   /** The in-app camera. */
   onCamera?: () => void;
+  /** A GIF or sticker picked on the keyboard (Gboard etc.), or a pasted image. */
+  onRichContent?: (content: RichContent) => void;
 }) {
   const [text, setText] = useState(initialText);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +57,8 @@ export function Composer({
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const rec = useAudioRecorderState(recorder, 250);
   const [recording, setRecording] = useState(false);
+  // The field is swapped out while recording, so it's hooked up again when it's back.
+  useRichContent(input, !recording, onRichContent);
 
   useEffect(() => {
     if (replyTo) input.current?.focus();

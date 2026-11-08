@@ -19,6 +19,8 @@ export interface Gif {
 
 interface GiphyImage {
   url?: string;
+  /** The same, as animated WebP: much smaller than the GIF. */
+  webp?: string;
   width?: string;
   height?: string;
 }
@@ -46,11 +48,12 @@ export async function searchGifs(apiKey: string, kind: GifKind, query: string, o
   return data.flatMap((g) => {
     const send = g.images.downsized ?? g.images.fixed_width ?? g.images.original;
     const preview = g.images.fixed_width ?? send;
-    if (!isGiphyUrl(send?.url) || !isGiphyUrl(preview?.url)) return [];
+    const previewUrl = isGiphyUrl(preview?.webp) ? preview.webp : preview?.url;
+    if (!isGiphyUrl(send?.url) || !isGiphyUrl(previewUrl)) return [];
     return [
       {
         id: g.id,
-        previewUrl: preview.url,
+        previewUrl,
         url: send.url,
         width: Number(send.width) || 200,
         height: Number(send.height) || 200,

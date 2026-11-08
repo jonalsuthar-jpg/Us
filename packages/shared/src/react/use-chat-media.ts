@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { openChatMedia, type MediaRequest } from '../api/chat-media';
 import { chatMediaUrls } from '../api/messages';
-import { isOurStickerPath } from '../api/stickers';
+import { isOurStickerPath, stickerMime } from '../api/stickers';
 import type { Message } from '../database.types';
 import { useChatKey } from './chat-key-provider';
 import { useCouple } from './couple-provider';
@@ -50,7 +50,7 @@ export function useChatMedia(messages: Pick<Message, 'media_path' | 'ciphertext'
       const p = m.media_path;
       if (!p) continue;
       if (isSealedMedia(m)) {
-        if (!opened[p] && !asked.current.has(`sealed:${p}`)) sealedOut.push({ path: p, mime: m.mime ?? (isOurStickerPath(p) ? 'image/png' : null) });
+        if (!opened[p] && !asked.current.has(`sealed:${p}`)) sealedOut.push({ path: p, mime: m.mime ?? (isOurStickerPath(p) ? stickerMime(p) : null) });
       } else if (!urls[p] && !asked.current.has(p)) plainOut.push(p);
     }
     return { plain: plainOut, sealed: sealedOut };

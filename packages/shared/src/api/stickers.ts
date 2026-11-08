@@ -15,19 +15,32 @@ function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
   return data as T;
 }
 
+/** The picture types a sticker file can be: ours are PNG; ones from the keyboard may be animated WebP or GIF. */
+const STICKER_EXT = { 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' } as const;
+export type StickerMime = keyof typeof STICKER_EXT;
+export const isStickerMime = (mime: string): mime is StickerMime => mime in STICKER_EXT;
+
 /** Sticker files sit at the top of our chat folder, so unpairing's cleanup finds them. */
-export const stickerPath = (coupleId: string, id: string = uuid()) => `${coupleId}/sticker-${id}.png`;
+export const stickerPath = (coupleId: string, id: string = uuid(), mime: StickerMime = 'image/png') => `${coupleId}/sticker-${id}.${STICKER_EXT[mime]}`;
 
-export const isOurStickerPath = (path: string | null | undefined) => !!path && /\/sticker-[0-9a-f-]{36}\.(png|webp)$/.test(path);
+export const isOurStickerPath = (path: string | null | undefined) => !!path && /\/sticker-[0-9a-f-]{36}\.(png|webp|gif)$/.test(path);
 
-/** Upload a sticker I made and keep it in Ours. With a cipher the file is encrypted (its path stays the same shape). */
+/** A sticker file's picture type, from its name. */
+export function stickerMime(path: string): StickerMime {
+  if (path.endsWith('.gif')) return 'image/gif';
+  if (path.endsWith('.webp')) return 'image/webp';
+  return 'image/png';
+}
+
+/** Upload a sticker I made (or picked on the keyboard: `mime` then says what it is) and keep it in Ours. With a cipher the file is encrypted (its path stays the same shape). */
 export async function saveSticker(
   sb: UsClient,
-  s: { coupleId: string; me: string; png: Blob | ArrayBuffer | Uint8Array; width?: number; height?: number; cipher?: ChatCipher | null },
+  s: { coupleId: string; me: string; png: Blob | ArrayBuffer | Uint8Array; mime?: StickerMime; width?: number; height?: number; cipher?: ChatCipher | null },
 ): Promise<Sticker> {
-  const path = stickerPath(s.coupleId);
+  const mime = s.mime ?? 'image/png';
+  const path = stickerPath(s.coupleId, uuid(), mime);
   if (s.cipher) await uploadFile(sb, CHAT_BUCKET, path, s.cipher.encryptFile(path, await toBytes(s.png)), ENCRYPTED_MIME);
-  else await uploadFile(sb, CHAT_BUCKET, path, s.png, 'image/png');
+  else await uploadFile(sb, CHAT_BUCKET, path, s.png, mime);
   try {
     return unwrap(
       await sb

@@ -1,6 +1,6 @@
 'use client';
 
-import { clusters, formatDay, groupByDay, keepSticker, listPinned, messagePreview, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type Message, type Sticker } from '@us/shared';
+import { clusters, formatDay, groupByDay, isStickerMime, keepSticker, listPinned, messagePreview, saveSticker, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type Message, type Sticker } from '@us/shared';
 import { useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import { ChatKeyBanner } from '@/components/chat/chat-key';
 import { ChevronsDown, Phone, Pin, Search, Video } from 'lucide-react';
@@ -15,6 +15,7 @@ import { StickerMaker } from '@/components/stickers/maker';
 import { StickerPicker } from '@/components/stickers/picker';
 import { env } from '@/lib/env';
 import { GifPicker } from '@/components/chat/gif-picker';
+import { PastedMediaDialog, type PastedSendAs } from '@/components/chat/pasted-media-dialog';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
 import { Dialog } from '@/components/ui/dialog';
@@ -43,7 +44,7 @@ function Thread() {
   const active = usePageActive();
   const { messages, loading, hasOlder, loadOlder, send, retry, react, pin } = useMessages({ viewing: active });
   const media = useChatMedia(messages);
-  const { cipher } = useChatKey();
+  const { cipher, sealer } = useChatKey();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -126,6 +127,27 @@ function Thread() {
       throw new VideoTooLongError();
     }
     sendWithReply(caption, { media: { kind: 'video', meta, localUri, upload: { body: file, contentType: file.type || 'video/mp4' } } });
+  }
+
+  /** Pasted: sent as it is (a GIF keeps moving), or kept in Ours and sent as a sticker. */
+  const [pasted, setPasted] = useState<File | null>(null);
+  async function sendPasted(file: File, as: PastedSendAs) {
+    setPasted(null);
+    if (as === 'video') return sendVideo(file, '');
+    let meta = { width: 320, height: 320 };
+    try {
+      const bmp = await createImageBitmap(file);
+      meta = { width: bmp.width, height: bmp.height };
+      bmp.close();
+    } catch {
+      // size is only a layout hint
+    }
+    if (as === 'sticker' && isStickerMime(file.type)) {
+      const st = await saveSticker(sb, { coupleId: couple.id, me: me.id, png: file, mime: file.type, ...meta, cipher: await sealer() });
+      channel.sendChanged(STICKERS_TOPIC);
+      return sendSticker(st, URL.createObjectURL(file));
+    }
+    sendWithReply('', { media: { kind: 'image', meta, localUri: URL.createObjectURL(file), upload: { body: file, contentType: file.type } } });
   }
 
   function sendVoice(blob: Blob, durationMs: number) {
@@ -390,7 +412,9 @@ function Thread() {
             onGif={env.giphyKey ? () => setGifs(true) : undefined}
             onDoodle={draw ? () => setDoodle(true) : undefined}
             onSticker={stickersOn ? () => setStickerPicker(true) : undefined}
+            onPasteMedia={setPasted}
           />
+          <PastedMediaDialog file={pasted} stickers={stickersOn} onClose={() => setPasted(null)} onSend={(f, as) => void sendPasted(f, as).catch(fail)} />
           {stickersOn ? (
             <>
               <StickerPicker

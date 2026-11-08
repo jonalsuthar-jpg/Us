@@ -23,6 +23,8 @@ interface ComposerProps {
   onDoodle?: () => void;
   /** Our stickers: send one, or make one from a photo. */
   onSticker?: () => void;
+  /** A GIF, sticker or picture pasted into the box. */
+  onPasteMedia?: (file: File) => void;
 }
 
 function pickAudioType(): string | undefined {
@@ -31,7 +33,7 @@ function pickAudioType(): string | undefined {
 }
 
 /** Auto-growing textarea. Enter sends; Shift+Enter is a new line. Photos and voice notes too. */
-export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply, onPhoto, onVoice, onGif, onDoodle, onSticker }: ComposerProps) {
+export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply, onPhoto, onVoice, onGif, onDoodle, onSticker, onPasteMedia }: ComposerProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -236,6 +238,12 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
               onChange(e.target.value);
             }}
             onKeyDown={onKeyDown}
+            onPaste={(e) => {
+              const file = onPasteMedia ? [...e.clipboardData.files].find((f) => /^(image\/(gif|png|webp|jpeg)|video\/mp4)$/.test(f.type)) : undefined;
+              if (!file) return;
+              e.preventDefault();
+              onPasteMedia!(file);
+            }}
             className="scrollbar-quiet max-h-[180px] flex-1 resize-none bg-transparent py-2.5 text-body text-ink placeholder:text-ink-muted/70 focus:outline-none"
           />
           {canRecord ? (
