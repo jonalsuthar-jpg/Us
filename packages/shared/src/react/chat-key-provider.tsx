@@ -44,8 +44,12 @@ export interface ChatKeyValue {
   /** My own code, shown while waiting for approval. */
   myCode: string | null;
   myDeviceId: string | null;
-  /** Whether I've saved a PIN backup. Without one, losing my devices loses the history. */
-  hasBackup: boolean;
+  /**
+   * Whether I've saved a PIN backup (without one, losing my devices loses
+   * the history). null until known: the last answer is remembered on the
+   * device, so a fresh start doesn't flash "Set PIN" while the server answers.
+   */
+  hasBackup: boolean | null;
   /**
    * My partner has an app that reads encrypted chat. Until then messages go
    * as before, so they never receive something they can't open.
@@ -107,6 +111,7 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
   // Once my partner could read encrypted chat, a slow or offline start never goes back to plaintext.
   const onKey = cacheKey(couple.id, 'chat:e2ee');
   const [partnerSeen, setPartnerSeen] = useState(() => readCache<boolean>(onKey) === true);
+  const pinKey = cacheKey(couple.id, 'chat:pin');
   const partnerSeenRef = useRef(partnerSeen);
   const lastPing = useRef(0);
   const lastLoad = useRef(0);
@@ -177,6 +182,10 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
   }, [sb, couple.id, me.id, partner.id, platform, channel, adoptKey]);
 
   const settled = useCallback(() => firstLoad.current ?? load(), [load]);
+
+  useEffect(() => {
+    if (state) writeCache(pinKey, state.hasBackup);
+  }, [state, pinKey]);
 
   const partnerReady = partnerSeen || !!state?.devices.some((d) => d.user_id === partner.id);
   useEffect(() => {
@@ -299,7 +308,7 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
       cipher,
       myCode: device ? shortCode(device.publicKey) : null,
       myDeviceId: device?.id ?? null,
-      hasBackup: state?.hasBackup ?? false,
+      hasBackup: state?.hasBackup ?? readCache<boolean>(pinKey) ?? null,
       partnerReady,
       pending,
       devices: state?.devices ?? [],
@@ -315,7 +324,7 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
       error,
       waitingFor: status === 'waiting' && state ? whoToWaitFor(state, me.id) : null,
     }),
-    [status, cipher, device, state, partnerReady, pending, approve, dismiss, setPin, unlockWithPin, revoke, refresh, settled, sealer, migrating, error, me.id],
+    [status, cipher, device, state, partnerReady, pending, approve, dismiss, setPin, unlockWithPin, revoke, refresh, settled, sealer, migrating, error, me.id, pinKey],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

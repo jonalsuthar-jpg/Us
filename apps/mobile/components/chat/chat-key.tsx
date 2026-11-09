@@ -105,7 +105,7 @@ export function ChatKeyBanner() {
       action: 'Use chat PIN',
       mode: 'unlock',
     };
-  } else if (status === 'ready' && !hasBackup) {
+  } else if (status === 'ready' && hasBackup === false) {
     banner = { text: 'Your chat is end-to-end encrypted. Set a PIN so you can read it on a new device.', action: 'Set PIN', mode: 'set' };
   } else if (migrating) {
     banner = { text: 'Encrypting your earlier messages…' };
