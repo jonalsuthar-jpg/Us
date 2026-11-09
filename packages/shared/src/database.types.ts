@@ -757,10 +757,11 @@ export type Message = MessageRow & {
   keep?: boolean;
   /**
    * Client-only, encrypted rows: 'ok' once opened (body and media_meta filled
-   * in), 'locked' while this device has no key for it, 'failed' when it
-   * doesn't open (tampered, or under a key we don't have).
+   * in), 'opening' while this device is still finding its key, 'locked' when
+   * it has none, 'failed' when it doesn't open (tampered, or under a key we
+   * don't have).
    */
-  e2ee?: 'ok' | 'locked' | 'failed';
+  e2ee?: 'ok' | 'opening' | 'locked' | 'failed';
   /** Client-only: the media file's real type, from inside the ciphertext. */
   mime?: string | null;
 };

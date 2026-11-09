@@ -18,7 +18,7 @@ import { encryptLegacyBatch, encryptLegacyStickers } from '../api/legacy-encrypt
 import { ChatCipher } from '../crypto/chat-cipher';
 import { fromBase64, toBase64 } from '../crypto/encoding';
 import { shortCode } from '../crypto/keys';
-import { loadChatKey, saveChatKey, type StoredDevice } from '../crypto/keystore';
+import { loadChatKey, peekChatKey, saveChatKey, type StoredDevice } from '../crypto/keystore';
 import type { ChatDevice } from '../database.types';
 import { useCouple } from './couple-provider';
 import { cacheKey, readCache, writeCache } from './data-cache';
@@ -95,8 +95,9 @@ const LABELS: Record<string, string> = { web: 'Web browser', ios: 'iPhone', andr
  */
 export function ChatKeyProvider({ platform, children }: { platform: string; children: ReactNode }) {
   const { sb, couple, me, partner, channel } = useCouple();
-  const [status, setStatus] = useState<ChatKeyStatus>('loading');
-  const [key, setKey] = useState<Uint8Array | null>(null);
+  // A key read at boot (or earlier this session) makes the first frame readable.
+  const [key, setKey] = useState<Uint8Array | null>(() => peekChatKey(couple.id, CHAT_KEY_VERSION));
+  const [status, setStatus] = useState<ChatKeyStatus>(() => (key ? 'ready' : 'loading'));
   const [device, setDevice] = useState<StoredDevice | null>(null);
   const [state, setState] = useState<ChatKeyState | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
@@ -119,6 +120,12 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
     loadingRef.current ??= (async () => {
       try {
         lastLoad.current = Date.now();
+        // The saved key first: the thread opens without waiting for the network.
+        const saved = await loadChatKey(couple.id, CHAT_KEY_VERSION).catch(() => null);
+        if (saved) {
+          adoptKey(saved);
+          setStatus('ready');
+        }
         const { device: mine, created } = await ensureChatDevice(sb, me.id, LABELS[platform] ?? platform);
         setDevice(mine);
         let current = await fetchChatKeyState(sb, couple.id);

@@ -218,6 +218,8 @@ export const Bubble = memo(function Bubble({
           {hasText ? <Text className={cn('text-ink', photo && url && 'px-2.5 pt-1.5')}>{message.body}</Text> : null}
           {/* Encrypted, and this phone can't open it (yet). */}
           {message.e2ee === 'locked' || message.e2ee === 'failed' ? <Text className="italic text-ink-soft">{messagePreview(message)}</Text> : null}
+          {/* The key is still on its way (a moment at most): a quiet bar, not a lock. */}
+          {message.e2ee === 'opening' ? <View accessibilityLabel="Opening message" className="my-1 h-3 w-32 rounded-full bg-ink/10" /> : null}
           <View className={cn('mt-0.5 flex-row items-center justify-end gap-1 self-end', photo && url && 'px-2 pb-1')}>
             {message.pinned_at ? <Pin size={11} color={c.inkMuted} /> : null}
             <Text className="text-[12px] leading-[15px] text-ink-muted">{formatClock(message.created_at)}</Text>

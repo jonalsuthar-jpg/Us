@@ -279,6 +279,8 @@ export function Bubble({
           ) : null}
           {/* Encrypted, and this browser can't open it (yet). */}
           {message.e2ee === 'locked' || message.e2ee === 'failed' ? <span className="italic text-ink-muted">{messagePreview(message)}</span> : null}
+          {/* The key is still on its way (a moment at most): a quiet bar, not a lock. */}
+          {message.e2ee === 'opening' ? <span aria-label="Opening message" className="my-1 inline-block h-3 w-32 rounded-full bg-ink/10 align-middle" /> : null}
           {/* Meta floats bottom-right; the spacer reserves room on the last line. */}
           <span aria-hidden className={cn('inline-block', message.pinned_at ? 'w-[5.25rem]' : 'w-[4.25rem]')} />
           <span

@@ -218,6 +218,7 @@ export function formatVoiceLength(ms: number | undefined | null): string {
 export function messagePreview(m: Pick<Message, 'body' | 'media_kind' | 'kind' | 'e2ee'> & { deleted_at?: string | null }): string {
   if (m.deleted_at) return 'This message was deleted';
   if (m.body?.trim()) return m.body.trim();
+  if (m.e2ee === 'opening') return '';
   if (m.e2ee === 'locked') return '🔒 Encrypted message';
   if (m.e2ee === 'failed') return '🔒 Couldn’t open this message';
   if (m.media_kind === 'image') return '📷 Photo';
@@ -394,13 +395,14 @@ function openReactions(m: Message, cipher: ChatCipher | null): Record<string, st
 
 /**
  * A row from the server, made readable. An encrypted message gets its text
- * and media details back (e2ee 'ok') or says why not ('locked': this device
- * has no key yet; 'failed': it doesn't open). Older plain rows pass through.
+ * and media details back (e2ee 'ok') or says why not ('opening': the key is
+ * still being looked for; 'locked': this device has no key; 'failed': it
+ * doesn't open). Older plain rows pass through.
  */
-export function openMessage(m: Message, cipher: ChatCipher | null): Message {
+export function openMessage(m: Message, cipher: ChatCipher | null, opening = false): Message {
   const reactions = openReactions(m, cipher);
   if (!m.ciphertext) return reactions === m.reactions ? m : { ...m, reactions };
-  if (!cipher) return { ...m, reactions, e2ee: 'locked' };
+  if (!cipher) return { ...m, reactions, e2ee: opening ? 'opening' : 'locked' };
   const p = m.key_version === cipher.version ? openPayload(m, cipher) : null;
   if (!p) return { ...m, reactions, e2ee: 'failed' };
   return { ...m, reactions, body: p.body, media_meta: p.meta, mime: p.mime, e2ee: 'ok' };

@@ -42,7 +42,9 @@ interface Options {
  */
 export function useMessages({ viewing }: Options) {
   const { sb, couple, me, partner, channel, refreshUnread } = useCouple();
-  const { cipher, sealer } = useChatKey();
+  const { cipher, sealer, status: keyStatus } = useChatKey();
+  // Until the key check settles, an encrypted row is "opening", not "locked".
+  const opening = keyStatus === 'loading';
   const key = cacheKey(couple.id, 'chat:messages');
   const unsentKey = cacheKey(couple.id, 'chat:unsent');
   const [rows, setMessages] = useState<Message[]>(() => {
@@ -272,17 +274,17 @@ export function useMessages({ viewing }: Options) {
   );
 
   // Opened once per row (and per key): unchanged rows keep their identity, so they don't redraw.
-  const opened = useMemo(() => new WeakMap<Message, Message>(), [cipher]);
+  const opened = useMemo(() => new WeakMap<Message, Message>(), [cipher, opening]);
   const messages = useMemo(
     () =>
       rows.flatMap((r) => {
         // "Delete for me": gone from my thread.
         if (hiddenFor(r, me.id)) return [];
         let m = opened.get(r);
-        if (!m) opened.set(r, (m = openMessage(r, cipher)));
+        if (!m) opened.set(r, (m = openMessage(r, cipher, opening)));
         return [m];
       }),
-    [rows, opened, cipher, me.id],
+    [rows, opened, cipher, opening, me.id],
   );
 
   return { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, markRead, react, pin, remove };

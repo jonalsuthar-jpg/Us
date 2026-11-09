@@ -1,4 +1,4 @@
-import { clearMediaVault, getCoupleContext, getMyAccess, tokens, type CoupleContext, type MyAccess } from '@us/shared';
+import { clearMediaVault, getCoupleContext, getMyAccess, preloadChatKey, tokens, type CoupleContext, type MyAccess } from '@us/shared';
 import { AccessProvider, CallProvider, clearDataCache, CoupleProvider, hydrateDataCache, setDataCacheStore, useCallManager, useCallState, useCouple } from '@us/shared/react';
 import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
@@ -37,7 +37,12 @@ export default function AppLayout() {
       const { data } = await supabase.auth.getSession();
       const userId = data.session?.user.id;
       if (!userId) return router.replace('/sign-in');
-      const [cached, cachedAccess] = await Promise.all([readBoot(userId), readAccess(userId), hydrateDataCache()]);
+      // The chat key comes along with the cached couple, so the chat opens already readable.
+      const withKey = readBoot(userId).then(async (ctx) => {
+        if (ctx) await preloadChatKey(ctx.couple.id);
+        return ctx;
+      });
+      const [cached, cachedAccess] = await Promise.all([withKey, readAccess(userId), hydrateDataCache()]);
       if (cancelled) return;
       if (cachedAccess.status !== 'approved') return router.replace('/waiting');
       setAccess(cachedAccess);

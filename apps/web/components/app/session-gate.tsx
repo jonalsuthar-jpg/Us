@@ -1,6 +1,6 @@
 'use client';
 
-import { clearMediaVault, getCoupleContext, getMyAccess, type CoupleContext, type MyAccess } from '@us/shared';
+import { clearMediaVault, getCoupleContext, getMyAccess, preloadChatKey, type CoupleContext, type MyAccess } from '@us/shared';
 import { AccessProvider, CallProvider, CoupleProvider } from '@us/shared/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -33,6 +33,9 @@ export function SessionGate({ children }: { children: ReactNode }) {
       const c = await getCoupleContext(sb, data.user.id);
       if (cancelled) return;
       if (!c) return router.replace('/pair');
+      // A few milliseconds from IndexedDB, so the chat's first frame is readable.
+      await preloadChatKey(c.couple.id);
+      if (cancelled) return;
       setAccess(a);
       setCtx(c);
     });

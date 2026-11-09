@@ -15,6 +15,7 @@ import {
   utf8Encode,
   wrapWithPin,
 } from '../src/crypto';
+import { forgetChatSecrets, peekChatKey, preloadChatKey, setKeyStore } from '../src/crypto/keystore';
 import { draftMessage, messagePreview, openMessage } from '../src/api/messages';
 import { partnerDevicesToShare, waitingFor } from '../src/api/chat-keys';
 
@@ -184,5 +185,28 @@ describe('who gets the chat key', () => {
     expect(partnerDevicesToShare(state, 'them')).toEqual([]);
     expect(waitingFor(state, 'me')).toBe('my-device');
     expect(waitingFor(state, 'them')).toBe('my-device');
+  });
+});
+
+describe('opening the chat fast', () => {
+  it('keeps a loaded chat key in memory for the next screen', async () => {
+    const store = new Map<string, string>();
+    setKeyStore({ get: async (k) => store.get(k) ?? null, set: async (k, v) => void store.set(k, v), remove: async (k) => void store.delete(k) });
+    expect(peekChatKey('couple-x', 1)).toBe(null);
+    const key = generateChatKey();
+    store.set('us.chat.key.couple-x.1', toBase64(key));
+    await preloadChatKey('couple-x');
+    expect(peekChatKey('couple-x', 1)).toEqual(key);
+    await forgetChatSecrets('u', 'couple-x');
+    expect(peekChatKey('couple-x', 1)).toBe(null);
+  });
+
+  it('says "opening", not "locked", while the key is still being found', () => {
+    const cipher = new ChatCipher(1, generateChatKey());
+    const base = { ...draftMessage('c1', 'u1', null), pending: undefined };
+    const sealed = { ...base, ciphertext: cipher.encryptMessage(base, { body: 'x' }), key_version: 1 };
+    expect(openMessage(sealed, null, true).e2ee).toBe('opening');
+    expect(messagePreview(openMessage(sealed, null, true))).toBe('');
+    expect(openMessage(sealed, null).e2ee).toBe('locked');
   });
 });
