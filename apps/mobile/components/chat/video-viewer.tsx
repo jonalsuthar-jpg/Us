@@ -2,17 +2,18 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { X } from 'lucide-react-native';
 import { Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ViewerActions } from '../ui/photo-viewer';
 
 /** A chat video, full screen, playing from the file opened on this phone. */
-export function VideoViewer({ uri, onClose }: { uri: string | null; onClose: () => void }) {
+export function VideoViewer({ uri, onClose, onSave, onDelete }: { uri: string | null; onClose: () => void; onSave?: () => void; onDelete?: () => void }) {
   return (
     <Modal visible={!!uri} animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      {uri ? <Player uri={uri} onClose={onClose} /> : null}
+      {uri ? <Player uri={uri} onClose={onClose} onSave={onSave} onDelete={onDelete} /> : null}
     </Modal>
   );
 }
 
-function Player({ uri, onClose }: { uri: string; onClose: () => void }) {
+function Player({ uri, onClose, onSave, onDelete }: { uri: string; onClose: () => void; onSave?: () => void; onDelete?: () => void }) {
   const insets = useSafeAreaInsets();
   const player = useVideoPlayer(uri, (p) => p.play());
   return (
@@ -27,6 +28,7 @@ function Player({ uri, onClose }: { uri: string; onClose: () => void }) {
       >
         <X size={22} color="#fff" />
       </Pressable>
+      <ViewerActions onSave={onSave} onDelete={onDelete} top={insets.top + 8} />
     </View>
   );
 }

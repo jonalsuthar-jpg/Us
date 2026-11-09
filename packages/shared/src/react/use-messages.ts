@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ackMessages,
+  deleteMessage,
   draftMessage,
   dropDeleted,
   fetchMessage,
   fetchMessages,
+  hiddenFor,
   mergeMessages,
   openMessage,
   PAGE_SIZE,
@@ -14,6 +16,7 @@ import {
   type DraftExtras,
 } from '../api/messages';
 import { notifyPartner } from '../api/push';
+import { keepSticker, STICKERS_TOPIC } from '../api/stickers';
 import type { Message } from '../database.types';
 import { useChatKey } from './chat-key-provider';
 import { useCouple } from './couple-provider';
@@ -86,6 +89,11 @@ export function useMessages({ viewing }: Options) {
       try {
         const saved = await sendMessage(sb, draft, await sealer());
         upsert({ ...saved, pending: false, failed: false });
+        if (draft.keep && saved.media_path) {
+          void keepSticker(sb, couple.id, me.id, saved.media_path, { width: draft.media_meta?.width, height: draft.media_meta?.height })
+            .then(() => channel.sendChanged(STICKERS_TOPIC))
+            .catch(() => {});
+        }
         void notifyPartner(sb, { category: 'new_message', messageId: saved.id });
       } catch {
         setMessages((prev) => prev.map((m) => (m.id === draft.id ? { ...m, pending: false, failed: true } : m)));
@@ -93,7 +101,7 @@ export function useMessages({ viewing }: Options) {
         delivering.current.delete(draft.id);
       }
     },
-    [sb, upsert, sealer],
+    [sb, couple.id, me.id, channel, upsert, sealer],
   );
 
   const retry = useCallback(
@@ -226,6 +234,34 @@ export function useMessages({ viewing }: Options) {
     [sb, me.id, patch, upsert, sealer],
   );
 
+  /**
+   * Delete for everyone (mine) or just for me. Shown at once, put back if it
+   * fails. An unsent draft is simply dropped.
+   */
+  const remove = useCallback(
+    async (id: string, forEveryone: boolean) => {
+      const before = messagesRef.current.find((m) => m.id === id);
+      if (!before) return;
+      if (before.pending || before.failed) {
+        setMessages((prev) => prev.filter((m) => m.id !== id));
+        return;
+      }
+      patch(id, (m) =>
+        forEveryone
+          ? { deleted_at: new Date().toISOString(), body: null, ciphertext: null, media_kind: null, media_path: null, media_meta: null, reactions: {}, pinned_at: null, localUri: undefined }
+          : { hidden_for: [...(m.hidden_for ?? []), me.id] },
+      );
+      try {
+        upsert(await deleteMessage(sb, before, forEveryone));
+        if (before.pinned_at) channel.sendChanged('chat:pins');
+      } catch (e) {
+        setMessages((prev) => prev.map((m) => (m.id === id ? before : m)));
+        throw e;
+      }
+    },
+    [sb, me.id, channel, patch, upsert],
+  );
+
   const pin = useCallback(
     async (id: string, pinned: boolean) => {
       const saved = await pinMessage(sb, id, pinned);
@@ -239,13 +275,15 @@ export function useMessages({ viewing }: Options) {
   const opened = useMemo(() => new WeakMap<Message, Message>(), [cipher]);
   const messages = useMemo(
     () =>
-      rows.map((r) => {
+      rows.flatMap((r) => {
+        // "Delete for me": gone from my thread.
+        if (hiddenFor(r, me.id)) return [];
         let m = opened.get(r);
         if (!m) opened.set(r, (m = openMessage(r, cipher)));
-        return m;
+        return [m];
       }),
-    [rows, opened, cipher],
+    [rows, opened, cipher, me.id],
   );
 
-  return { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, markRead, react, pin };
+  return { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, markRead, react, pin, remove };
 }

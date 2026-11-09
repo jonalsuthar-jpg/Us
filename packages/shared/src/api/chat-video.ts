@@ -84,6 +84,11 @@ export function videoUrls(sb: UsClient, paths: string[]): Promise<Record<string,
   return keptLinks(STORE, paths, DOWNLOAD_S, async (missing) => (await invoke<{ urls: Record<string, string> }>(sb, { action: 'download', paths: missing })).urls);
 }
 
+/** After "delete for everyone": the message's video goes too. */
+export async function removeChatVideo(sb: UsClient, messageId: string): Promise<void> {
+  await invoke(sb, { action: 'remove', messageId });
+}
+
 /** Unpairing: delete our videos (best effort; R2 only holds ciphertext). */
 export async function removeCoupleVideos(sb: UsClient): Promise<void> {
   await invoke(sb, { action: 'clear' }).catch(() => {});

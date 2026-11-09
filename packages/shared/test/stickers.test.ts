@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { draftMessage, isOurStickerPath, keepSticker, sendMessage, stickerMime, stickerPath, stickerTextBox, STICKER_TEXT_STYLES, type UsClient } from '../src';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { deleteMessage, draftMessage, isOurStickerPath, keepSticker, sendMessage, stickerMime, stickerPath, stickerTextBox, STICKER_TEXT_STYLES, type UsClient } from '../src';
 
 function fakeSb(log: string[], insertError: unknown = null): UsClient {
   const chain = {
@@ -11,8 +11,17 @@ function fakeSb(log: string[], insertError: unknown = null): UsClient {
   return {
     from: (t: string) => (log.push(`from:${t}`), chain),
     storage: { from: () => ({ upload: async () => (log.push('upload'), { error: null }) }) },
+    functions: {
+      invoke: async (name: string, { body }: { body: Record<string, unknown> }) => {
+        log.push(`${name}:${body.action}:${body.path ?? (body.paths as string[] | undefined)?.join(',') ?? body.messageId}`);
+        return { data: { url: 'https://r2.example/put', ok: true }, error: null };
+      },
+    },
+    rpc: async (fn: string) => (log.push(`rpc:${fn}`), { data: { id: 'm1' }, error: null }),
   } as unknown as UsClient;
 }
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('our stickers', () => {
   it('live at the top of our chat folder, and only those count as ours', () => {
@@ -43,6 +52,33 @@ describe('our stickers', () => {
     expect(log).not.toContain('upload');
     const insert = JSON.parse(log.find((l) => l.startsWith('insert:'))!.slice(7));
     expect(insert).toMatchObject({ media_kind: 'sticker', media_path: path, body: null });
+  });
+
+  it('a new sticker shows at once: its file uploads to the sticker path as it sends', async () => {
+    vi.stubGlobal('fetch', async () => new Response(null, { status: 200 }));
+    const log: string[] = [];
+    const path = stickerPath('c1', undefined, 'image/gif');
+    const draft = draftMessage('c1', 'me', null, {
+      media: { kind: 'sticker', path, meta: { width: 200, height: 200 }, localUri: 'file:///k.gif', upload: { body: new Uint8Array([1]), contentType: 'image/gif' }, keep: true },
+    });
+    expect(draft.pending).toBe(true);
+    expect(draft.keep).toBe(true);
+    await sendMessage(fakeSb(log), draft);
+    expect(log).toContain(`media:upload:${path}`);
+    const insert = JSON.parse(log.find((l) => l.startsWith('insert:'))!.slice(7));
+    expect(insert).toMatchObject({ media_kind: 'sticker', media_path: path });
+  });
+
+  it('deleting for everyone removes the file, but never a sticker kept in Ours', async () => {
+    const log: string[] = [];
+    await deleteMessage(fakeSb(log), { id: 'm1', media_path: 'c1/m1.jpg' }, true);
+    expect(log).toEqual(['rpc:delete_message', 'media:remove:c1/m1.jpg']);
+    const kept: string[] = [];
+    await deleteMessage(fakeSb(kept), { id: 'm2', media_path: stickerPath('c1') }, true);
+    expect(kept).toEqual(['rpc:delete_message']);
+    const mine: string[] = [];
+    await deleteMessage(fakeSb(mine), { id: 'm3', media_path: 'c1/m3.jpg' }, false);
+    expect(mine).toEqual(['rpc:delete_message']);
   });
 
   it('keeping a sticker that is already in Ours is fine', async () => {

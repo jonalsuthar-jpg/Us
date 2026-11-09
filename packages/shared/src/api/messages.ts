@@ -2,9 +2,10 @@ import { isEncryptedReaction, type ChatCipher } from '../crypto/chat-cipher';
 import type { MediaKind, MediaMeta, Message, MessageRow, MessageStatus } from '../database.types';
 import type { UsClient } from '../supabase';
 import { uuid } from '../uuid';
-import { isVideoPath, uploadChatVideo, videoUrls } from './chat-video';
+import { isVideoPath, removeChatVideo, uploadChatVideo, videoUrls } from './chat-video';
 import { signedUrls } from './signed-urls';
-import { uploadFile } from './media';
+import { removeFiles, uploadFile } from './media';
+import { isOurStickerPath } from './stickers';
 
 const SELECT = '*, call:calls(*)';
 
@@ -41,8 +42,10 @@ export interface DraftExtras {
     localUri?: string;
     /** Photos, voice notes and videos; GIFs and stickers are links and upload nothing. */
     upload?: { body: Blob | ArrayBuffer | Uint8Array; contentType: string };
-    /** A file already in our folder (one of our saved stickers): nothing to upload. */
+    /** A file already in our folder (one of our saved stickers): nothing to upload. With `upload`, where that goes. */
     path?: string;
+    /** Keep the sticker in Ours once it's sent. */
+    keep?: boolean;
   };
 }
 
@@ -69,10 +72,13 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
     snap_id: extras.snapId ?? null,
     ciphertext: null,
     key_version: null,
+    deleted_at: null,
+    hidden_for: [],
     call: null,
     pending: true,
     localUri: extras.media?.localUri,
     upload: extras.media?.upload,
+    keep: extras.media?.keep,
   };
 }
 
@@ -86,6 +92,12 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
  */
 export async function sendMessage(sb: UsClient, draft: Message, cipher?: ChatCipher | null): Promise<MessageRow> {
   let mediaPath = draft.media_path;
+  // A new sticker (from the keyboard or a paste): its file goes to the sticker path the draft already has.
+  if (mediaPath && draft.upload && draft.media_kind === 'sticker') {
+    const bytes = await toBytes(draft.upload.body);
+    if (cipher) await uploadFile(sb, CHAT_BUCKET, mediaPath, cipher.encryptFile(mediaPath, bytes), ENCRYPTED_MIME);
+    else await uploadFile(sb, CHAT_BUCKET, mediaPath, bytes, baseMime(draft.upload.contentType));
+  }
   if (!mediaPath && draft.upload && draft.media_kind) {
     mediaPath =
       draft.media_kind === 'video'
@@ -203,7 +215,8 @@ export function formatVoiceLength(ms: number | undefined | null): string {
 }
 
 /** One line describing a message, for reply quotes, pins, search and pushes. */
-export function messagePreview(m: Pick<Message, 'body' | 'media_kind' | 'kind' | 'e2ee'>): string {
+export function messagePreview(m: Pick<Message, 'body' | 'media_kind' | 'kind' | 'e2ee'> & { deleted_at?: string | null }): string {
+  if (m.deleted_at) return 'This message was deleted';
   if (m.body?.trim()) return m.body.trim();
   if (m.e2ee === 'locked') return '🔒 Encrypted message';
   if (m.e2ee === 'failed') return '🔒 Couldn’t open this message';
@@ -238,6 +251,23 @@ export async function reactToMessage(
   if (error) throw error;
   return data;
 }
+
+/**
+ * Delete a message: for everyone (mine only; both of us then see "This
+ * message was deleted", and its file is removed), or just for me (hidden on
+ * my devices). Saved stickers keep their file: Ours still uses it.
+ */
+export async function deleteMessage(sb: UsClient, m: Pick<Message, 'id' | 'media_path'>, forEveryone: boolean): Promise<MessageRow> {
+  const { data, error } = await sb.rpc('delete_message', { p_id: m.id, p_for_everyone: forEveryone });
+  if (error) throw error;
+  if (forEveryone && m.media_path && !isOurStickerPath(m.media_path)) {
+    await (isVideoPath(m.media_path) ? removeChatVideo(sb, m.id) : removeFiles(sb, CHAT_BUCKET, [m.media_path])).catch(() => {});
+  }
+  return data;
+}
+
+/** Hidden from me with "Delete for me". */
+export const hiddenFor = (m: Pick<Message, 'hidden_for'>, me: string) => !!m.hidden_for?.includes(me);
 
 export async function pinMessage(sb: UsClient, id: string, pinned: boolean): Promise<MessageRow> {
   const { data, error } = await sb.rpc('pin_message', { p_id: id, p_pinned: pinned });

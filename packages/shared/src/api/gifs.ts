@@ -4,6 +4,8 @@
  * on GIPHY's media hosts — see the gifs migration.
  */
 
+import type { UsClient } from '../supabase';
+
 export type GifKind = 'gif' | 'sticker';
 
 export interface Gif {
@@ -12,6 +14,8 @@ export interface Gif {
   previewUrl: string;
   /** What goes in the message. */
   url: string;
+  /** A still first frame: shown at once while the GIF itself loads. */
+  still?: string;
   width: number;
   height: number;
   title: string;
@@ -36,29 +40,32 @@ export function isGiphyUrl(url: string | undefined | null): url is string {
   return !!url && GIPHY_MEDIA.test(url);
 }
 
-/** Trending when the search is empty. Keeps results to a PG-13 rating. */
-export async function searchGifs(apiKey: string, kind: GifKind, query: string, offset = 0, limit = 24): Promise<Gif[]> {
-  const type = kind === 'sticker' ? 'stickers' : 'gifs';
-  const q = query.trim();
-  const params = new URLSearchParams({ api_key: apiKey, limit: String(limit), offset: String(offset), rating: 'pg-13', bundle: 'messaging_non_clips' });
-  if (q) params.set('q', q);
-  const res = await fetch(`https://api.giphy.com/v1/${type}/${q ? 'search' : 'trending'}?${params}`);
-  if (!res.ok) throw new Error('GIFs are unavailable right now.');
-  const { data } = (await res.json()) as { data: GiphyItem[] };
-  return data.flatMap((g) => {
+/** Trending when the search is empty. Asked through our giphy function, which holds the key; PG-13. */
+export async function searchGifs(sb: UsClient, kind: GifKind, query: string, offset = 0): Promise<Gif[]> {
+  const { data, error } = await sb.functions.invoke<{ data: GiphyItem[] }>('giphy', { body: { kind, q: query.trim(), offset } });
+  if (error || !data) throw new Error('GIFs aren’t available right now.');
+  return data.data.flatMap((g) => {
     const send = g.images.downsized ?? g.images.fixed_width ?? g.images.original;
     const preview = g.images.fixed_width ?? send;
     const previewUrl = isGiphyUrl(preview?.webp) ? preview.webp : preview?.url;
+    const still = g.images.fixed_width_still?.url ?? g.images['480w_still']?.url;
     if (!isGiphyUrl(send?.url) || !isGiphyUrl(previewUrl)) return [];
     return [
       {
         id: g.id,
         previewUrl,
         url: send.url,
+        still: isGiphyUrl(still) ? still : undefined,
         width: Number(send.width) || 200,
         height: Number(send.height) || 200,
         title: g.title || (kind === 'sticker' ? 'Sticker' : 'GIF'),
       },
     ];
   });
+}
+
+/** The GIFs and stickers I sent last, newest first, for the picker's "Recent" row. */
+export const RECENT_GIFS = 24;
+export function rememberGif(recent: Gif[], gif: Gif): Gif[] {
+  return [gif, ...recent.filter((g) => g.id !== gif.id)].slice(0, RECENT_GIFS);
 }

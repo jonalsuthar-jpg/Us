@@ -1,12 +1,12 @@
-import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, saveSticker, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
+import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, stickerPath, uuid, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
 import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { ArrowLeft, ChevronsDown, Copy, Phone, Pin, PinOff, Plus, Reply, Search, Sticker, Video } from 'lucide-react-native';
+import { ArrowLeft, ChevronsDown, Copy, Download, Phone, Pin, PinOff, Plus, Reply, Search, Sticker, Trash2, Video } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, AppState, FlatList, Modal, Platform, Pressable, TextInput, View, type ListRenderItem } from 'react-native';
+import { ActivityIndicator, Alert, AppState, FlatList, Modal, Platform, Pressable, TextInput, View, type ListRenderItem } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachSheet, ATTACH_ICONS, ATTACH_TINTS, type AttachOption } from '@/components/chat/attach-sheet';
@@ -19,13 +19,12 @@ import { Composer } from '@/components/chat/composer';
 import { SwipeableRow } from '@/components/chat/swipeable-row';
 import { DoodleSheet } from '@/components/draw/doodle-sheet';
 import { StickerMaker } from '@/components/stickers/maker';
-import { StickerPicker } from '@/components/stickers/picker';
 import { FeatureOff } from '@/components/feature-off';
-import { GifPicker } from '@/components/chat/gif-picker';
+import { ExpressionPanel, type ExpressionTab } from '@/components/chat/expression-panel';
+import { saveToGallery } from '@/lib/save-media';
 import { KeyboardMediaSheet, type KeyboardSendAs } from '@/components/chat/keyboard-media-sheet';
 import type { RichContent } from '@/modules/us-rich-input';
 import { clearMessageNotifications } from '@/modules/us-call';
-import { env } from '@/lib/env';
 import { preparePhoto, type ReadyPhoto } from '@/lib/photo';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
@@ -100,19 +99,30 @@ function Thread() {
   useEffect(() => {
     if (viewing) clearMessageNotifications();
   }, [viewing]);
-  const { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, react, pin } = useMessages({ viewing });
+  const { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, react, pin, remove } = useMessages({ viewing });
   const media = useChatMedia(messages);
   const { cipher, sealer } = useChatKey();
   const [acting, setActing] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [video, setVideo] = useState<string | null>(null);
+  /** The chat message open in the photo / video viewer (not a profile photo). */
+  const [viewed, setViewed] = useState<Message | null>(null);
+  const openPhoto = useCallback((url: string, m?: Message) => {
+    setPhoto(url);
+    setViewed(m ?? null);
+  }, []);
+  const openVideo = useCallback((url: string, m?: Message) => {
+    setVideo(url);
+    setViewed(m ?? null);
+  }, []);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [panel, setPanel] = useState<'search' | 'pins' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /** 0–1 while a video is being made smaller. */
   const [shrinking, setShrinking] = useState<number | null>(null);
-  const [gifs, setGifs] = useState(false);
+  /** The sticker / GIF panel, open on this tab. */
+  const [expressions, setExpressions] = useState<ExpressionTab | null>(null);
   const [attach, setAttach] = useState(false);
   const [camera, setCamera] = useState(false);
   const list = useRef<FlatList<Row>>(null);
@@ -120,7 +130,7 @@ function Thread() {
   const draftKey = cacheKey(couple.id, 'chat:draft');
 
   // Opened pins hold message text: kept in memory only.
-  const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id, cipher), [sb, couple.id, cipher], undefined, 'memory');
+  const pins = useCoupleData('chat:pins', async () => (await listPinned(sb, couple.id, cipher)).filter((m) => !hiddenFor(m, me.id)), [sb, couple.id, me.id, cipher], undefined, 'memory');
   const pinSignature = useMemo(() => messages.map((m) => (m.pinned_at ? m.id : '')).join(''), [messages]);
   useEffect(() => {
     void pins.reload();
@@ -143,7 +153,6 @@ function Thread() {
   const draw = useFeature('draw');
   const [doodle, setDoodle] = useState(false);
   const stickersOn = useFeature('stickers');
-  const [stickerPicker, setStickerPicker] = useState(false);
   const [stickerMaker, setStickerMaker] = useState(false);
 
   function sendSticker(st: OurSticker, url?: string) {
@@ -216,13 +225,37 @@ function Thread() {
     if (as === 'video') return sendClip({ uri: k.uri, durationMs: k.durationMs, width: k.width, height: k.height, fileSize: k.size, mimeType: k.mime }, '');
     const bytes = await (await fetch(k.uri)).arrayBuffer();
     const meta = { width: k.width || 320, height: k.height || 320 };
+    const upload = { body: bytes, contentType: k.mime };
+    // On screen at once; the file uploads as it sends, and the sticker joins Ours after.
     if (as === 'sticker' && isStickerMime(k.mime)) {
-      // Kept in Ours as it came, so it can be sent again.
-      const st = await saveSticker(sb, { coupleId: couple.id, me: me.id, png: bytes, mime: k.mime, ...meta, cipher: await sealer() });
-      channel.sendChanged(STICKERS_TOPIC);
-      return sendSticker(st, k.uri);
+      return sendWithReply('', { media: { kind: 'sticker', path: stickerPath(couple.id, uuid(), k.mime), meta, localUri: k.uri, upload, keep: true } });
     }
-    sendWithReply('', { media: { kind: 'image', meta, localUri: k.uri, upload: { body: bytes, contentType: k.mime } } });
+    sendWithReply('', { media: { kind: 'image', meta, localUri: k.uri, upload } });
+  }
+
+  /** Where a message's picture or video is on this phone, or its link. */
+  const mediaOf = (m: Message) => (m.media_path ? (media[m.media_path] ?? m.localUri) : (m.media_meta?.url ?? m.localUri));
+
+  function saveMedia(m: Message) {
+    const uri = mediaOf(m);
+    if (!uri) return say('Still opening. Try again in a moment.');
+    saveToGallery(uri)
+      .then(() => say(m.media_kind === 'video' ? 'Video saved to Photos' : 'Saved to Photos'))
+      .catch(fail);
+  }
+
+  /** WhatsApp's choice: for everyone (mine), or just for me. */
+  function confirmDelete(m: Message, after?: () => void) {
+    const go = (forEveryone: boolean) => {
+      after?.();
+      void remove(m.id, forEveryone).catch(fail);
+    };
+    const mine = m.sender_id === me.id && m.kind === 'text' && !m.deleted_at && !m.pending && !m.failed;
+    Alert.alert('Delete message?', mine ? undefined : 'It goes from this chat on your phones only.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete for me', style: 'destructive', onPress: () => go(false) },
+      ...(mine ? [{ text: 'Delete for everyone', style: 'destructive' as const, onPress: () => go(true) }] : []),
+    ]);
   }
 
   async function sendVoice(uri: string, durationMs: number) {
@@ -350,12 +383,12 @@ function Thread() {
           onLongPress={onLongPress}
           onReact={onReact}
           onReply={onReply}
-          onOpenPhoto={setPhoto}
-          onOpenVideo={setVideo}
+          onOpenPhoto={openPhoto}
+          onOpenVideo={openVideo}
           onJumpTo={onJumpTo}
         />
       ),
-    [me.id, mySlot, partnerSlot, partner.display_name, media, highlight, viewing, onRetry, onLongPress, onReact, onReply, onJumpTo, onCallBack],
+    [me.id, mySlot, partnerSlot, partner.display_name, media, highlight, viewing, onRetry, onLongPress, onReact, onReply, onJumpTo, onCallBack, openPhoto, openVideo],
   );
   const typingHeader = useMemo(() => <TypingBubble visible={partnerTyping} name={partner.display_name} slot={partnerSlot} />, [partnerTyping, partner.display_name, partnerSlot]);
   const olderFooter = olderFailed ? (
@@ -373,7 +406,7 @@ function Thread() {
     { key: 'camera', label: 'Camera', icon: ATTACH_ICONS.camera, tint: ATTACH_TINTS.camera, onPress: () => setCamera(true) },
     { key: 'video', label: 'Video', icon: ATTACH_ICONS.video, tint: ATTACH_TINTS.video, onPress: () => void sendVideo().catch(fail) },
     ...(draw ? [{ key: 'draw', label: 'Draw', icon: ATTACH_ICONS.draw, tint: ATTACH_TINTS.draw, onPress: () => setDoodle(true) }] : []),
-    ...(env.giphyKey ? [{ key: 'gif', label: 'GIF', icon: ATTACH_ICONS.gif, tint: ATTACH_TINTS.gif, onPress: () => setGifs(true) }] : []),
+    { key: 'gif', label: 'GIF', icon: ATTACH_ICONS.gif, tint: ATTACH_TINTS.gif, onPress: () => setExpressions('gif') },
     ...(stickersOn ? [{ key: 'sticker', label: 'New sticker', icon: ATTACH_ICONS.sticker, tint: ATTACH_TINTS.sticker, onPress: () => setStickerMaker(true) }] : []),
   ];
 
@@ -388,7 +421,7 @@ function Thread() {
           accessibilityRole="imagebutton"
           accessibilityLabel={`${partner.display_name}'s photo. Open`}
           disabled={!partnerPhoto}
-          onPress={() => setPhoto(partnerPhoto)}
+          onPress={() => partnerPhoto && openPhoto(partnerPhoto)}
           className="active:opacity-70"
         >
           <Avatar name={partner.display_name} slot={partnerSlot} online={partnerOnline} />
@@ -524,7 +557,7 @@ function Thread() {
             sendWithReply(t);
           }}
           onVoice={(uri, ms) => void sendVoice(uri, ms).catch(fail)}
-          onSticker={stickersOn ? () => setStickerPicker(true) : env.giphyKey ? () => setGifs(true) : undefined}
+          onSticker={() => setExpressions('sticker')}
           onAttach={() => setAttach(true)}
           onCamera={() => setCamera(true)}
           onRichContent={setFromKeyboard}
@@ -566,37 +599,45 @@ function Thread() {
                   .catch(fail)
             : undefined
         }
+        onSave={saveMedia}
+        onDelete={(m) => confirmDelete(m)}
       />
-      {stickersOn ? (
-        <>
-          <StickerPicker
-            open={stickerPicker}
-            onClose={() => setStickerPicker(false)}
-            onMake={() => {
-              setStickerPicker(false);
-              setStickerMaker(true);
-            }}
-            onSend={(st, url) => {
-              setStickerPicker(false);
-              sendSticker(st, url);
-            }}
-          />
-          <StickerMaker open={stickerMaker} onClose={() => setStickerMaker(false)} onSaved={(st, send) => send && sendSticker(st)} />
-        </>
-      ) : null}
+      {stickersOn ? <StickerMaker open={stickerMaker} onClose={() => setStickerMaker(false)} onSaved={(st, send) => send && sendSticker(st)} /> : null}
       <FormSheet open={panel !== null} title={panel === 'pins' ? 'Pinned' : 'Search messages'} onClose={() => setPanel(null)}>
         {panel === 'search' ? <SearchPanel onPick={pick} authorOf={authorOf} /> : null}
         {panel === 'pins' ? <MessageList items={pins.data ?? []} empty="Nothing pinned." onPick={pick} authorOf={authorOf} /> : null}
       </FormSheet>
-      <PhotoViewer uri={photo} label="Photo" onClose={() => setPhoto(null)} />
-      <VideoViewer uri={video} onClose={() => setVideo(null)} />
+      <PhotoViewer
+        uri={photo}
+        label="Photo"
+        onClose={() => setPhoto(null)}
+        onSave={viewed ? () => saveMedia(viewed) : undefined}
+        onDelete={viewed ? () => confirmDelete(viewed, () => setPhoto(null)) : undefined}
+      />
+      <VideoViewer
+        uri={video}
+        onClose={() => setVideo(null)}
+        onSave={viewed ? () => saveMedia(viewed) : undefined}
+        onDelete={viewed ? () => confirmDelete(viewed, () => setVideo(null)) : undefined}
+      />
       <KeyboardMediaSheet content={fromKeyboard} stickers={stickersOn} onClose={() => setFromKeyboard(null)} onSend={(k, as) => void sendFromKeyboard(k, as).catch(fail)} />
-      <GifPicker
-        open={gifs}
-        onClose={() => setGifs(false)}
+      <ExpressionPanel
+        open={expressions !== null}
+        initialTab={expressions ?? 'sticker'}
+        stickers={stickersOn}
+        onClose={() => setExpressions(null)}
         onPick={(kind, gif) => {
-          setGifs(false);
-          sendWithReply('', { media: { kind, meta: { url: gif.url, width: gif.width, height: gif.height } } });
+          setExpressions(null);
+          // The picker's preview is already on this phone: the bubble shows it at once.
+          sendWithReply('', { media: { kind, meta: { url: gif.url, still: gif.still, width: gif.width, height: gif.height }, localUri: gif.previewUrl } });
+        }}
+        onSendOurs={(st, url) => {
+          setExpressions(null);
+          sendSticker(st, url);
+        }}
+        onMake={() => {
+          setExpressions(null);
+          setStickerMaker(true);
         }}
       />
     </KeyboardAvoidingView>
@@ -636,6 +677,8 @@ function MessageActions({
   onReply,
   onPin,
   onKeepSticker,
+  onSave,
+  onDelete,
 }: {
   message: Message | null;
   myId: string;
@@ -645,6 +688,9 @@ function MessageActions({
   onPin: (m: Message, pinned: boolean) => void;
   /** Keep a sticker we made (one sent in chat) in Our stickers. */
   onKeepSticker?: (m: Message) => void;
+  /** Photos, videos, GIFs and stickers: save to the gallery. */
+  onSave: (m: Message) => void;
+  onDelete: (m: Message) => void;
 }) {
   const c = usePalette();
   const mine = message?.reactions?.[myId] ?? null;
@@ -663,39 +709,47 @@ function MessageActions({
               {messagePreview(message)}
             </Text>
           ) : null}
-          <View className="flex-row items-center justify-between rounded-full bg-paper-sunken p-1">
-            {QUICK_REACTIONS.map((e) => (
-              <ReactionButton key={e} emoji={e} selected={mine === e} onPress={act((m) => onReact(m, mine === e ? null : e))} />
-            ))}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={more ? 'Fewer reactions' : 'More reactions'}
-              accessibilityState={{ expanded: more }}
-              onPress={() => setMore((v) => !v)}
-              className={cn('h-11 w-11 items-center justify-center rounded-full', more ? 'bg-paper-raised' : 'active:bg-paper-raised')}
-            >
-              <Plus size={22} color={c.inkSoft} />
-            </Pressable>
-          </View>
-          {more ? (
-            <View className="flex-row flex-wrap justify-between gap-y-1">
-              {MORE_REACTIONS.map((e) => (
-                <ReactionButton key={e} emoji={e} selected={mine === e} onPress={act((m) => onReact(m, mine === e ? null : e))} />
-              ))}
-            </View>
-          ) : null}
-          <ActionRow label="Reply" onPress={act(onReply)} icon={<Reply size={20} color={c.ink} />} />
-          <ActionRow
-            label={message?.pinned_at ? 'Unpin' : 'Pin for both of you'}
-            onPress={act((m) => onPin(m, !m.pinned_at))}
-            icon={message?.pinned_at ? <PinOff size={20} color={c.ink} /> : <Pin size={20} color={c.ink} />}
-          />
+          {message?.deleted_at ? null : (
+            <>
+              <View className="flex-row items-center justify-between rounded-full bg-paper-sunken p-1">
+                {QUICK_REACTIONS.map((e) => (
+                  <ReactionButton key={e} emoji={e} selected={mine === e} onPress={act((m) => onReact(m, mine === e ? null : e))} />
+                ))}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={more ? 'Fewer reactions' : 'More reactions'}
+                  accessibilityState={{ expanded: more }}
+                  onPress={() => setMore((v) => !v)}
+                  className={cn('h-11 w-11 items-center justify-center rounded-full', more ? 'bg-paper-raised' : 'active:bg-paper-raised')}
+                >
+                  <Plus size={22} color={c.inkSoft} />
+                </Pressable>
+              </View>
+              {more ? (
+                <View className="flex-row flex-wrap justify-between gap-y-1">
+                  {MORE_REACTIONS.map((e) => (
+                    <ReactionButton key={e} emoji={e} selected={mine === e} onPress={act((m) => onReact(m, mine === e ? null : e))} />
+                  ))}
+                </View>
+              ) : null}
+              <ActionRow label="Reply" onPress={act(onReply)} icon={<Reply size={20} color={c.ink} />} />
+              <ActionRow
+                label={message?.pinned_at ? 'Unpin' : 'Pin for both of you'}
+                onPress={act((m) => onPin(m, !m.pinned_at))}
+                icon={message?.pinned_at ? <PinOff size={20} color={c.ink} /> : <Pin size={20} color={c.ink} />}
+              />
+            </>
+          )}
           {onKeepSticker && message?.media_kind === 'sticker' && isOurStickerPath(message.media_path) ? (
             <ActionRow label="Save sticker" onPress={act(onKeepSticker)} icon={<Sticker size={20} color={c.ink} />} />
           ) : null}
           {message?.body?.trim() ? (
             <ActionRow label="Copy text" onPress={act((m) => void Clipboard.setStringAsync(m.body ?? ''))} icon={<Copy size={20} color={c.ink} />} />
           ) : null}
+          {message && !message.deleted_at && (message.media_kind === 'image' || message.media_kind === 'video' || message.media_kind === 'gif' || message.media_kind === 'sticker') ? (
+            <ActionRow label="Save to gallery" onPress={act(onSave)} icon={<Download size={20} color={c.ink} />} />
+          ) : null}
+          <ActionRow label="Delete" onPress={act(onDelete)} icon={<Trash2 size={20} color={c.ink} />} />
         </Pressable>
       </Pressable>
     </Modal>
@@ -742,7 +796,7 @@ function MessageList({ items, empty, onPick, authorOf }: { items: Message[]; emp
 }
 
 function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; authorOf: (m: Message) => string }) {
-  const { sb, couple } = useCouple();
+  const { sb, couple, me } = useCouple();
   const { cipher } = useChatKey();
   const c = usePalette();
   const [q, setQ] = useState('');
@@ -761,7 +815,7 @@ function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; autho
         signal,
         onProgress: (found, done) => {
           if (signal.aborted) return;
-          setResults(found);
+          setResults(found.filter((m) => !hiddenFor(m, me.id) && !m.deleted_at));
           if (done) setSearching(false);
         },
       }).catch(() => {
@@ -774,7 +828,7 @@ function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; autho
       signal.aborted = true;
       clearTimeout(t);
     };
-  }, [q, sb, couple.id, cipher]);
+  }, [q, sb, couple.id, me.id, cipher]);
   return (
     <>
       <TextInput

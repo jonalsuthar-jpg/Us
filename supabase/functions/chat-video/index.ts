@@ -5,12 +5,13 @@
  *
  *   { action: 'upload', messageId }       → { path, url }   (PUT, 15 minutes)
  *   { action: 'download', paths }         → { urls }        (GET, 6 hours, keyed by path)
+ *   { action: 'remove', messageId }       → { ok }          (after "delete for everyone")
  *   { action: 'clear' }                   → { ok }          (unpair: delete our videos)
  *
  * Only paths in the caller's own couple folder are signed.
  */
 import { cors, json, requireCaller } from '../_shared/auth.ts';
-import { presign, removeFolder } from '../_shared/r2.ts';
+import { presign, removeFile, removeFolder } from '../_shared/r2.ts';
 
 const UPLOAD_S = 15 * 60;
 const DOWNLOAD_S = 6 * 3600;
@@ -39,6 +40,15 @@ Deno.serve(async (req) => {
         urls[p] = await presign('GET', p, DOWNLOAD_S);
       }
       return json({ urls, expiresIn: DOWNLOAD_S });
+    }
+
+    // Only a message the sender has already deleted for everyone loses its video.
+    if (body.action === 'remove') {
+      if (!UUID.test(String(body.messageId ?? ''))) return json({ error: 'bad_request' }, 400);
+      const { data } = await caller.asUser.from('messages').select('id').eq('id', body.messageId).eq('sender_id', caller.userId).not('deleted_at', 'is', null).maybeSingle();
+      if (!data) return json({ error: 'forbidden' }, 403);
+      await removeFile(`${folder}${body.messageId}.enc`);
+      return json({ ok: true });
     }
 
     if (body.action === 'clear') {

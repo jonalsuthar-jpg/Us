@@ -1,7 +1,7 @@
 import { describeCall, formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, messagePreview, type CallMedia, type Message, type PartnerSlot } from '@us/shared';
 import { Image as AnimatedImage } from 'expo-image';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { Headphones, Pause, Phone, PhoneMissed, Pin, Play, Tv, Video } from 'lucide-react-native';
+import { Ban, Headphones, Pause, Phone, PhoneMissed, Pin, Play, Tv, Video } from 'lucide-react-native';
 import { memo, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { cn } from '../ui/cn';
@@ -56,8 +56,8 @@ export const Bubble = memo(function Bubble({
   /** Opens reactions / reply / pin. */
   onLongPress?: (m: Message) => void;
   onReact?: (m: Message, emoji: string | null) => void;
-  onOpenPhoto?: (url: string) => void;
-  onOpenVideo?: (url: string) => void;
+  onOpenPhoto?: (url: string, m: Message) => void;
+  onOpenVideo?: (url: string, m: Message) => void;
   onJumpTo?: (id: string) => void;
   /** GIFs and stickers play; off while the chat isn't on screen. */
   animate?: boolean;
@@ -76,6 +76,14 @@ export const Bubble = memo(function Bubble({
   const linked = giphy ?? ours;
   const sticker = message.media_kind === 'sticker' && !!(giphy || message.media_path);
   const meta = message.media_meta;
+  const deleted = !!message.deleted_at;
+  const giphyStill = giphy ? (message.localUri ?? (typeof meta?.still === 'string' ? meta.still : undefined)) : undefined;
+  // A GIF or sticker whose file isn't here yet: hold its place, so it never looks empty.
+  const waiting = isLinkedMedia(message.media_kind) && !linked && !!message.media_path;
+  const linkedSize = {
+    width: sticker ? 150 : 220,
+    aspectRatio: meta?.width && meta?.height ? Math.max(meta.width / meta.height, 0.6) : 1,
+  };
   const describe = hasText ? message.body : messagePreview(message);
   const settled = !message.pending && !message.failed;
   const lastTap = useRef(0);
@@ -108,7 +116,7 @@ export const Bubble = memo(function Bubble({
           }${message.pinned_at ? ', pinned' : ''}`}
           className={cn(
             'rounded-bubble',
-            photo && url ? 'overflow-hidden p-1' : linked ? 'overflow-hidden p-1' : 'px-3 pb-1.5 pt-2',
+            photo && url ? 'overflow-hidden p-1' : linked || waiting ? 'overflow-hidden p-1' : 'px-3 pb-1.5 pt-2',
             sticker ? 'bg-transparent' : mine ? MINE[slot] : THEIRS[slot],
             last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
             message.pending && 'opacity-80',
@@ -133,7 +141,7 @@ export const Bubble = memo(function Bubble({
 
           {photo ? (
             url ? (
-              <Pressable accessibilityRole="imagebutton" accessibilityLabel="Open photo" onPress={() => onOpenPhoto?.(url)} onLongPress={longPress}>
+              <Pressable accessibilityRole="imagebutton" accessibilityLabel="Open photo" onPress={() => onOpenPhoto?.(url, message)} onLongPress={longPress}>
                 <AnimatedImage
                   source={source(url)}
                   recyclingKey={message.id}
@@ -150,19 +158,26 @@ export const Bubble = memo(function Bubble({
                 ) : null}
               </Pressable>
             ) : (
-              <View style={{ width: 240, aspectRatio: photoAspect(meta) }} className="rounded-[14px] bg-black/10" />
+              <View style={{ width: 240, aspectRatio: photoAspect(meta) }} className="items-center justify-center rounded-[14px] bg-black/10">
+                <ActivityIndicator color={c.inkMuted} />
+              </View>
             )
+          ) : null}
+
+          {waiting ? (
+            <View style={linkedSize} className="items-center justify-center rounded-[18px] bg-black/5">
+              <ActivityIndicator color={c.inkMuted} />
+            </View>
           ) : null}
 
           {linked ? (
             <AnimatedImage
               source={giphy ? linked : source(linked)}
+              // GIPHY: the sender's picker preview, or the still frame, while the GIF itself loads.
+              placeholder={giphyStill ? { uri: giphyStill } : undefined}
+              placeholderContentFit="contain"
               accessibilityLabel={message.media_kind === 'sticker' ? 'Sticker' : 'GIF'}
-              style={{
-                width: sticker ? 150 : 220,
-                aspectRatio: meta?.width && meta?.height ? Math.max(meta.width / meta.height, 0.6) : 1,
-                borderRadius: sticker ? 0 : 14,
-              }}
+              style={{ ...linkedSize, borderRadius: sticker ? 0 : 14 }}
               contentFit="contain"
               cachePolicy="memory-disk"
               recyclingKey={message.id}
@@ -177,7 +192,7 @@ export const Bubble = memo(function Bubble({
               accessibilityRole="button"
               accessibilityLabel={url ? `Play video, ${formatVoiceLength(meta?.duration_ms)}` : 'Video, opening'}
               disabled={!url}
-              onPress={() => url && onOpenVideo?.(url)}
+              onPress={() => url && onOpenVideo?.(url, message)}
               onLongPress={longPress}
               style={{ width: 220, aspectRatio: Math.min(Math.max(photoAspect(meta), 0.75), 1.6) }}
               className="items-center justify-center overflow-hidden rounded-[14px] bg-plum-900"
@@ -194,6 +209,12 @@ export const Bubble = memo(function Bubble({
             </Pressable>
           ) : null}
 
+          {deleted ? (
+            <View className="flex-row items-center gap-1.5">
+              <Ban size={14} color={c.inkMuted} />
+              <Text className="italic text-ink-soft">{mine ? 'You deleted this message' : 'This message was deleted'}</Text>
+            </View>
+          ) : null}
           {hasText ? <Text className={cn('text-ink', photo && url && 'px-2.5 pt-1.5')}>{message.body}</Text> : null}
           {/* Encrypted, and this phone can't open it (yet). */}
           {message.e2ee === 'locked' || message.e2ee === 'failed' ? <Text className="italic text-ink-soft">{messagePreview(message)}</Text> : null}

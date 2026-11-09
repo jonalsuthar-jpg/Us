@@ -1,6 +1,6 @@
 'use client';
 
-import { clusters, formatDay, groupByDay, isStickerMime, keepSticker, listPinned, messagePreview, saveSticker, searchMessages, snapReplyQuote, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type Message, type Sticker } from '@us/shared';
+import { clusters, formatDay, groupByDay, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, searchMessages, snapReplyQuote, stickerPath, STICKERS_TOPIC, uuid, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type Message, type Sticker } from '@us/shared';
 import { useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping } from '@us/shared/react';
 import { ChatKeyBanner } from '@/components/chat/chat-key';
 import { ChevronsDown, Phone, Pin, Search, Video } from 'lucide-react';
@@ -12,15 +12,13 @@ import { CallEntry } from '@/components/chat/call-entry';
 import { Composer } from '@/components/chat/composer';
 import { DoodleDialog } from '@/components/draw/doodle-dialog';
 import { StickerMaker } from '@/components/stickers/maker';
-import { StickerPicker } from '@/components/stickers/picker';
-import { env } from '@/lib/env';
-import { GifPicker } from '@/components/chat/gif-picker';
+import { ExpressionPanel, type ExpressionTab } from '@/components/chat/expression-panel';
 import { PastedMediaDialog, type PastedSendAs } from '@/components/chat/pasted-media-dialog';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
 import { Dialog } from '@/components/ui/dialog';
 import { Lightbox } from '@/components/ui/lightbox';
-import { Spinner } from '@/components/ui/button';
+import { Button, Spinner } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import { PrivacyBadge } from '@/components/ui/privacy';
 import { usePageActive } from '@/lib/hooks';
@@ -42,26 +40,31 @@ function Thread() {
   const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf, channel } = useCouple();
   const partnerPhoto = photoOf(partnerSlot);
   const active = usePageActive();
-  const { messages, loading, hasOlder, loadOlder, send, retry, react, pin } = useMessages({ viewing: active });
+  const { messages, loading, hasOlder, loadOlder, send, retry, react, pin, remove } = useMessages({ viewing: active });
   const media = useChatMedia(messages);
-  const { cipher, sealer } = useChatKey();
+  const { cipher } = useChatKey();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
+  /** The chat message open in the lightbox (not a profile photo). */
+  const [viewed, setViewed] = useState<Message | null>(null);
+  /** Asking "for me or for everyone?" about this one. */
+  const [deleting, setDeleting] = useState<Message | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [panel, setPanel] = useState<'search' | 'pins' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const draw = useFeature('draw');
   const [doodle, setDoodle] = useState(false);
   const stickersOn = useFeature('stickers');
-  const [stickerPicker, setStickerPicker] = useState(false);
+  /** The sticker / GIF panel, open on this tab. */
+  const [expressions, setExpressions] = useState<ExpressionTab | null>(null);
   const [stickerMaker, setStickerMaker] = useState(false);
   const sendSticker = (st: Sticker, url?: string) =>
     sendWithReply('', { media: { kind: 'sticker', path: st.path, meta: { width: st.width, height: st.height }, localUri: url } });
 
   // Pinned messages (any age). Refreshes on a partner's pin ping and when a loaded message's pin changes.
   // Opened pins hold message text: kept in memory only.
-  const pins = useCoupleData('chat:pins', () => listPinned(sb, couple.id, cipher), [sb, couple.id, cipher], undefined, 'memory');
+  const pins = useCoupleData('chat:pins', async () => (await listPinned(sb, couple.id, cipher)).filter((m) => !hiddenFor(m, me.id)), [sb, couple.id, me.id, cipher], undefined, 'memory');
   const pinSignature = messages.map((m) => (m.pinned_at ? m.id : '')).join('');
   useEffect(() => {
     void pins.reload();
@@ -89,7 +92,6 @@ function Thread() {
     return true;
   }
 
-  const [gifs, setGifs] = useState(false);
 
   function sendWithReply(text: string, extras: Parameters<typeof send>[1] = {}) {
     stick.current = true;
@@ -142,12 +144,28 @@ function Thread() {
     } catch {
       // size is only a layout hint
     }
+    // On screen at once; the file uploads as it sends, and the sticker joins Ours after.
     if (as === 'sticker' && isStickerMime(file.type)) {
-      const st = await saveSticker(sb, { coupleId: couple.id, me: me.id, png: file, mime: file.type, ...meta, cipher: await sealer() });
-      channel.sendChanged(STICKERS_TOPIC);
-      return sendSticker(st, URL.createObjectURL(file));
+      return sendWithReply('', {
+        media: { kind: 'sticker', path: stickerPath(couple.id, uuid(), file.type), meta, localUri: URL.createObjectURL(file), upload: { body: file, contentType: file.type }, keep: true },
+      });
     }
     sendWithReply('', { media: { kind: 'image', meta, localUri: URL.createObjectURL(file), upload: { body: file, contentType: file.type } } });
+  }
+
+  /** Save a photo, video, GIF or sticker as a file, named by when it was sent. */
+  async function download(m: Message) {
+    const src = m.media_path ? (media[m.media_path] ?? m.localUri) : (m.media_meta?.url ?? m.localUri);
+    if (!src) throw new Error('Still opening. Try again in a moment.');
+    const blob = await (await fetch(src)).blob();
+    const ext = (m.mime ?? blob.type).split('/')[1]?.split(';')[0]?.replace('jpeg', 'jpg').replace('quicktime', 'mov') || (m.media_kind === 'video' ? 'mp4' : 'jpg');
+    const d = new Date(m.created_at);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Us-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${ext}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
 
   function sendVoice(blob: Blob, durationMs: number) {
@@ -337,7 +355,18 @@ function Thread() {
                                   }
                                 : undefined
                             }
-                            onOpenPhoto={setPhoto}
+                            onOpenPhoto={(url) => {
+                              setPhoto(url);
+                              setViewed(m);
+                            }}
+                            onDownload={() => {
+                              setActiveId(null);
+                              void download(m).catch(fail);
+                            }}
+                            onDelete={() => {
+                              setActiveId(null);
+                              setDeleting(m);
+                            }}
                             onJumpTo={(id) => void jumpTo(id)}
                           />
                         ),
@@ -389,7 +418,16 @@ function Thread() {
           }}
         />
       </Dialog>
-      <Lightbox src={photo} label="Photo" onClose={() => setPhoto(null)} />
+      <Lightbox
+        src={photo}
+        label="Photo"
+        onClose={() => {
+          setPhoto(null);
+          setViewed(null);
+        }}
+        onDownload={viewed ? () => void download(viewed).catch(fail) : undefined}
+        onDelete={viewed ? () => setDeleting(viewed) : undefined}
+      />
 
       <div className="px-3 pb-3 pt-1 sm:px-8 sm:pb-6">
         <div className="mx-auto max-w-3xl">
@@ -409,41 +447,66 @@ function Thread() {
             }}
             onPhoto={(f, caption) => void sendPhoto(f, caption).catch(fail)}
             onVoice={sendVoice}
-            onGif={env.giphyKey ? () => setGifs(true) : undefined}
+            onGif={() => setExpressions('gif')}
             onDoodle={draw ? () => setDoodle(true) : undefined}
-            onSticker={stickersOn ? () => setStickerPicker(true) : undefined}
+            onSticker={() => setExpressions('sticker')}
             onPasteMedia={setPasted}
           />
           <PastedMediaDialog file={pasted} stickers={stickersOn} onClose={() => setPasted(null)} onSend={(f, as) => void sendPasted(f, as).catch(fail)} />
-          {stickersOn ? (
-            <>
-              <StickerPicker
-                open={stickerPicker}
-                onOpenChange={setStickerPicker}
-                onMake={() => {
-                  setStickerPicker(false);
-                  setStickerMaker(true);
-                }}
-                onSend={(st, url) => {
-                  setStickerPicker(false);
-                  sendSticker(st, url);
-                }}
-              />
-              <StickerMaker open={stickerMaker} onOpenChange={setStickerMaker} onSaved={(st, send) => send && sendSticker(st)} />
-            </>
-          ) : null}
+          {stickersOn ? <StickerMaker open={stickerMaker} onOpenChange={setStickerMaker} onSaved={(st, send) => send && sendSticker(st)} /> : null}
           {draw ? <DoodleDialog open={doodle} onOpenChange={setDoodle} mode="chat" onChatPhoto={(f) => void sendPhoto(f, '').catch(fail)} /> : null}
-          <GifPicker
-            open={gifs}
-            onOpenChange={setGifs}
+          <ExpressionPanel
+            open={expressions !== null}
+            initialTab={expressions ?? 'sticker'}
+            stickers={stickersOn}
+            onOpenChange={(o) => !o && setExpressions(null)}
             onPick={(kind, gif) => {
-              setGifs(false);
-              sendWithReply('', { media: { kind, meta: { url: gif.url, width: gif.width, height: gif.height } } });
+              setExpressions(null);
+              sendWithReply('', { media: { kind, meta: { url: gif.url, still: gif.still, width: gif.width, height: gif.height }, localUri: gif.previewUrl } });
+            }}
+            onSendOurs={(st, url) => {
+              setExpressions(null);
+              sendSticker(st, url);
+            }}
+            onMake={() => {
+              setExpressions(null);
+              setStickerMaker(true);
+            }}
+          />
+          <DeleteDialog
+            message={deleting}
+            mine={!!deleting && deleting.sender_id === me.id && !deleting.deleted_at && !deleting.pending && !deleting.failed}
+            onClose={() => setDeleting(null)}
+            onDelete={(m, forEveryone) => {
+              setDeleting(null);
+              if (viewed?.id === m.id) setPhoto(null);
+              void remove(m.id, forEveryone).catch(fail);
             }}
           />
         </div>
       </div>
     </div>
+  );
+}
+
+/** WhatsApp's choice: for everyone (mine), or just for me. */
+function DeleteDialog({ message, mine, onClose, onDelete }: { message: Message | null; mine: boolean; onClose: () => void; onDelete: (m: Message, forEveryone: boolean) => void }) {
+  return (
+    <Dialog open={!!message} onOpenChange={(o) => !o && onClose()} title="Delete message?" description={mine ? undefined : 'It goes from this chat on your devices only.'}>
+      <div className="flex flex-col gap-2">
+        {mine ? (
+          <Button block onClick={() => message && onDelete(message, true)}>
+            Delete for everyone
+          </Button>
+        ) : null}
+        <Button block variant={mine ? 'secondary' : 'primary'} onClick={() => message && onDelete(message, false)}>
+          Delete for me
+        </Button>
+        <Button block variant="quiet" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -470,7 +533,7 @@ function MessageList({ items, empty, onPick, authorOf }: { items: Message[]; emp
 }
 
 function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; authorOf: (m: Message) => string }) {
-  const { sb, couple } = useCouple();
+  const { sb, couple, me } = useCouple();
   const { cipher } = useChatKey();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Message[] | null>(null);
@@ -488,7 +551,7 @@ function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; autho
         signal,
         onProgress: (found, done) => {
           if (signal.aborted) return;
-          setResults(found);
+          setResults(found.filter((m) => !hiddenFor(m, me.id) && !m.deleted_at));
           if (done) setSearching(false);
         },
       }).catch(() => {
@@ -501,7 +564,7 @@ function SearchPanel({ onPick, authorOf }: { onPick: (m: Message) => void; autho
       signal.aborted = true;
       clearTimeout(t);
     };
-  }, [q, sb, couple.id, cipher]);
+  }, [q, sb, couple.id, me.id, cipher]);
   return (
     <div className="space-y-3">
       <input

@@ -83,8 +83,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         photosPermission: 'Us shows your recent photos so you can send one in chat.',
         savePhotosPermission: 'Us saves photos you choose to keep.',
         isAccessMediaLocationEnabled: false,
-        // Photos only: the camera strip never needs videos or audio.
-        granularPermissions: ['photo'],
+        // Photos for the camera strip; videos too, so a chat video can be saved.
+        granularPermissions: ['photo', 'video'],
       },
     ],
     [

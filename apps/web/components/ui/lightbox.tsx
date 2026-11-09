@@ -1,7 +1,7 @@
 'use client';
 
 import * as D from '@radix-ui/react-dialog';
-import { X } from 'lucide-react';
+import { Download, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
 
@@ -27,7 +27,21 @@ export function Photo({ src, label, className }: { src: string; label: string; c
 }
 
 /** Black full-screen viewer; click the photo to toggle actual size. */
-export function Lightbox({ src, label, onClose }: { src: string | null; label: string; onClose: () => void }) {
+export function Lightbox({
+  src,
+  label,
+  onClose,
+  onDownload,
+  onDelete,
+}: {
+  src: string | null;
+  label: string;
+  onClose: () => void;
+  /** Chat photos: save it. */
+  onDownload?: () => void;
+  /** Chat photos: delete the message. */
+  onDelete?: () => void;
+}) {
   const [actual, setActual] = useState(false);
   return (
     <D.Root
@@ -62,8 +76,24 @@ export function Lightbox({ src, label, onClose }: { src: string | null; label: s
           >
             <X className="h-5 w-5" />
           </D.Close>
+          {onDownload || onDelete ? (
+            <div className="fixed left-4 top-[max(1rem,env(safe-area-inset-top))] flex gap-2">
+              {onDownload ? (
+                <button type="button" aria-label="Download" onClick={onDownload} className={LIGHTBOX_BUTTON}>
+                  <Download className="h-5 w-5" />
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button type="button" aria-label="Delete" onClick={onDelete} className={LIGHTBOX_BUTTON}>
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </D.Content>
       </D.Portal>
     </D.Root>
   );
 }
+
+const LIGHTBOX_BUTTON = 'rounded-full bg-white/10 p-2.5 text-white hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400';

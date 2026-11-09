@@ -926,6 +926,22 @@ await test('sticker messages: a GIPHY link or one of our sticker files, nothing 
   await rejects(send({ path: `${couple.id}/sticker-55555555-5555-4555-8555-555555555555.mp4` }), /media_shape/, 'not a picture');
 });
 
+await test('deleting messages: mine for everyone, any for me, never theirs for everyone', async () => {
+  const send = (who, body) => as(who, () => one(`insert into public.messages (couple_id, sender_id, body) values ($1, $2, $3) returning id`, [couple.id, who, body]));
+  const mine = await send(alice, 'oops');
+  const theirs = await send(bob, 'hello');
+  await rejects(as(alice, () => q(`select public.delete_message($1, true)`, [theirs.id])), /not_yours/, 'their message for everyone');
+  await rejects(as(carol, () => q(`select public.delete_message($1, false)`, [mine.id])), /message_not_found/, 'outsider');
+  await rejects(as(alice, () => q(`update public.messages set body = 'x' where id = $1`, [mine.id])), /permission denied/, 'no direct updates');
+  const wiped = await as(alice, () => one(`select (public.delete_message($1, true)).*`, [mine.id]));
+  assert.ok(wiped.deleted_at, 'marked deleted');
+  assert.equal(wiped.body, null, 'content wiped');
+  const hidden = await as(alice, () => one(`select (public.delete_message($1, false)).*`, [theirs.id]));
+  assert.deepEqual(hidden.hidden_for, [alice]);
+  await as(alice, () => q(`select public.delete_message($1, false)`, [theirs.id]));
+  assert.deepEqual((await q(`select hidden_for from public.messages where id = $1`, [theirs.id]))[0].hidden_for, [alice], 'once only');
+});
+
 console.log('\nEncrypted chat');
 
 const pub = (n) => Buffer.alloc(32, n).toString('base64');

@@ -131,6 +131,10 @@ export type Database = {
           ciphertext: string | null;
           /** Which chat key `ciphertext` is under. */
           key_version: number | null;
+          /** Deleted for everyone (its content wiped). Set via delete_message(). */
+          deleted_at: string | null;
+          /** Who deleted it just for themselves. */
+          hidden_for: string[];
         };
         Insert: {
           id?: string;
@@ -638,6 +642,7 @@ export type Database = {
         Args: { p_id: string; p_ciphertext: string; p_key_version: number; p_reactions: Record<string, string> };
         Returns: Database['public']['Tables']['messages']['Row'];
       };
+      delete_message: { Args: { p_id: string; p_for_everyone: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };
       react_to_message: { Args: { p_id: string; p_emoji: string | null }; Returns: Database['public']['Tables']['messages']['Row'] };
       pin_message: { Args: { p_id: string; p_pinned: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };
       mark_snap_seen: { Args: { p_id: string }; Returns: Database['public']['Tables']['snaps']['Row'] };
@@ -748,6 +753,8 @@ export type Message = MessageRow & {
   localUri?: string;
   /** Client-only: the file still to upload, kept so a failed send can retry. */
   upload?: { body: Blob | ArrayBuffer | Uint8Array; contentType: string };
+  /** Client-only: a new sticker, to keep in Ours once it's sent. */
+  keep?: boolean;
   /**
    * Client-only, encrypted rows: 'ok' once opened (body and media_meta filled
    * in), 'locked' while this device has no key for it, 'failed' when it

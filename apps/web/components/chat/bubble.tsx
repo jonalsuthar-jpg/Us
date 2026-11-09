@@ -1,5 +1,5 @@
 import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, isOurStickerPath, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
-import { Copy, Pin, PinOff, Plus, Reply, Sticker } from 'lucide-react';
+import { Ban, Copy, Download, Pin, PinOff, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Ticks } from '@/components/ui/ticks';
 import { cn } from '@/lib/cn';
@@ -44,6 +44,9 @@ interface BubbleProps {
   /** Keep a sticker we made (sent in chat) in Our stickers. */
   onKeepSticker?: () => void;
   onOpenPhoto?: (url: string) => void;
+  /** Photos, videos, GIFs and stickers: save as a file. */
+  onDownload?: () => void;
+  onDelete?: () => void;
   onJumpTo?: (id: string) => void;
 }
 
@@ -66,6 +69,8 @@ export function Bubble({
   onPin,
   onKeepSticker,
   onOpenPhoto,
+  onDownload,
+  onDelete,
   onJumpTo,
 }: BubbleProps) {
   const reactions = groupReactions(message.reactions, myId);
@@ -79,6 +84,11 @@ export function Bubble({
   const ours = message.media_kind === 'sticker' && !!message.media_path ? (url ?? null) : null;
   const linked = giphy ?? ours;
   const sticker = message.media_kind === 'sticker' && !!(giphy || message.media_path);
+  const deleted = !!message.deleted_at;
+  // A GIF or sticker whose file isn't here yet: hold its place, so it never looks empty.
+  const waiting = isLinkedMedia(message.media_kind) && !linked && !!message.media_path;
+  const still = giphy ? (message.localUri ?? (typeof message.media_meta?.still === 'string' ? message.media_meta.still : undefined)) : undefined;
+  const hasMedia = !deleted && !!message.media_kind && message.media_kind !== 'audio';
   const [more, setMore] = useState(false);
   useEffect(() => {
     if (!active) setMore(false);
@@ -114,26 +124,40 @@ export function Bubble({
             mine ? 'justify-end' : 'justify-start',
           )}
         >
-          {QUICK_REACTIONS.map(reactButton)}
-          <ToolButton label={more ? 'Fewer reactions' : 'More reactions'} onClick={() => setMore((v) => !v)}>
-            <Plus className="h-4 w-4" />
-          </ToolButton>
-          {more ? <div className="flex w-full flex-wrap gap-0.5 border-y border-paper-edge py-1">{MORE_REACTIONS.map(reactButton)}</div> : null}
-          <span className="mx-1 h-6 w-px bg-paper-edge" aria-hidden />
-          <ToolButton label="Reply" onClick={onReply}>
-            <Reply className="h-4 w-4" />
-          </ToolButton>
-          <ToolButton label={message.pinned_at ? 'Unpin' : 'Pin'} onClick={() => onPin?.(!message.pinned_at)}>
-            {message.pinned_at ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-          </ToolButton>
-          {onKeepSticker && message.media_kind === 'sticker' && isOurStickerPath(message.media_path) ? (
-            <ToolButton label="Save sticker" onClick={onKeepSticker}>
-              <Sticker className="h-4 w-4" />
-            </ToolButton>
-          ) : null}
-          {hasText ? (
-            <ToolButton label="Copy" onClick={() => void navigator.clipboard?.writeText(message.body ?? '')}>
-              <Copy className="h-4 w-4" />
+          {deleted ? null : (
+            <>
+              {QUICK_REACTIONS.map(reactButton)}
+              <ToolButton label={more ? 'Fewer reactions' : 'More reactions'} onClick={() => setMore((v) => !v)}>
+                <Plus className="h-4 w-4" />
+              </ToolButton>
+              {more ? <div className="flex w-full flex-wrap gap-0.5 border-y border-paper-edge py-1">{MORE_REACTIONS.map(reactButton)}</div> : null}
+              <span className="mx-1 h-6 w-px bg-paper-edge" aria-hidden />
+              <ToolButton label="Reply" onClick={onReply}>
+                <Reply className="h-4 w-4" />
+              </ToolButton>
+              <ToolButton label={message.pinned_at ? 'Unpin' : 'Pin'} onClick={() => onPin?.(!message.pinned_at)}>
+                {message.pinned_at ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+              </ToolButton>
+              {onKeepSticker && message.media_kind === 'sticker' && isOurStickerPath(message.media_path) ? (
+                <ToolButton label="Save sticker" onClick={onKeepSticker}>
+                  <Sticker className="h-4 w-4" />
+                </ToolButton>
+              ) : null}
+              {hasText ? (
+                <ToolButton label="Copy" onClick={() => void navigator.clipboard?.writeText(message.body ?? '')}>
+                  <Copy className="h-4 w-4" />
+                </ToolButton>
+              ) : null}
+              {hasMedia && onDownload ? (
+                <ToolButton label="Download" onClick={onDownload}>
+                  <Download className="h-4 w-4" />
+                </ToolButton>
+              ) : null}
+            </>
+          )}
+          {onDelete ? (
+            <ToolButton label="Delete" onClick={onDelete}>
+              <Trash2 className="h-4 w-4" />
             </ToolButton>
           ) : null}
         </div>
@@ -154,7 +178,7 @@ export function Bubble({
           }}
           className={cn(
             'relative cursor-default rounded-bubble text-body transition-shadow',
-            (url && message.media_kind === 'image') || linked ? 'overflow-hidden p-1' : 'px-3.5 pb-1.5 pt-2',
+            (url && message.media_kind === 'image') || linked || waiting ? 'overflow-hidden p-1' : 'px-3.5 pb-1.5 pt-2',
             sticker ? 'bg-transparent shadow-none' : mine ? MINE[slot] : THEIRS[slot],
             last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
             message.pending && 'opacity-80',
@@ -178,13 +202,26 @@ export function Bubble({
             </button>
           ) : null}
 
+          {waiting ? (
+            <span
+              className={cn('flex items-center justify-center rounded-[18px] bg-black/5', sticker ? 'w-36' : 'w-60')}
+              style={{ aspectRatio: message.media_meta?.width && message.media_meta?.height ? `${message.media_meta.width} / ${message.media_meta.height}` : '1' }}
+              aria-label={sticker ? 'Sticker loading' : 'GIF loading'}
+            >
+              <span className="h-6 w-6 animate-spin rounded-full border-2 border-ink/20 border-t-ink/50" />
+            </span>
+          ) : null}
           {linked ? (
             <img
               src={linked}
               alt={sticker ? 'Sticker' : 'GIF'}
               loading="lazy"
-              className={cn('block max-w-full object-contain', sticker ? 'w-36' : 'w-60 rounded-[14px]')}
-              style={{ aspectRatio: message.media_meta?.width && message.media_meta?.height ? `${message.media_meta.width} / ${message.media_meta.height}` : undefined }}
+              className={cn('block max-w-full bg-contain bg-center bg-no-repeat object-contain', sticker ? 'w-36' : 'w-60 rounded-[14px]')}
+              // GIPHY: the still frame (or my picker's preview) shows while the GIF loads.
+              style={{
+                aspectRatio: message.media_meta?.width && message.media_meta?.height ? `${message.media_meta.width} / ${message.media_meta.height}` : undefined,
+                backgroundImage: still ? `url(${still})` : undefined,
+              }}
             />
           ) : null}
           {message.media_kind === 'image' ? (
@@ -229,6 +266,12 @@ export function Bubble({
             </span>
           ) : null}
 
+          {deleted ? (
+            <span className="inline-flex items-center gap-1.5 italic text-ink-muted">
+              <Ban className="h-3.5 w-3.5" aria-hidden />
+              {mine ? 'You deleted this message' : 'This message was deleted'}
+            </span>
+          ) : null}
           {hasText ? (
             <span className={cn('whitespace-pre-wrap break-words [overflow-wrap:anywhere]', url && message.media_kind === 'image' && 'block px-2.5 pb-1 pt-1.5')}>
               {message.body}

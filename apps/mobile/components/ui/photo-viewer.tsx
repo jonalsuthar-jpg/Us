@@ -1,4 +1,4 @@
-import { X } from 'lucide-react-native';
+import { Download, Trash2, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Image, Modal, Pressable, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -35,7 +35,21 @@ export function Photo({ uri, label, className }: { uri: string; label: string; c
  * Black full-screen viewer. Pinch to zoom (where your fingers are), drag
  * while zoomed, double-tap to zoom in or out, swipe down to close.
  */
-export function PhotoViewer({ uri, label, onClose }: { uri: string | null; label: string; onClose: () => void }) {
+export function PhotoViewer({
+  uri,
+  label,
+  onClose,
+  onSave,
+  onDelete,
+}: {
+  uri: string | null;
+  label: string;
+  onClose: () => void;
+  /** Chat photos: save to the gallery. */
+  onSave?: () => void;
+  /** Chat photos: delete the message. */
+  onDelete?: () => void;
+}) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={!!uri} animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
@@ -45,6 +59,7 @@ export function PhotoViewer({ uri, label, onClose }: { uri: string | null; label
         <IconButton label="Close photo" tone="night" onPress={onClose} className="absolute right-4" style={{ top: insets.top + 8 }}>
           <X size={22} color="#fff" />
         </IconButton>
+        <ViewerActions onSave={onSave} onDelete={onDelete} top={insets.top + 8} />
       </GestureHandlerRootView>
     </Modal>
   );
@@ -152,5 +167,24 @@ function ZoomableImage({ uri, label, onClose }: { uri: string; label: string; on
         <Image source={{ uri }} style={{ width, height }} resizeMode="contain" />
       </Animated.View>
     </GestureDetector>
+  );
+}
+
+/** Save and Delete, top left, over a full-screen photo or video. */
+export function ViewerActions({ onSave, onDelete, top }: { onSave?: () => void; onDelete?: () => void; top: number }) {
+  if (!onSave && !onDelete) return null;
+  return (
+    <View className="absolute left-4 flex-row gap-2" style={{ top }}>
+      {onSave ? (
+        <IconButton label="Save to gallery" tone="night" onPress={onSave}>
+          <Download size={21} color="#fff" />
+        </IconButton>
+      ) : null}
+      {onDelete ? (
+        <IconButton label="Delete" tone="night" onPress={onDelete}>
+          <Trash2 size={21} color="#fff" />
+        </IconButton>
+      ) : null}
+    </View>
   );
 }
