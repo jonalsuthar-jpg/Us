@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonStyles } from '@/components/ui/button';
 import { reloadIfStale } from '@/lib/stale-deploy';
 
 /** A page that threw: reload onto a newer build if that's the cause, otherwise say what broke. */
@@ -23,9 +23,9 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
           <p className="text-small text-ink-soft">Try again, or go back home. If it keeps happening, send the line below.</p>
           <div className="flex gap-3">
             <Button onClick={reset}>Try again</Button>
-            <Button variant="secondary" asChild>
-              <Link href="/home">Home</Link>
-            </Button>
+            <Link href="/home" className={buttonStyles({ variant: 'secondary' })}>
+              Home
+            </Link>
           </div>
           <p className="max-w-full break-words font-mono text-micro text-ink-muted">
             {error.name}: {error.message}
