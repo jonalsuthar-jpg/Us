@@ -86,7 +86,11 @@ export function SongPlayer({ url, autoPlay }: { url: string; autoPlay?: boolean 
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
         onTimeUpdate={(e) => setTime({ at: e.currentTarget.currentTime, of: Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0 })}
-        onLoadedMetadata={(e) => setTime((t) => ({ ...t, of: Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0 }))}
+        onLoadedMetadata={(e) => {
+          // Read it now: React clears currentTarget before the updater runs.
+          const of = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0;
+          setTime((t) => ({ ...t, of }));
+        }}
       />
       <button
         type="button"
