@@ -1,4 +1,5 @@
 import { AppShell } from '@/components/app/app-shell';
+import { BirthdayDecor } from '@/components/birthday/birthday-decor';
 import { NotificationsBridge } from '@/components/app/notifications-bridge';
 import { SessionGate } from '@/components/app/session-gate';
 import { SetupNotice } from '@/components/app/setup-notice';
@@ -14,6 +15,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <AppShell>{children}</AppShell>
       <CallOverlay />
       <DrawBridge />
+      <BirthdayDecor />
     </SessionGate>
   );
 }

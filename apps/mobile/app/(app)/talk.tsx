@@ -1,5 +1,5 @@
 import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, stickerPath, uuid, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
-import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
+import { cacheKey, readCache, useBirthday, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, useWishBurst, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -18,6 +18,7 @@ import { ChatKeyBanner } from '@/components/chat/chat-key';
 import { Composer } from '@/components/chat/composer';
 import { SwipeableRow } from '@/components/chat/swipeable-row';
 import { DoodleSheet } from '@/components/draw/doodle-sheet';
+import { Confetti } from '@/components/games/confetti';
 import { StickerMaker } from '@/components/stickers/maker';
 import { FeatureOff } from '@/components/feature-off';
 import { ExpressionPanel, type ExpressionTab } from '@/components/chat/expression-panel';
@@ -90,6 +91,25 @@ export default function Talk() {
   return <Thread />;
 }
 
+/** Soft paper confetti behind the chat on the birthday. */
+const BACKDROP_DOTS = Array.from({ length: 36 }, (_, i) => ({
+  // Spread evenly, nudged so it doesn't read as a grid.
+  left: `${((i % 6) * 17 + ((i * 7) % 11)) % 100}%` as const,
+  top: `${(Math.floor(i / 6) * 17 + ((i * 5) % 9)) % 100}%` as const,
+  size: 4 + (i % 3),
+  colour: ['#E46B8A', '#F3B33D', '#3FA6A0', '#8E6BB8'][i % 4]!,
+}));
+
+function FestiveBackdrop() {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      {BACKDROP_DOTS.map((d, i) => (
+        <View key={i} style={{ position: 'absolute', left: d.left, top: d.top, width: d.size, height: d.size, borderRadius: d.size, backgroundColor: d.colour, opacity: 0.22 }} />
+      ))}
+    </View>
+  );
+}
+
 function Thread() {
   const insets = useSafeAreaInsets();
   const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf, channel } = useCouple();
@@ -102,6 +122,8 @@ function Thread() {
   const { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, react, pin, remove } = useMessages({ viewing });
   const media = useChatMedia(messages);
   const { cipher, sealer } = useChatKey();
+  const birthday = useBirthday();
+  const wishBurst = useWishBurst(messages, birthday.festive);
   const [acting, setActing] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -447,6 +469,12 @@ function Thread() {
 
       <ChatKeyBanner />
 
+      {birthday.festive && birthday.room ? (
+        <View className="border-b border-paper-edge bg-rose-50 px-4 py-1.5">
+          <Text className="text-center font-sans-medium text-small text-plum-800">{`🎂 It’s ${birthday.room.name}’s birthday today 🎈`}</Text>
+        </View>
+      ) : null}
+
       {latestPin ? (
         <Pressable
           accessibilityRole="button"
@@ -465,6 +493,7 @@ function Thread() {
       ) : null}
 
       <View className="flex-1">
+        {birthday.festive ? <FestiveBackdrop /> : null}
         {loading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator color={c.rose} />
@@ -640,6 +669,7 @@ function Thread() {
           setStickerMaker(true);
         }}
       />
+      {wishBurst ? <Confetti key={wishBurst} pieces={60} /> : null}
     </KeyboardAvoidingView>
   );
 }

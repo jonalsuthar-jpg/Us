@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { birthdayPhase, moveKnife, topEmoji } from '../src';
+import { birthdayPhase, isBirthdayWish, moveKnife, msToNextLocalMidnight, topEmoji } from '../src';
 
 describe('birthday room', () => {
   const room = { unlock_at: '2026-11-09T18:30:00.000Z', ends_at: '2026-11-10T18:30:00.000Z' };
@@ -36,5 +36,17 @@ describe('birthday songs', () => {
     expect(songType('x', 'audio/mpeg')).toBe('audio/mpeg');
     expect(songType('x.wav', 'audio/x-wav')).toBe('audio/wav');
     expect(songType('notes.pdf', 'application/pdf')).toBeNull();
+  });
+
+  it('spots a birthday wish in the chat', () => {
+    for (const t of ['Happy birthday!!', 'happy bday jaan', 'HBD 💛', 'Happy Birth day', 'cake 🎂', '🥳🥳']) expect(isBirthdayWish(t)).toBe(true);
+    for (const t of ['happy to see you', 'birthday plans tomorrow?', 'hbdx', '', null]) expect(isBirthdayWish(t)).toBe(false);
+  });
+
+  it('counts down to the next midnight on this clock', () => {
+    const late = new Date(2026, 10, 9, 23, 59, 30).getTime();
+    expect(msToNextLocalMidnight(late)).toBe(30_000);
+    const midnight = new Date(2026, 10, 10, 0, 0, 0).getTime();
+    expect(msToNextLocalMidnight(midnight)).toBe(24 * 3600_000);
   });
 });

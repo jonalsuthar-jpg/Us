@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   BIRTHDAY_TOPIC,
   birthdayPhase,
@@ -14,6 +14,7 @@ import {
 import { draftMessage, sendMessage } from '../api/messages';
 import { notifyPartner } from '../api/push';
 import { moveKnife, type CakeState } from '../birthday/cake';
+import { birthdayPreviewKey, getDeviceFlag, isBirthdayWish, msToNextLocalMidnight, onDeviceFlags, setDeviceFlag } from '../birthday/festive';
 import { usSoFar, type UsSoFar } from '../birthday/stats';
 import { useChatKey } from './chat-key-provider';
 import { useCouple } from './couple-provider';
@@ -26,6 +27,11 @@ export interface BirthdayView {
   phase: 'before' | 'day' | 'after' | null;
   /** I made it: I can preview and edit it any time. */
   maker: boolean;
+  /** The whole app is decorated: the day itself, or the maker previewing it on this device. */
+  festive: boolean;
+  /** The maker is previewing the look on this device before the day. */
+  preview: boolean;
+  setPreview: (on: boolean) => void;
   loading: boolean;
   reload: () => Promise<void>;
   save: <K extends BirthdaySection>(section: K, value: BirthdayContent[K]) => Promise<void>;
@@ -49,18 +55,55 @@ export function useBirthday(): BirthdayView {
   const lastCheck = useRef(Date.now());
   useForegroundTick(() => {
     setNow(Date.now());
-    if (!room && Date.now() - lastCheck.current >= WAIT_MS) {
+    // A midnight passed since the last look (the room appears at midnight), or it's been a while.
+    const crossedMidnight = new Date(lastCheck.current).toDateString() !== new Date().toDateString();
+    if (!room && (crossedMidnight || Date.now() - lastCheck.current >= WAIT_MS)) {
       lastCheck.current = Date.now();
       void data.reload();
     }
   }, 60_000);
 
+  // On the second: look again just after midnight while there's nothing yet,
+  // and switch the look on and off exactly when the day starts and ends.
+  const { reload } = data;
+  const unlockAt = room ? Date.parse(room.unlock_at) : null;
+  const endsAt = room ? Date.parse(room.ends_at) : null;
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const at = (ms: number, fn: () => void) => {
+      if (ms > 0 && ms < 2 ** 31 - 1) timers.push(setTimeout(fn, ms));
+    };
+    if (unlockAt === null || endsAt === null) {
+      at(msToNextLocalMidnight() + 3000, () => {
+        lastCheck.current = Date.now();
+        void reload();
+      });
+    } else {
+      at(unlockAt - Date.now() + 50, () => setNow(Date.now()));
+      at(endsAt - Date.now() + 50, () => setNow(Date.now()));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [unlockAt, endsAt, reload]);
+
   const id = room?.id;
+  const maker = !!room && room.from_id === me.id;
+  const phase = room ? birthdayPhase(room, now) : null;
+  const previewOn = useDeviceFlag(room ? birthdayPreviewKey(room.id) : null);
+  const preview = maker && phase === 'before' && previewOn;
+
   const { mutate } = data;
   return {
     room,
-    phase: room ? birthdayPhase(room, now) : null,
-    maker: !!room && room.from_id === me.id,
+    phase,
+    maker,
+    festive: phase === 'day' || preview,
+    preview,
+    setPreview: useCallback(
+      (on: boolean) => {
+        if (id) setDeviceFlag(birthdayPreviewKey(id), on);
+      },
+      [id],
+    ),
     loading: data.loading,
     reload: data.reload,
     save: useCallback(
@@ -90,6 +133,38 @@ export function useBirthday(): BirthdayView {
       [sb, couple.id, me.id, sealer],
     ),
   };
+}
+
+/** A per-device on/off flag (see birthday/festive.ts); false without a key. */
+export function useDeviceFlag(key: string | null): boolean {
+  return useSyncExternalStore(
+    onDeviceFlags,
+    () => (key ? getDeviceFlag(key) : false),
+    () => false,
+  );
+}
+
+/**
+ * Counts up each time a birthday wish arrives in the chat while the app is
+ * festive (sent or received just now, not ones scrolled back to), so the
+ * screen can burst confetti. Each message bursts once.
+ */
+export function useWishBurst(messages: { id: string; body?: string | null; created_at: string }[], festive: boolean): number {
+  const [burst, setBurst] = useState(0);
+  const since = useRef(Date.now());
+  const done = useRef(new Set<string>());
+  useEffect(() => {
+    if (!festive) return;
+    let wishes = 0;
+    for (const m of messages.slice(-5)) {
+      if (done.current.has(m.id) || Date.parse(m.created_at) < since.current - 30_000) continue;
+      if (!isBirthdayWish(m.body)) continue;
+      done.current.add(m.id);
+      wishes++;
+    }
+    if (wishes) setBurst((n) => n + 1);
+  }, [messages, festive]);
+  return burst;
 }
 
 /** "Us, so far", read on this device (see birthday/stats.ts). */

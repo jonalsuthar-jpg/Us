@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
+import { BirthdayDecor } from '@/components/birthday/birthday-decor';
 import { CallScreen } from '@/components/call/call-screen';
 import { ChatKeyApproval } from '@/components/chat/chat-key';
 import { DrawBridge, drawRoute } from '@/components/draw/draw-bridge';
@@ -128,6 +129,7 @@ export default function AppLayout() {
         <TapHeart />
         <ChatKeyApproval />
         <DrawBridge />
+        <BirthdayDecor />
         <CallScreen />
       </CallProvider>
     </CoupleProvider>
