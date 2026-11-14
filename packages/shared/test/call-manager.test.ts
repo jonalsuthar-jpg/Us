@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Call, CallMedia, CallStatus } from '../src/database.types';
 import type { SignalEnvelope } from '../src/realtime/couple-channel';
 import { CallManager, opusForMedia, type CallPhase, type RtcAdapter } from '../src/webrtc/call-manager';
+import type { SignalEvent } from '../src/webrtc/signals';
 
 // ---------------------------------------------------------------------------
 // Fakes: just enough WebRTC surface for the state machine to run end-to-end.
@@ -189,9 +190,24 @@ function makeWorld() {
     };
   }
 
+  /** A fresh connection to the broadcast channel, as a reopened app gets. */
+  function signalingFor(me: string) {
+    const clientId = nextClient++;
+    return {
+      send: async (event: SignalEvent) => {
+        const env = { ...event, from: me } as SignalEnvelope;
+        for (const c of clients) if (c.id !== clientId) queueMicrotask(() => c.fn(env));
+      },
+      subscribe: (fn: (e: SignalEnvelope) => void) => {
+        const entry = { id: clientId, fn };
+        clients.add(entry);
+        return () => void clients.delete(entry);
+      },
+    };
+  }
+
   function manager(me: string, partner: string, extra: { ringTimeoutMs?: number; rtc?: Partial<RtcAdapter> } = {}) {
     const { rtc: rtcExtra, ...rest } = extra;
-    const clientId = nextClient++;
     const owned: FakePC[] = [];
     const m = new CallManager({
       me,
@@ -209,23 +225,13 @@ function makeWorld() {
       endedLingerMs: 10,
       ...rest,
       backend: backendFor(me, partner),
-      signaling: {
-        send: async (event) => {
-          const env = { ...event, from: me } as SignalEnvelope;
-          for (const c of clients) if (c.id !== clientId) queueMicrotask(() => c.fn(env));
-        },
-        subscribe: (fn) => {
-          const entry = { id: clientId, fn };
-          clients.add(entry);
-          return () => void clients.delete(entry);
-        },
-      },
+      signaling: signalingFor(me),
     });
     pcsOf.set(m, owned);
     return m;
   }
 
-  return { manager, calls, statusLog, pushes };
+  return { manager, signalingFor, backendFor, calls, statusLog, pushes };
 }
 
 const pcsOf = new WeakMap<CallManager, FakePC[]>();
@@ -531,6 +537,47 @@ describe('CallManager', () => {
     await alice.stopScreenShare();
     await alice.startScreenShare();
     expect(alice.getState().shareMode).toBe('smooth');
+  });
+
+  it('closed mid-call (Android swipe): carries on without the channel and ends from the call row', async () => {
+    const w = makeWorld();
+    const alice = w.manager('alice', 'bob');
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('audio');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(bob, 'connected');
+
+    bob.detach();
+    expect(bob.isOnCall()).toBe(true);
+    await alice.hangup();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(bob.getState().phase).toBe('connected'); // the hang-up signal never reached the closed app
+
+    bob.syncFromRow(w.calls.get('call-1')!);
+    expect(bob.getState().phase).toBe('ended');
+    expect(bob.getState().endReason).toBe('remote-hangup');
+    expect(bob.isOnCall()).toBe(false);
+  });
+
+  it('reopened mid-call: signals move to the new channel and my media state is resent', async () => {
+    const w = makeWorld();
+    const alice = w.manager('alice', 'bob');
+    const bob = w.manager('bob', 'alice');
+    await alice.startCall('audio');
+    await until(bob, 'incoming');
+    await bob.accept();
+    await until(alice, 'connected');
+    await until(bob, 'connected');
+
+    bob.detach();
+    bob.rebind(w.signalingFor('bob'), w.backendFor('bob', 'alice'));
+    bob.toggleMic();
+    await vi.waitFor(() => expect(alice.getState().remote.mic).toBe(false));
+
+    await alice.hangup();
+    await until(bob, 'ended');
+    expect(bob.getState().endReason).toBe('remote-hangup');
   });
 
   it('declining ends both sides and records it', async () => {

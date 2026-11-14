@@ -186,6 +186,7 @@ function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }
 /** Hand the audio session to the call while it's live; release it after. */
 function useCallAudio(state: CallState) {
   const { partner } = useCouple();
+  const m = useCallManager();
   const started = useRef(false);
   const active = state.phase === 'connecting' || state.phase === 'connected' || state.phase === 'reconnecting';
   const video = state.local.camera || state.media === 'video';
@@ -214,7 +215,8 @@ function useCallAudio(state: CallState) {
   useEffect(() => setShowWhenLocked(onScreen), [onScreen]);
   useEffect(
     () => () => {
-      if (started.current) {
+      // Still on the call: the app was closed and the call carries on (CallProvider ends it).
+      if (started.current && !m.isOnCall()) {
         stopCallAudio();
         stopCallService();
       }

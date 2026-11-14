@@ -19,6 +19,12 @@ class UsCallModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("UsCall")
 
+    /** "Hang up" pressed on the ongoing-call notification, maybe with the app closed. */
+    Events("onHangupRequested")
+
+    OnCreate { CallService.onHangup = { sendEvent("onHangupRequested") } }
+    OnDestroy { CallService.onHangup = null }
+
     /** Keep the mic (and camera on video calls) while Us is in the background. */
     Function("startCallService") { title: String, video: Boolean ->
       val intent = Intent(context, CallService::class.java)

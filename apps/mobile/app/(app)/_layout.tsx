@@ -1,5 +1,5 @@
 import { clearMediaVault, getCoupleContext, getMyAccess, preloadChatKey, tokens, type CoupleContext, type MyAccess } from '@us/shared';
-import { AccessProvider, CallProvider, clearDataCache, CoupleProvider, hydrateDataCache, setDataCacheStore, useCallManager, useCallState, useCouple } from '@us/shared/react';
+import { AccessProvider, CallProvider, clearDataCache, CoupleProvider, currentCallManager, hydrateDataCache, setDataCacheStore, useCallManager, useCallState, useCouple } from '@us/shared/react';
 import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -15,11 +15,22 @@ import { env } from '@/lib/env';
 import { initPush, onPush } from '@/lib/push';
 import { nativeRtc } from '@/lib/rtc';
 import { playChime, startRing, stopRing } from '@/lib/sounds';
+import { stopCallAudio } from '@/lib/audio-route';
+import { onHangupRequested, stopCallService } from '@/modules/us-call';
 import { supabase } from '@/lib/supabase';
 import { usePalette } from '@/components/ui/palette';
 
 // Every screen's last-known data survives a cold start.
 setDataCacheStore(dataCacheStore);
+
+// The call notification's Hang up, which also works once the app is swiped away and the call carries on.
+onHangupRequested(() => void currentCallManager()?.hangup());
+
+/** A call that carried on with the app closed is over: let go of the mic and the notification. */
+function releaseClosedCall() {
+  stopCallAudio();
+  stopCallService();
+}
 
 // Opened straight into chat from a notification, the tabs are still behind it for Back.
 export const unstable_settings = { anchor: '(tabs)' };
@@ -110,7 +121,7 @@ export default function AppLayout() {
       }}
     >
     <CoupleProvider sb={supabase} context={ctx} platform={Platform.OS} onEnded={() => router.replace('/pair')}>
-      <CallProvider rtc={nativeRtc} forceRelay={env.forceRelay}>
+      <CallProvider rtc={nativeRtc} forceRelay={env.forceRelay} keepCallWhenClosed onClosedCallEnded={releaseClosedCall}>
         <Bridge />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.paper } }}>
           <Stack.Screen name="(tabs)" />

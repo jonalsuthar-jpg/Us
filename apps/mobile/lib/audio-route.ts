@@ -51,7 +51,12 @@ async function allowBluetooth() {
   }
 }
 
+/** Started and not stopped yet; the call screen may mount again mid-call. */
+let audioOn = false;
+
 export async function startCallAudio(media: 'audio' | 'video') {
+  if (audioOn) return;
+  audioOn = true;
   // Asked before starting: the audio manager only looks for Bluetooth as it starts.
   await allowBluetooth();
   safely((m) => m.start({ media, auto: true }));
@@ -78,5 +83,6 @@ export function onAudioRoutes(fn: (available: AudioRoute[], selected: AudioRoute
 }
 
 export function stopCallAudio() {
+  audioOn = false;
   safely((m) => m.stop());
 }

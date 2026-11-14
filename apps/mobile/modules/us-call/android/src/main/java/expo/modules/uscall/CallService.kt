@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -14,12 +15,18 @@ import android.util.Log
 /**
  * Runs for the length of a call. Android cuts the microphone (and camera) of
  * an app that goes to the background unless a foreground service like this
- * one holds them; its notification takes you back to the call.
+ * one holds them; its notification takes you back to the call. The call
+ * also outlives the app being swiped away, so the notification can hang up.
  */
 class CallService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    if (intent?.action == ACTION_HANGUP) {
+      // The app's JS ends the call and then stops this service. No JS left: nothing holds the call.
+      onHangup?.invoke() ?: stopSelf()
+      return START_NOT_STICKY
+    }
     val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Call in progress"
     val video = intent?.getBooleanExtra(EXTRA_VIDEO, false) ?: false
 
@@ -37,6 +44,8 @@ class CallService : Service() {
     val open = packageManager.getLaunchIntentForPackage(packageName)
       ?.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
     val openPi = open?.let { PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE) }
+    val hangup = Intent(this, CallService::class.java).setAction(ACTION_HANGUP)
+    val hangupPi = PendingIntent.getService(this, 1, hangup, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     val builder =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL)
       else @Suppress("DEPRECATION") Notification.Builder(this)
@@ -47,6 +56,7 @@ class CallService : Service() {
       .setCategory(Notification.CATEGORY_CALL)
       .setOngoing(true)
       .setContentIntent(openPi)
+      .addAction(Notification.Action.Builder(Icon.createWithResource(this, CallRing.smallIcon(this)), "Hang up", hangupPi).build())
       .build()
 
     try {
@@ -73,5 +83,9 @@ class CallService : Service() {
     private const val NOTIFICATION_ID = 4711
     const val EXTRA_TITLE = "title"
     const val EXTRA_VIDEO = "video"
+    private const val ACTION_HANGUP = "expo.modules.uscall.HANGUP"
+
+    /** Set by UsCallModule while the app's JS is running. */
+    var onHangup: (() -> Unit)? = null
   }
 }

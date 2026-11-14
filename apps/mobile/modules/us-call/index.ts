@@ -1,4 +1,4 @@
-import { requireOptionalNativeModule } from 'expo-modules-core';
+import { requireOptionalNativeModule, type EventSubscription } from 'expo-modules-core';
 
 interface UsCallNative {
   startCallService(title: string, video: boolean): void;
@@ -8,6 +8,7 @@ interface UsCallNative {
   canRingFullScreen(): boolean;
   openFullScreenSettings(): void;
   clearMessageNotifications(): void;
+  addListener(event: 'onHangupRequested', fn: () => void): EventSubscription;
 }
 
 /** Android-only call plumbing (see android/). Absent elsewhere, where every call is a no-op. */
@@ -35,3 +36,5 @@ export const canRingFullScreen = () => safely((n) => n.canRingFullScreen(), true
 export const openFullScreenSettings = () => safely((n) => n.openFullScreenSettings(), undefined);
 /** The chat is on screen: clear the gathered "new messages" notification. */
 export const clearMessageNotifications = () => safely((n) => n.clearMessageNotifications(), undefined);
+/** "Hang up" pressed on the ongoing-call notification (the app may be closed). */
+export const onHangupRequested = (fn: () => void) => safely((n) => n.addListener('onHangupRequested', fn), undefined);

@@ -231,8 +231,12 @@ export class CallManager {
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private lingerTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(private readonly opts: CallManagerOptions) {
-    this.unsubscribe = opts.signaling.subscribe((env) => {
+  constructor(private opts: CallManagerOptions) {
+    this.unsubscribe = this.listen();
+  }
+
+  private listen() {
+    return this.opts.signaling.subscribe((env) => {
       this.onSignal(env).catch((e) => this.log('signal handling failed', env.type, e));
     });
   }
@@ -245,6 +249,30 @@ export class CallManager {
     this.listeners.add(fn);
     return () => void this.listeners.delete(fn);
   };
+
+  /** Talk through a new channel, e.g. the app's screen came back mid-call (Android). */
+  rebind(signaling: CallSignaling, backend: CallBackend) {
+    this.unsubscribe();
+    this.opts = { ...this.opts, signaling, backend };
+    this.unsubscribe = this.listen();
+  }
+
+  /** Stop listening for signals while the call carries on (its channel is going away). */
+  detach() {
+    this.unsubscribe();
+    this.unsubscribe = () => {};
+  }
+
+  /** Answered and not over yet: the media is (or is about to be) flowing. */
+  isOnCall() {
+    const p = this.state.phase;
+    return p === 'connecting' || p === 'connected' || p === 'reconnecting';
+  }
+
+  /** Tell my partner my mic and camera again, e.g. after rejoining the channel. */
+  resendMediaState() {
+    this.broadcastMediaState();
+  }
 
   dispose() {
     this.unsubscribe();
