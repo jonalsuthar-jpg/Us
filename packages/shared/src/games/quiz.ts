@@ -24,10 +24,10 @@ export interface QuizItem {
 export const QUIZ_KINDS: QuizKind[] = ['this_or_that', 'know_me', 'most_likely', 'rate_it'];
 
 export const QUIZ_INFO: Record<QuizKind, { title: string; blurb: string; emoji: string }> = {
-  this_or_that: { title: 'This or that', blurb: '5 quick picks', emoji: '⚖️' },
+  this_or_that: { title: 'This or that', blurb: '8 quick picks', emoji: '⚖️' },
   know_me: { title: 'Know me', blurb: 'One answers, one guesses', emoji: '🔍' },
   most_likely: { title: 'Who’s more likely', blurb: 'Point at one of you', emoji: '👉' },
-  rate_it: { title: 'Rate it together', blurb: 'Score 5 things, 1 to 10', emoji: '⭐' },
+  rate_it: { title: 'Rate it together', blurb: 'Score 8 things, 1 to 10', emoji: '⭐' },
 };
 
 /** A know-me question worded for whoever reads it: "Your dream holiday?" or "Parul's dream holiday?". */
