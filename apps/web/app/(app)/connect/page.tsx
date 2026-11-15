@@ -6,7 +6,7 @@ import { FeatureOff } from '@/components/app/feature-off';
 import { MobileSettingsLink } from '@/components/app/app-shell';
 import { DailyQuestion } from '@/components/connect/daily-question';
 import { DailyDoodleCard, DrawingsStrip, DrawTiles } from '@/components/draw/connect-draw';
-import { PlaySection } from '@/components/games/play-section';
+import { DailyGames } from '@/components/games/daily-games';
 import { Avatar } from '@/components/ui/avatar';
 
 // TODO(phase-3): Fight Translator (Edge Function supabase/functions/fight-translator), Future Letters, Inside Jokes.
@@ -38,13 +38,20 @@ export default function ConnectPage() {
       </header>
 
       {draw ? (
-        <>
+        <section aria-labelledby="play-anytime" className="space-y-3">
+          <h2 id="play-anytime" className="font-display text-heading text-ink">
+            Play anytime
+          </h2>
           <DrawTiles />
+        </section>
+      ) : null}
+      <DailyGames />
+      {draw ? (
+        <div className="space-y-3">
           <DrawingsStrip />
           <DailyDoodleCard />
-        </>
+        </div>
       ) : null}
-      <PlaySection />
       {daily ? <DailyQuestion /> : draw || quizzes ? null : <FeatureOff />}
     </div>
   );

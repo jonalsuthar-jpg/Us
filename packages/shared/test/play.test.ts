@@ -1,36 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { quizState } from '../src/api/quizzes';
 import { cardAt, DECKS, seededOrder } from '../src/games/cards';
-import { KNOW_ME, knowMePrompt, pickQuestions, QUIZ_LENGTH, quizScore, quizVerdict, THIS_OR_THAT } from '../src/games/quiz';
+import { knowMePrompt, mostLikelyPrompt, quizMatches, quizScore, quizVerdict, rateGap } from '../src/games/quiz';
 
 describe('quizzes', () => {
-  it('has unique ids and sensible questions', () => {
-    expect(new Set(KNOW_ME.map((q) => q.id)).size).toBe(KNOW_ME.length);
-    expect(new Set(THIS_OR_THAT.map((q) => q.id)).size).toBe(THIS_OR_THAT.length);
-    for (const q of KNOW_ME) expect(q.options.length).toBeGreaterThanOrEqual(3);
-  });
   it('words know-me questions for whoever reads them', () => {
-    const q = KNOW_ME.find((x) => x.id === 'k04')!;
-    expect(knowMePrompt(q, 'Parul', false)).toBe('Parul’s dream holiday?'.replace('’', "'"));
-    expect(knowMePrompt(q, 'Parul', true)).toBe('Your dream holiday?');
-    const fire = KNOW_ME.find((x) => x.id === 'k03')!;
-    expect(knowMePrompt(fire, 'Parul', true)).toBe('What would you grab first in a fire?');
-    const stress = KNOW_ME.find((x) => x.id === 'k09')!;
-    expect(knowMePrompt(stress, 'Parul', true)).toBe('When you is stressed, you…'.replace('you is', 'you are'));
+    expect(knowMePrompt("{name}'s dream holiday?", 'Parul', false)).toBe("Parul's dream holiday?");
+    expect(knowMePrompt("{name}'s dream holiday?", 'Parul', true)).toBe('Your dream holiday?');
+    expect(knowMePrompt('What would {name} grab first in a fire?', 'Parul', true)).toBe('What would you grab first in a fire?');
+    expect(knowMePrompt('When {name} is stressed, they…', 'Parul', true)).toBe('When you are stressed, you…');
+    expect(knowMePrompt('How does {name} like to say sorry?', 'Parul', true)).toBe('How do you like to say sorry?');
+    expect(knowMePrompt("How would {name}'s friends describe them?", 'Parul', true)).toBe('How would your friends describe you?');
+    expect(knowMePrompt("{name}'s best feature, according to {name}?", 'Parul', true)).toBe('Your best feature, according to you?');
+    expect(mostLikelyPrompt('cry at a movie')).toBe('Who’s more likely to cry at a movie?');
   });
-  it('picks fresh questions first, then recycles the oldest', () => {
-    const first = pickQuestions('know_me', [], () => 0.5);
-    expect(first).toHaveLength(QUIZ_LENGTH);
-    const used = KNOW_ME.map((q) => q.id).filter((id) => !['k01', 'k02'].includes(id));
-    const next = pickQuestions('know_me', used, () => 0.5);
-    expect(next).toHaveLength(QUIZ_LENGTH);
-    expect(next).toEqual(expect.arrayContaining(['k01', 'k02']));
+  it('matches each game its own way', () => {
+    expect(quizScore('this_or_that', [0, 1, 1], [0, 1, 0])).toBe(2);
+    expect(quizScore('know_me', null, [0])).toBe(0);
+    // Most likely: "me" (0) from one of us is "my partner" (1) from the other.
+    expect(quizMatches('most_likely', [0, 0, 1], [1, 0, 0])).toEqual([true, false, true]);
+    expect(quizMatches('rate_it', [7, 3, 10], [8, 6, 10])).toEqual([true, false, true]);
+    expect(rateGap([7, 3, 10], [8, 6, 10])).toBe(1.3);
   });
-  it('scores matches and names the result', () => {
-    expect(quizScore([0, 1, 2], [0, 1, 1])).toBe(2);
-    expect(quizScore(null, [0])).toBe(0);
-    expect(quizVerdict('know_me', 10, 10)).toMatch(/Soulmates/);
-    expect(quizVerdict('this_or_that', 2, 10)).toMatch(/Opposites attract/);
+  it('names the result', () => {
+    expect(quizVerdict('know_me', 5, 5)).toMatch(/Soulmates/);
+    expect(quizVerdict('this_or_that', 1, 5)).toMatch(/Opposites attract/);
+    expect(quizVerdict('rate_it', 4, 5)).toMatch(/Pretty in sync/);
     expect(quizState({ my_answers: null, partner_answers: null })).toBe('mine');
     expect(quizState({ my_answers: [0], partner_answers: null })).toBe('waiting');
     expect(quizState({ my_answers: [0], partner_answers: [1] })).toBe('revealed');

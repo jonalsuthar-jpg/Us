@@ -22,10 +22,10 @@ export function DrawTiles() {
         accessibilityRole="button"
         accessibilityLabel={`Draw together. ${drawing ? `${name} is drawing` : 'One canvas, live'}`}
         onPress={() => router.push('/draw')}
-        className="h-[200px] flex-1 justify-between overflow-hidden rounded-[26px] border border-rose-100 bg-rose-50 p-4 active:opacity-90"
+        className="h-[176px] flex-1 justify-between overflow-hidden rounded-[24px] border border-rose-100 bg-rose-50 p-4 active:opacity-90"
       >
         <View pointerEvents="none" className="absolute -right-[18px] -top-[14px]" style={{ transform: [{ rotate: '6deg' }] }}>
-          <CoupleDoodle width={120} />
+          <CoupleDoodle width={105} />
         </View>
         <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-rose-400">
           <PenLine size={19} color="#fff" />
@@ -49,7 +49,7 @@ export function DrawTiles() {
         accessibilityRole="button"
         accessibilityLabel={`Draw and Guess. ${guessLine}`}
         onPress={() => router.push('/draw/guess')}
-        className="h-[200px] flex-1 justify-between overflow-hidden rounded-[26px] border border-gold-100 bg-gold-50 p-4 active:opacity-90"
+        className="h-[176px] flex-1 justify-between overflow-hidden rounded-[24px] border border-gold-100 bg-gold-50 p-4 active:opacity-90"
       >
         <View pointerEvents="none" className="absolute right-3 top-3.5 flex-row gap-1">
           {['', 'a', ''].map((ch, i) => (

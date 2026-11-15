@@ -1,31 +1,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { answerQuiz, listQuizzes, QUIZ_TOPIC, quizState, startQuiz } from '../api/quizzes';
+import { toDateKey } from '../api/plan';
+import { answerQuiz, listQuizzes, QUIZ_TOPIC, quizState } from '../api/quizzes';
 import type { QuizRound } from '../database.types';
 import { cardAt, type CardTable, type DeckId } from '../games/cards';
 import type { QuizKind } from '../games/quiz';
 import { useCouple } from './couple-provider';
 import { useCoupleData } from './use-couple-data';
 
-/** Our quiz rounds, newest first, with my picks and (once we've both answered) my partner's. */
+/**
+ * Our quiz rounds, newest first, with my picks and (once we've both answered)
+ * my partner's, and today's round of each game.
+ */
 export function useQuizzes(enabled = true) {
-  const { sb, couple, me } = useCouple();
-  const data = useCoupleData<QuizRound[]>(QUIZ_TOPIC, () => (enabled ? listQuizzes(sb) : Promise.resolve([])), [sb, enabled]);
+  const { sb } = useCouple();
+  // Part of the cache key, so a new day loads (and makes) the new rounds.
+  const day = toDateKey(new Date());
+  const data = useCoupleData<QuizRound[]>(QUIZ_TOPIC, () => (enabled ? listQuizzes(sb) : Promise.resolve([])), [sb, enabled, day]);
   const rounds = useMemo(() => data.data ?? [], [data.data]);
+  const today = useMemo(() => {
+    const out: Partial<Record<QuizKind, QuizRound>> = {};
+    for (const r of rounds) if (r.for_date === day && !out[r.kind]) out[r.kind] = r;
+    return out;
+  }, [rounds, day]);
 
-  const start = useCallback(
-    (kind: QuizKind, subject?: string | null) => data.mutate(() => startQuiz(sb, { coupleId: couple.id, me: me.id, kind, subject, history: rounds })),
-    [data.mutate, sb, couple.id, me.id, rounds],
-  );
   const answer = useCallback((roundId: string, picks: number[]) => data.mutate(() => answerQuiz(sb, roundId, picks)), [data.mutate, sb]);
 
   return {
     rounds,
-    /** Rounds waiting for my answers. */
-    toAnswer: rounds.filter((r) => quizState(r) === 'mine').length,
+    today,
+    /** Today's rounds waiting for my answers. */
+    toAnswer: Object.values(today).filter((r) => quizState(r) === 'mine').length,
     loading: data.loading,
     error: data.error,
     reload: data.reload,
-    start,
     answer,
   };
 }

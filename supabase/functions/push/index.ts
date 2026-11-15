@@ -293,7 +293,7 @@ Deno.serve(async (req) => {
     if (!mine) return json({ error: 'forbidden' }, 403);
     if (Date.now() - Date.parse(mine.created_at) > 10 * 60_000) return json({ skipped: 'stale' });
     const both = (answers ?? []).some((a) => a.user_id === partnerId);
-    const title = r.kind === 'know_me' ? 'How well do you know me?' : 'This or that';
+    const title = { know_me: 'Know me', this_or_that: 'This or that', most_likely: 'Who’s more likely', rate_it: 'Rate it together' }[r.kind as string] ?? 'a quiz';
     category = 'quiz_ready';
     content = both ? `finished ${title}. See how you did 👀` : `answered ${title}. Your turn to play`;
     collapseId = `quiz-${r.id}`;

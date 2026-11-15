@@ -26,7 +26,8 @@ export type CallStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'declined';
 export type MessageKind = 'text' | 'call';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
 export type AccessStatusEnum = 'pending' | 'approved' | 'rejected' | 'suspended';
-export type MemoryKind = 'moment' | 'trip' | 'date';
+export type QuizKindEnum = 'know_me' | 'this_or_that' | 'most_likely' | 'rate_it';
+export type MemoryKind ='moment' | 'trip' | 'date';
 export type Database = {
   public: {
     Tables: {
@@ -560,8 +561,9 @@ export type Database = {
         Relationships: [];
       };
       quiz_rounds: {
-        Row: { id: string; couple_id: string; kind: 'know_me' | 'this_or_that'; created_by: string; subject_id: string | null; questions: string[]; created_at: string };
-        Insert: { id?: string; couple_id: string; kind: 'know_me' | 'this_or_that'; created_by: string; subject_id?: string | null; questions: string[] };
+        Row: { id: string; couple_id: string; kind: QuizKindEnum; created_by: string; subject_id: string | null; questions: string[]; for_date: string | null; created_at: string };
+        /** Created by todays_quizzes() only. */
+        Insert: never;
         Update: never;
         Relationships: [];
       };
@@ -678,14 +680,19 @@ export type Database = {
         Args: { p_id: string; p_played: number; p_score: number; p_solved: number; p_best_word: string | null; p_best_ms: number | null };
         Returns: Database['public']['Tables']['draw_games']['Row'];
       };
+      todays_quizzes: { Args: { p_date?: string | null }; Returns: Database['public']['Functions']['quiz_history']['Returns'] };
       quiz_history: {
-        Args: { p_limit?: number };
+        Args: { p_limit?: number; p_date?: string | null };
         Returns: {
           id: string;
-          kind: 'know_me' | 'this_or_that';
+          kind: QuizKindEnum;
           created_by: string;
           subject_id: string | null;
           questions: string[];
+          /** The day of a daily round (older rounds: null). */
+          for_date: string | null;
+          /** The questions, in order. */
+          items: { id: string; prompt: string | null; options: string[] }[];
           created_at: string;
           my_answers: number[] | null;
           partner_done: boolean;

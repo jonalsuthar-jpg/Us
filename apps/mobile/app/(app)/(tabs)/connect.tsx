@@ -7,7 +7,7 @@ import { CLEAR_CHAT_FAB } from '@/components/chat/chat-fab';
 import { AnswersCard, DailyQuestion, useDaily } from '@/components/connect/daily-question';
 import { DailyDoodleCard, DrawingsStrip, DrawTiles } from '@/components/draw/connect-draw';
 import { FeatureOff } from '@/components/feature-off';
-import { PlaySection } from '@/components/games/play-section';
+import { DailyGames } from '@/components/games/daily-games';
 import { IconButton } from '@/components/ui/button';
 import { usePalette } from '@/components/ui/palette';
 import { Display } from '@/components/ui/text';
@@ -47,14 +47,20 @@ export default function Connect() {
       </View>
 
       {draw ? (
-        <>
+        <View className="gap-3">
+          <Display className="text-heading">Play anytime</Display>
           <DrawTiles />
-          <DrawingsStrip />
-          <DailyDoodleCard />
-        </>
+        </View>
       ) : null}
 
-      <PlaySection />
+      <DailyGames />
+
+      {draw ? (
+        <View className="gap-3">
+          <DrawingsStrip />
+          <DailyDoodleCard />
+        </View>
+      ) : null}
 
       {on ? (
         <View className="gap-3">

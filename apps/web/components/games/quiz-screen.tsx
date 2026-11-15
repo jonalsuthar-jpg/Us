@@ -1,14 +1,21 @@
 'use client';
 
-import { knowMePrompt, knowMeQuestion, QUIZ_INFO, quizOptions, quizScore, quizState, quizVerdict } from '@us/shared';
+import { fromDateKey, knowMePrompt, mostLikelyPrompt, QUIZ_INFO, quizMatches, quizState, quizVerdict, rateGap, type QuizItem, type QuizRound } from '@us/shared';
 import { useCouple, useQuizzes } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, Check, X } from 'lucide-react';
+import { ArrowLeft, Check, Clock, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { Confetti } from './confetti';
+
+const ACCENT: Record<QuizRound['kind'], { eyebrow: string; bar: string; next: string }> = {
+  this_or_that: { eyebrow: 'text-sage-700', bar: 'bg-sage-400', next: 'bg-sage-200' },
+  know_me: { eyebrow: 'text-teal-700', bar: 'bg-teal-500', next: 'bg-teal-200' },
+  most_likely: { eyebrow: 'text-plum-600', bar: 'bg-plum-500', next: 'bg-plum-200' },
+  rate_it: { eyebrow: 'text-gold-700', bar: 'bg-gold-500', next: 'bg-gold-200' },
+};
 
 /** A quiz round: answer card by card, wait for my partner, then the reveal. */
 export function QuizScreen({ id }: { id: string }) {
@@ -27,35 +34,44 @@ export function QuizScreen({ id }: { id: string }) {
     );
   }
 
-  const info = QUIZ_INFO[round.kind];
+  const kind = round.kind;
+  const accent = ACCENT[kind];
   const state = quizState(round);
+  const items = round.items;
+  const total = items.length;
   const iAmSubject = round.subject_id === me.id;
   const subjectName = iAmSubject ? me.display_name : partner.display_name;
-  const prompt = (qid: string, mine: boolean) => {
-    if (round.kind === 'this_or_that') return 'This or that?';
-    const q = knowMeQuestion(qid);
-    return q ? knowMePrompt(q, subjectName, mine && iAmSubject) : '';
-  };
+  const prompt = (item: QuizItem, mine: boolean) =>
+    kind === 'know_me'
+      ? knowMePrompt(item.prompt ?? '', subjectName, mine && iAmSubject)
+      : kind === 'most_likely'
+        ? mostLikelyPrompt(item.prompt ?? '')
+        : kind === 'rate_it'
+          ? (item.prompt ?? '')
+          : `${item.options[0]} or ${item.options[1]}?`;
+  const done = state === 'mine' && picks.length >= total;
 
   const header = (
     <header className="flex items-center gap-3">
-      <Link href="/connect" aria-label="Back to Connect" className="flex h-10 w-10 items-center justify-center rounded-full text-ink-soft hover:bg-paper-sunken hover:text-ink">
+      <Link href="/connect" aria-label="Back to Connect" className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-paper-sunken hover:text-ink">
         <ArrowLeft className="h-5 w-5" />
       </Link>
       <div className="min-w-0 flex-1">
-        <p className="text-micro font-semibold uppercase tracking-[0.08em] text-teal-700">Quiz</p>
-        <h1 className="font-display text-title text-ink">
-          {info.emoji} {info.title}
-        </h1>
+        <p className={cn('text-micro font-semibold uppercase tracking-[0.08em]', accent.eyebrow)}>
+          {round.for_date ? `Daily · ${fromDateKey(round.for_date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}` : 'Quiz'}
+        </p>
+        <h1 className="font-display text-title text-ink">{QUIZ_INFO[kind].title}</h1>
       </div>
+      {state === 'mine' ? (
+        <span className="rounded-full bg-paper-sunken px-3 py-1.5 text-micro font-semibold text-ink-soft">{done ? 'Done' : `${picks.length + 1} of ${total}`}</span>
+      ) : null}
     </header>
   );
 
   if (state === 'mine') {
-    const i = picks.length;
-    const done = i >= round.questions.length;
-    const qid = round.questions[Math.min(i, round.questions.length - 1)]!;
-    const options = quizOptions(round.kind, qid);
+    const i = Math.min(picks.length, total - 1);
+    const item = items[i]!;
+    const pick = (k: number) => setPicks((p) => (p.length < total ? [...p, k] : p));
     const submit = async () => {
       setSending(true);
       setError(null);
@@ -68,61 +84,130 @@ export function QuizScreen({ id }: { id: string }) {
       }
     };
     return (
-      <div className="mx-auto max-w-xl space-y-6 px-5 py-6 sm:py-10">
+      <div className="mx-auto max-w-xl space-y-5 px-5 py-6 sm:py-10">
         {header}
-        {round.kind === 'know_me' ? (
-          <p className="rounded-[18px] bg-teal-50 px-4 py-3 text-small text-teal-800">
-            {iAmSubject ? `Answer honestly about yourself. ${partner.display_name} will try to guess.` : `Guess what ${partner.display_name} will say about themselves.`}
+        {kind === 'know_me' ? (
+          <p className="rounded-[18px] border border-teal-100 bg-teal-50 px-4 py-3 text-small text-teal-800">
+            {iAmSubject
+              ? `Today is about you. Answer honestly; ${partner.display_name} will try to guess.`
+              : `Today is about ${partner.display_name}. Guess what they said about themselves.`}
           </p>
         ) : null}
-        <div className="flex gap-1" aria-label={`Question ${Math.min(i + 1, round.questions.length)} of ${round.questions.length}`}>
-          {round.questions.map((_, k) => (
-            <span key={k} className={cn('h-1.5 flex-1 rounded-full', k < i ? 'bg-teal-500' : k === i ? 'bg-teal-300' : 'bg-paper-sunken')} />
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }} aria-hidden>
+          {items.map((_, k) => (
+            <span key={k} className={cn('h-1.5 rounded-full', k < picks.length ? accent.bar : k === picks.length ? accent.next : 'bg-paper-sunken')} />
           ))}
         </div>
+
         {!done ? (
           <AnimatePresence mode="wait">
             <motion.div
-              key={qid}
-              initial={{ opacity: 0, x: 40, rotate: 2 }}
+              key={item.id}
+              initial={{ opacity: 0, x: 40, rotate: 1.5 }}
               animate={{ opacity: 1, x: 0, rotate: 0 }}
-              exit={{ opacity: 0, x: -40, rotate: -2 }}
+              exit={{ opacity: 0, x: -40, rotate: -1.5 }}
               transition={{ duration: 0.22 }}
-              className="space-y-4 rounded-[28px] border border-paper-edge bg-paper-raised p-6 shadow-[0_18px_40px_-28px_rgba(36,25,51,0.5)]"
             >
-              <p className="font-display text-heading text-ink">{prompt(qid, true)}</p>
-              <div className={cn('grid gap-2.5', round.kind === 'this_or_that' ? 'grid-cols-2' : 'grid-cols-1')}>
-                {options.map((o, k) => (
-                  <button
-                    key={o}
-                    type="button"
-                    onClick={() => setPicks((p) => [...p, k])}
-                    className={cn(
-                      'rounded-[18px] border-2 border-paper-edge px-4 text-left font-semibold text-ink transition-colors hover:border-teal-400 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
-                      round.kind === 'this_or_that' ? 'flex h-28 items-center justify-center text-center text-lead' : 'py-3.5',
-                    )}
-                  >
-                    {o}
-                  </button>
-                ))}
-              </div>
+              {kind === 'this_or_that' ? (
+                <div className="relative grid gap-2.5">
+                  {item.options.map((o, k) => (
+                    <button
+                      key={o}
+                      type="button"
+                      onClick={() => pick(k)}
+                      className={cn(
+                        'flex h-40 items-center justify-center rounded-[28px] px-5 text-center font-display text-[28px] leading-tight text-white transition-transform hover:scale-[1.01] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-gold-400 sm:h-48',
+                        k === 0 ? 'bg-rose-500' : 'bg-teal-600',
+                      )}
+                    >
+                      {o}
+                    </button>
+                  ))}
+                  <span aria-hidden className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[5px] border-paper bg-paper-raised font-serif text-[20px] italic text-ink">
+                    or
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-5 rounded-[28px] border border-paper-edge bg-paper-raised p-5 shadow-[0_18px_40px_-28px_rgba(36,25,51,0.5)] sm:p-6">
+                  <p className="text-balance font-serif text-[24px] leading-[1.3] text-ink sm:text-[28px]">{prompt(item, true)}</p>
+                  {kind === 'know_me' ? (
+                    <div className="grid gap-2.5">
+                      {item.options.map((o, k) => (
+                        <button
+                          key={o}
+                          type="button"
+                          onClick={() => pick(k)}
+                          className="flex min-h-[52px] items-center gap-3 rounded-[18px] border-2 border-paper-edge px-3.5 py-2.5 text-left font-semibold text-ink transition-colors hover:border-teal-400 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                        >
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] bg-paper-sunken text-micro font-bold text-ink-soft">{'ABCDEF'[k]}</span>
+                          {o}
+                        </button>
+                      ))}
+                    </div>
+                  ) : kind === 'most_likely' ? (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {[
+                        { label: 'Me', name: me.display_name, cls: 'bg-rose-500' },
+                        { label: partner.display_name, name: partner.display_name, cls: 'bg-teal-600' },
+                      ].map((p, k) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => pick(k)}
+                          className={cn(
+                            'flex h-32 flex-col items-center justify-center gap-2 rounded-[24px] text-white transition-transform hover:scale-[1.02] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-gold-400',
+                            p.cls,
+                          )}
+                        >
+                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/25 text-[18px] font-bold">{p.name.slice(0, 1).toUpperCase()}</span>
+                          <span className="max-w-full truncate px-2 font-display text-[19px]">{p.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-5 gap-2">
+                        {Array.from({ length: 10 }, (_, k) => k + 1).map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => pick(n)}
+                            aria-label={`${n} out of 10`}
+                            className="flex h-12 items-center justify-center rounded-[14px] border-2 border-paper-edge text-lead font-bold text-ink transition-colors hover:border-gold-400 hover:bg-gold-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="flex justify-between text-micro text-ink-muted">
+                        <span>Not for me</span>
+                        <span>Love it</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </motion.div>
           </AnimatePresence>
         ) : (
-          <div className="space-y-3 text-center">
-            <p className="font-serif text-lead italic text-ink-soft">All done. Send them off?</p>
+          <div className="space-y-3 rounded-[28px] border border-dashed border-paper-edge px-6 py-10 text-center">
+            <p className="font-serif text-lead italic text-ink">All done. Send them off?</p>
+            <p className="text-small text-ink-soft">Sealed once sent. You’ll see {partner.display_name}’s once they’ve played too.</p>
             {error ? <p className="text-small text-rose-700">{error}</p> : null}
           </div>
         )}
-        <div className="flex justify-between">
-          <Button variant="quiet" size="sm" disabled={!i || sending} onClick={() => setPicks((p) => p.slice(0, -1))}>
+
+        <div className="flex items-center justify-between gap-3">
+          <Button variant="quiet" size="sm" disabled={!picks.length || sending} onClick={() => setPicks((p) => p.slice(0, -1))}>
             Back
           </Button>
           {done ? (
             <Button disabled={sending} onClick={() => void submit()}>
               {sending ? 'Sending…' : 'Send my answers'}
             </Button>
-          ) : null}
+          ) : (
+            <p className="text-right text-micro text-ink-muted">{partner.display_name}’s answers stay hidden until you finish.</p>
+          )}
         </div>
       </div>
     );
@@ -135,83 +220,109 @@ export function QuizScreen({ id }: { id: string }) {
         <div className="rounded-[28px] border border-dashed border-paper-edge px-6 py-12 text-center">
           <p className="text-[40px]">⏳</p>
           <p className="mt-2 font-serif text-lead italic text-ink">Your answers are sealed.</p>
-          <p className="mt-1 text-small text-ink-soft">We’ll show you both once {partner.display_name} has answered too.</p>
+          <p className="mt-1 text-small text-ink-soft">We’ll show you both once {partner.display_name} has played too.</p>
         </div>
+        <BackLink />
       </div>
     );
   }
 
-  const score = quizScore(round.my_answers, round.partner_answers);
-  const total = round.questions.length;
+  const mine = round.my_answers!;
+  const theirs = round.partner_answers!;
+  const matches = quizMatches(kind, mine, theirs);
+  const score = matches.filter(Boolean).length;
   // Know me: the subject's picks are the truth; the other's are the guesses.
-  const truth = iAmSubject ? round.my_answers! : round.partner_answers!;
-  const guess = iAmSubject ? round.partner_answers! : round.my_answers!;
+  const truth = iAmSubject ? mine : theirs;
+  const guess = iAmSubject ? theirs : mine;
   const guesser = iAmSubject ? partner.display_name : 'You';
+  const person = (pick: number | undefined, fromMe: boolean) => ((pick === 0) === fromMe ? 'You' : partner.display_name);
+  const summary =
+    kind === 'know_me'
+      ? `${guesser} guessed ${score} right about ${iAmSubject ? 'you' : subjectName}`
+      : kind === 'rate_it'
+        ? `Within a point on ${score} of ${total} · ${rateGap(mine, theirs)} apart on average`
+        : `You agreed on ${score} of ${total}`;
 
   return (
-    <div className="mx-auto max-w-xl space-y-6 px-5 py-6 sm:py-10">
+    <div className="mx-auto max-w-xl space-y-5 px-5 py-6 sm:py-10">
       {score / total >= 0.7 ? <Confetti key={round.id} /> : null}
       {header}
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 260, damping: 18 }}
-        className="rounded-[28px] bg-teal-600 px-6 py-8 text-center text-white"
+        className="flex items-center gap-5 rounded-[28px] bg-teal-600 px-6 py-6 text-white"
       >
-        <p className="font-display text-[56px] leading-none">
+        <p className="font-display text-[54px] leading-none">
           {score}
-          <span className="text-[28px] opacity-70">/{total}</span>
+          <span className="text-[24px] opacity-70">/{total}</span>
         </p>
-        <p className="mt-2 text-lead font-semibold">{quizVerdict(round.kind, score, total)}</p>
-        <p className="mt-1 text-small opacity-80">
-          {round.kind === 'know_me' ? `${guesser} guessed ${score} right about ${subjectName === me.display_name ? 'you' : subjectName}` : `You agreed on ${score} of ${total}`}
-        </p>
+        <div className="min-w-0">
+          <p className="text-lead font-semibold">{quizVerdict(kind, score, total)}</p>
+          <p className="mt-0.5 text-small opacity-85">{summary}</p>
+        </div>
       </motion.div>
       <ol className="space-y-2.5">
-        {round.questions.map((qid, k) => {
-          const options = quizOptions(round.kind, qid);
-          const match = round.kind === 'know_me' ? truth[k] === guess[k] : round.my_answers![k] === round.partner_answers![k];
+        {items.map((item, k) => {
+          const match = matches[k];
           return (
             <motion.li
-              key={qid}
+              key={item.id}
               initial={{ opacity: 0, rotateX: -80 }}
               animate={{ opacity: 1, rotateX: 0 }}
               transition={{ delay: 0.15 + k * 0.12, duration: 0.35 }}
-              className={cn('rounded-[20px] border px-4 py-3', match ? 'border-sage-200 bg-sage-50' : 'border-paper-edge bg-paper-raised')}
+              className={cn('flex items-start gap-3 rounded-[20px] border px-4 py-3', match ? 'border-sage-200 bg-sage-50' : 'border-paper-edge bg-paper-raised')}
             >
-              <div className="flex items-start gap-3">
-                <span className={cn('mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white', match ? 'bg-sage-500' : 'bg-rose-400')}>
-                  {match ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
-                </span>
-                <div className="min-w-0 space-y-1">
-                  <p className="text-small font-semibold text-ink">{round.kind === 'know_me' ? prompt(qid, false) : `${options[0]} or ${options[1]}?`}</p>
-                  {round.kind === 'know_me' ? (
-                    <p className="text-small text-ink-soft">
-                      {subjectName === me.display_name ? 'You' : subjectName}: <b className="text-ink">{options[truth[k]!]}</b>
+              <span className={cn('mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white', match ? 'bg-sage-500' : 'bg-rose-400')}>
+                {match ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+              </span>
+              <div className="min-w-0 space-y-1">
+                <p className="text-small font-semibold text-ink">{prompt(item, false)}</p>
+                <p className="text-small text-ink-soft">
+                  {kind === 'know_me' ? (
+                    <>
+                      {iAmSubject ? 'You' : subjectName}: <b className="text-ink">{item.options[truth[k]!]}</b>
                       {!match ? (
                         <>
                           {' '}
-                          · {guesser} guessed: <b className="text-ink">{options[guess[k]!]}</b>
+                          · {guesser} guessed: <b className="text-ink">{item.options[guess[k]!]}</b>
                         </>
                       ) : null}
-                    </p>
+                    </>
+                  ) : kind === 'most_likely' ? (
+                    <>
+                      You said <b className="text-ink">{person(mine[k], true)}</b> · {partner.display_name} said <b className="text-ink">{person(theirs[k], false)}</b>
+                    </>
+                  ) : kind === 'rate_it' ? (
+                    <>
+                      You: <b className="text-ink">{mine[k]}</b> · {partner.display_name}: <b className="text-ink">{theirs[k]}</b>
+                    </>
                   ) : (
-                    <p className="text-small text-ink-soft">
-                      You: <b className="text-ink">{options[round.my_answers![k]!]}</b> · {partner.display_name}: <b className="text-ink">{options[round.partner_answers![k]!]}</b>
-                    </p>
+                    <>
+                      You: <b className="text-ink">{item.options[mine[k]!]}</b> · {partner.display_name}: <b className="text-ink">{item.options[theirs[k]!]}</b>
+                    </>
                   )}
-                </div>
+                </p>
               </div>
             </motion.li>
           );
         })}
       </ol>
-      <div className="flex justify-center">
-        <Link href="/connect#play" className="font-semibold text-rose-600 hover:text-rose-700">
-          Play another
-        </Link>
-      </div>
+      <BackLink />
     </div>
   );
 }
 
+function BackLink() {
+  return (
+    <div className="flex flex-col items-center gap-3 pt-1">
+      <p className="inline-flex items-center gap-1.5 text-small text-ink-soft">
+        <Clock className="h-4 w-4" aria-hidden />
+        New questions tomorrow
+      </p>
+      <Link href="/connect" className="font-semibold text-rose-600 hover:text-rose-700">
+        Back to Connect
+      </Link>
+    </div>
+  );
+}

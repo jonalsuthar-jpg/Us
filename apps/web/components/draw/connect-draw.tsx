@@ -20,9 +20,9 @@ export function DrawTiles() {
     <div className="grid grid-cols-2 gap-3 md:gap-4">
       <Link
         href="/connect/draw"
-        className="relative isolate flex h-[200px] flex-col justify-between overflow-hidden rounded-[26px] border border-rose-100 bg-rose-50 p-4 transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 md:h-[220px] md:p-5"
+        className="relative isolate flex h-[176px] flex-col justify-between overflow-hidden rounded-[24px] border border-rose-100 bg-rose-50 p-4 transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 md:h-[200px] md:p-5"
       >
-        <CoupleDoodle className="absolute -right-[18px] -top-[14px] -z-10 h-[160px] w-[120px] rotate-6 md:h-[190px] md:w-[142px]" />
+        <CoupleDoodle className="absolute -right-[18px] -top-[14px] -z-10 h-[140px] w-[105px] rotate-6 md:h-[170px] md:w-[128px]" />
         <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-rose-400 text-white">
           <PenLine className="h-[19px] w-[19px]" aria-hidden />
         </span>
@@ -39,7 +39,7 @@ export function DrawTiles() {
       </Link>
       <Link
         href="/connect/draw/guess"
-        className="relative isolate flex h-[200px] flex-col justify-between overflow-hidden rounded-[26px] border border-gold-100 bg-gold-50 p-4 transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 md:h-[220px] md:p-5"
+        className="relative isolate flex h-[176px] flex-col justify-between overflow-hidden rounded-[24px] border border-gold-100 bg-gold-50 p-4 transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 md:h-[200px] md:p-5"
       >
         <span aria-hidden className="absolute right-3 top-3.5 flex gap-1">
           <span className="h-6 w-[18px] border-b-[3px] border-gold-700" />

@@ -1140,28 +1140,46 @@ await test('stats, people and audit', async () => {
   assert.ok(log.some((r) => r.action === 'feature_switch'));
 });
 
-await test('quizzes: answers stay private until we have both answered', async () => {
+await test('quizzes: one round of each game a day, answers private until we have both answered', async () => {
   const founders = await one(`select id from public.couples where user_a_id = $1`, [jonal]);
-  const r = await as(jonal, () =>
-    one(`insert into public.quiz_rounds (couple_id, kind, created_by, subject_id, questions) values ($1, 'know_me', $2, $2, $3) returning *`, [founders.id, jonal, ['k1', 'k2', 'k3']]),
-  );
+  const today = await as(jonal, () => q(`select * from public.todays_quizzes()`));
+  assert.deepEqual(today.map((r) => r.kind).sort(), ['know_me', 'most_likely', 'rate_it', 'this_or_that']);
+  for (const r of today) {
+    assert.equal(r.questions.length, 5);
+    assert.deepEqual(r.items.map((x) => x.id), r.questions, 'questions spelled out in order');
+  }
+  const again = await as(parul, () => q(`select * from public.todays_quizzes()`));
+  assert.deepEqual(again.map((r) => r.id).sort(), today.map((r) => r.id).sort(), 'the same rounds for both of us');
+  const knowMe = today.find((r) => r.kind === 'know_me');
+  assert.ok([jonal, parul].includes(knowMe.subject_id));
+  const tomorrow = await as(jonal, () => q(`select * from public.todays_quizzes(current_date + 1)`));
+  assert.notEqual(tomorrow.find((r) => r.kind === 'know_me').subject_id, knowMe.subject_id, 'know me takes turns');
+  const used = today.find((r) => r.kind === 'this_or_that').questions;
+  assert.ok(!tomorrow.find((r) => r.kind === 'this_or_that').questions.some((id) => used.includes(id)), 'new questions every day');
+  await rejects(as(jonal, () => q(`select * from public.todays_quizzes(current_date + 5)`)), /date_out_of_range/, 'only around today');
   await rejects(
-    as(jonal, () => q(`insert into public.quiz_rounds (couple_id, kind, created_by, subject_id, questions) values ($1, 'know_me', $2, $3, '{k1}')`, [founders.id, jonal, erin])),
-    /row-level security/,
-    'subject outside the couple',
+    as(jonal, () => q(`insert into public.quiz_rounds (couple_id, kind, created_by, questions) values ($1, 'this_or_that', $2, '{t01}')`, [founders.id, jonal])),
+    /permission denied/,
+    'rounds only come from todays_quizzes',
   );
-  await rejects(as(jonal, () => q(`insert into public.quiz_answers (round_id, answers) values ($1, '{0,1}')`, [r.id])), /row-level security/, 'wrong number of answers');
-  await as(jonal, () => q(`insert into public.quiz_answers (round_id, answers) values ($1, '{0,1,2}')`, [r.id]));
-  await rejects(as(jonal, () => q(`update public.quiz_answers set answers = '{1,1,1}' where round_id = $1`, [r.id])), /permission denied/, 'sealed');
+
+  const r = today.find((x) => x.kind === 'rate_it');
+  await rejects(as(jonal, () => q(`insert into public.quiz_answers (round_id, answers) values ($1, '{1,2}')`, [r.id])), /row-level security/, 'wrong number of answers');
+  await rejects(as(jonal, () => q(`insert into public.quiz_answers (round_id, answers) values ($1, '{1,2,3,4,11}')`, [r.id])), /quiz_answers_range/, 'out of range');
+  await as(jonal, () => q(`insert into public.quiz_answers (round_id, answers) values ($1, '{7,7,7,7,7}')`, [r.id]));
+  await rejects(as(jonal, () => q(`update public.quiz_answers set answers = '{1,1,1,1,1}' where round_id = $1`, [r.id])), /permission denied/, 'sealed');
   assert.equal((await as(parul, () => q(`select * from public.quiz_answers`))).length, 0, 'partner can’t read my picks');
-  let mine = (await as(parul, () => q(`select * from public.quiz_history()`)))[0];
+  let mine = (await as(parul, () => q(`select * from public.quiz_history()`))).find((x) => x.id === r.id);
   assert.equal(mine.partner_done, true);
   assert.equal(mine.partner_answers, null, 'hidden until I answer too');
-  await as(parul, () => q(`insert into public.quiz_answers (round_id, answers) values ($1, '{0,2,2}')`, [r.id]));
-  mine = (await as(parul, () => q(`select * from public.quiz_history()`)))[0];
-  assert.deepEqual(mine.partner_answers, [0, 1, 2]);
-  assert.deepEqual(mine.my_answers, [0, 2, 2]);
+  await as(parul, () => q(`insert into public.quiz_answers (round_id, answers) values ($1, '{8,3,7,7,10}')`, [r.id]));
+  mine = (await as(parul, () => q(`select * from public.quiz_history()`))).find((x) => x.id === r.id);
+  assert.deepEqual(mine.partner_answers, [7, 7, 7, 7, 7]);
+  assert.deepEqual(mine.my_answers, [8, 3, 7, 7, 10]);
   assert.equal((await as(erin, () => q(`select * from public.quiz_history()`))).length, 0, 'outsider');
+  const bank = await one(`select count(*) filter (where kind = 'know_me')::int as k, count(*) filter (where kind = 'this_or_that')::int as t,
+    count(*) filter (where kind = 'most_likely')::int as m, count(*) filter (where kind = 'rate_it')::int as r from public.quiz_questions`);
+  console.log('      question bank:', bank);
 });
 
 await test('birthday room: Jonal always, Parul only from midnight, nobody else ever', async () => {
