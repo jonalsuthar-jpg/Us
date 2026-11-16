@@ -13,7 +13,7 @@ import {
 } from '@us/shared';
 import { useChatKey, useCouple } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from '@/lib/image-picker';
 import { ImagePlus, Pencil, Type, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, Switch, TextInput, useWindowDimensions, View } from 'react-native';

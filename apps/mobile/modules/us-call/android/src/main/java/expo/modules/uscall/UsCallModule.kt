@@ -70,6 +70,13 @@ class UsCallModule : Module() {
 
     Function("resetCallAudio") { CallAudio.reset(context) }
 
+    /** App lock on: the recent-apps screen shows a blank card instead of Us (Android 13+). */
+    Function("hideInRecents") { on: Boolean ->
+      if (Build.VERSION.SDK_INT >= 33) {
+        appContext.currentActivity?.let { activity -> activity.runOnUiThread { activity.setRecentsScreenshotEnabled(!on) } }
+      }
+    }
+
     /** The chat is open: clear the gathered message notification. */
     Function("clearMessageNotifications") {
       ChatNotifications.clear(context)

@@ -15,7 +15,7 @@ import {
 } from '@us/shared';
 import { useAccess, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from '@/lib/image-picker';
 import { router, useFocusEffect } from 'expo-router';
 import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Pencil, Phone, Settings, Sparkles, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';

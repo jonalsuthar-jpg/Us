@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Platform, ToastAndroid, View } from 'react-native';
+import { AppLock } from '@/components/app-lock';
 import { CallScreen } from '@/components/call/call-screen';
 import { ChatKeyApproval } from '@/components/chat/chat-key';
 import { DrawBridge, drawRoute } from '@/components/draw/draw-bridge';
@@ -145,6 +146,7 @@ export default function AppLayout() {
         <TapHeart />
         <ChatKeyApproval />
         <DrawBridge />
+        <AppLock />
         <CallScreen />
       </CallProvider>
     </CoupleProvider>

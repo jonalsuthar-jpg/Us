@@ -1,6 +1,6 @@
 import { postSnap } from '@us/shared';
 import { useChatKey, useCouple } from '@us/shared/react';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from '@/lib/image-picker';
 import { Camera, ImageIcon } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Image, useWindowDimensions, View } from 'react-native';

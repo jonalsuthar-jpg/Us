@@ -1,11 +1,12 @@
 import { clearMyPhoto, deleteAccount, friendlyError, setMyPhoto, unpair, updateMyProfile } from '@us/shared';
 import { COUPLE_ENDED_TOPIC, useCouple } from '@us/shared/react';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from '@/lib/image-picker';
 import { router } from 'expo-router';
 import { Camera, ChevronLeft } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppLockSettings } from '@/components/app-lock-settings';
 import { ChatSecurity } from '@/components/chat/chat-key';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, IconButton } from '@/components/ui/button';
@@ -177,6 +178,8 @@ export default function Settings() {
         <Display className="text-heading">Chat security</Display>
         <ChatSecurity meId={me.id} partnerName={partner.display_name} />
       </View>
+
+      <AppLockSettings />
 
       <View className="gap-3">
         <Display className="text-heading">Appearance</Display>

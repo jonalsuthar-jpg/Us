@@ -18,7 +18,7 @@ import {
   type MemoryRating,
 } from '@us/shared';
 import { useBirthdayStoryMemories, useCouple, useCoupleData } from '@us/shared/react';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from '@/lib/image-picker';
 import { router } from 'expo-router';
 import { Heart, ImagePlus, Plus, Sparkles, X } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';

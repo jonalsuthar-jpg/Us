@@ -2,7 +2,7 @@ import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hidde
 import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from '@/lib/image-picker';
 import { router, useFocusEffect } from 'expo-router';
 import { ArrowLeft, ChevronsDown, Copy, Download, Phone, Pin, PinOff, Plus, Reply, Search, Sticker, Trash2, Video } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';

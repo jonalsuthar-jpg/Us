@@ -1,6 +1,6 @@
 import { BOARD_H, BOARD_W, COLOURING_PAGES, DRAW_BUCKET, listMemories, PAGE_INK, signedPhotoUrls, uploadFile, uuid, type DrawBackground, type Memory } from '@us/shared';
 import { useCouple } from '@us/shared/react';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from '@/lib/image-picker';
 import { ImagePlus, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, Switch, View } from 'react-native';

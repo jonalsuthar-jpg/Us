@@ -13,6 +13,7 @@ interface UsCallNative {
   preferMic(which: 'phone' | 'auto'): boolean;
   bluetoothMedia(on: boolean): string | null;
   resetCallAudio(): void;
+  hideInRecents(on: boolean): void;
   addListener(event: 'onHangupRequested', fn: () => void): EventSubscription;
   addListener(event: 'onCallHandledElsewhere', fn: (e: { callId: string }) => void): EventSubscription;
 }
@@ -68,3 +69,5 @@ export const preferMic = (which: 'phone' | 'auto') => safely((n) => n.preferMic(
 export const bluetoothMedia = (on: boolean) => safely<string | null>((n) => n.bluetoothMedia(on), null);
 /** The call is over: back to Android's own choices. */
 export const resetCallAudio = () => safely((n) => n.resetCallAudio(), undefined);
+/** App lock on: keep Us's screen out of the recent-apps preview (Android 13+). */
+export const hideInRecents = (on: boolean) => safely((n) => n.hideInRecents(on), undefined);

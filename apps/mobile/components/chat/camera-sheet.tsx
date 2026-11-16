@@ -2,7 +2,7 @@ import { formatVoiceLength, VIDEO_MAX_MS } from '@us/shared';
 import { CameraView, useCameraPermissions, useMicrophonePermissions, type CameraType, type FlashMode } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from '@/lib/image-picker';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { ArrowLeft, Images, SendHorizontal, SwitchCamera, X, Zap, ZapOff } from 'lucide-react-native';

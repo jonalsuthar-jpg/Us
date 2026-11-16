@@ -22,6 +22,7 @@ import { Replay } from '@/components/draw/replay';
 import { drawingTitle } from '@/components/draw/titles';
 import { FeatureOff } from '@/components/feature-off';
 import { Text } from '@/components/ui/text';
+import { withoutLock } from '@/lib/app-lock';
 
 /** One drawing, redrawn stroke by stroke, with what to do with it. */
 export default function DrawingScreen() {
@@ -114,7 +115,7 @@ export default function DrawingScreen() {
               busy={false}
               onPress={() => {
                 const url = urls[d.png_path];
-                if (url) void Share.share({ message: url, url, title });
+                if (url) void withoutLock(() => Share.share({ message: url, url, title }));
               }}
             />
             <Action
