@@ -29,7 +29,23 @@ export interface RtcAdapter {
   switchCamera?: (track: MediaStreamTrack, facing: CameraFacing) => void | Promise<void>;
   /** Web: the cameras on this device, so calls can offer a flip when there's more than one. */
   listCameras?: () => Promise<{ deviceId: string; label: string }[]>;
+  /**
+   * How much picture this device should send right now: 'high' (1080p) or
+   * 'standard' (720p). Phones say 'standard' on mobile data, low battery or
+   * battery saver. Without it, 'high'.
+   */
+  videoQuality?: () => VideoTier | Promise<VideoTier>;
+  /**
+   * The video codec to put first, e.g. 'video/H264' where the phone encodes
+   * it in hardware (far less battery and heat than software VP8).
+   */
+  preferVideoCodec?: string;
+  /** The video codecs this device can send (RTCRtpSender.getCapabilities). */
+  videoSendCodecs?: () => RTCRtpCodec[];
 }
+
+/** 1080p or 720p camera (see CAMERA). */
+export type VideoTier = 'high' | 'standard';
 
 export type CameraFacing = 'user' | 'environment';
 
@@ -53,6 +69,15 @@ const SHARE_QUALITY: Record<
   smooth: { hint: 'motion', width: 1920, height: 1080, fps: 60, maxBitrate: 8_000_000, degradation: 'maintain-framerate' },
   sharp: { hint: 'detail', width: 2560, height: 1440, fps: 15, maxBitrate: 8_000_000, degradation: 'maintain-resolution' },
 };
+// The camera: the most it captures and sends at each tier. 'balanced' gives up
+// a little of both on a weak link instead of freezing.
+const CAMERA: Record<VideoTier, { width: number; height: number; fps: number; maxBitrate: number }> = {
+  high: { width: 1920, height: 1080, fps: 30, maxBitrate: 3_500_000 },
+  standard: { width: 1280, height: 720, fps: 30, maxBitrate: 1_800_000 },
+};
+/** How often a call re-checks whether to send 1080p or 720p (battery, Wi-Fi). */
+const TIER_CHECK_MS = 30_000;
+
 // Voice needs little; a shared film or song gets room for stereo music.
 const VOICE_BITRATE = 40_000;
 const SHARE_AUDIO_BITRATE = 128_000;
@@ -60,13 +85,15 @@ const SHARE_AUDIO_BITRATE = 128_000;
 /**
  * Let Opus carry stereo up to 128 kbps. This only advertises what I can
  * receive; each sender still picks its bitrate (VOICE_BITRATE by default).
+ * In-band FEC keeps speech whole through lost packets. With `dtx` (voice
+ * calls), silence sends almost nothing: less data and battery.
  */
-export function opusForMedia(sdp: string): string {
+export function opusForMedia(sdp: string, dtx = false): string {
   const pt = /a=rtpmap:(\d+) opus\/48000/i.exec(sdp)?.[1];
   if (!pt) return sdp;
   return sdp.replace(new RegExp(`(a=fmtp:${pt} )([^\r\n]*)`), (_, head: string, params: string) => {
-    const kept = params.split(';').filter((p) => p && !/^(stereo|sprop-stereo|maxaveragebitrate)=/.test(p.trim()));
-    return `${head}${[...kept, 'stereo=1', 'sprop-stereo=1', 'maxaveragebitrate=128000'].join(';')}`;
+    const kept = params.split(';').filter((p) => p && !/^(stereo|sprop-stereo|maxaveragebitrate|useinbandfec|usedtx)=/.test(p.trim()));
+    return `${head}${[...kept, 'stereo=1', 'sprop-stereo=1', 'maxaveragebitrate=128000', 'useinbandfec=1', ...(dtx ? ['usedtx=1'] : [])].join(';')}`;
   });
 }
 
@@ -154,6 +181,10 @@ export interface CallState {
   shareSoundIsSystem: boolean;
   /** My screen or window share goes out without sound, as my partner would hear their own voice in it. */
   shareSoundBlocked: boolean;
+  /** Send 1080p whatever the battery or network (otherwise chosen as the call goes). */
+  hdAlways: boolean;
+  /** What my camera is sending at: 1080p ('high') or 720p. */
+  videoTier: VideoTier;
   /** Bumped whenever tracks on either stream change, so views can re-bind. */
   revision: number;
 }
@@ -179,17 +210,17 @@ const INITIAL: CallState = {
   shareSoundLost: false,
   shareSoundIsSystem: false,
   shareSoundBlocked: false,
+  hdAlways: false,
+  videoTier: 'standard',
   revision: 0,
 };
 
 const AUDIO_CONSTRAINTS: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 
-const VIDEO_CONSTRAINTS: MediaTrackConstraints = {
-  facingMode: 'user',
-  width: { ideal: 1280 },
-  height: { ideal: 720 },
-  frameRate: { ideal: 30 },
-};
+function cameraConstraints(tier: VideoTier): MediaTrackConstraints {
+  const q = CAMERA[tier];
+  return { width: { ideal: q.width }, height: { ideal: q.height }, frameRate: { ideal: q.fps } };
+}
 
 const MAX_ICE_RESTARTS = 2;
 const RECONNECT_GRACE_MS = 4000;
@@ -231,6 +262,9 @@ export class CallManager {
 
   private ringTimer: ReturnType<typeof setTimeout> | undefined;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  private tierTimer: ReturnType<typeof setInterval> | undefined;
+  /** "HD always", kept from call to call. */
+  private hdAlways = false;
   private lingerTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private opts: CallManagerOptions) {
@@ -538,9 +572,9 @@ export class CallManager {
   /** Open a camera track: a specific device (web flip), else the current facing. */
   private async openCamera(deviceId?: string | null): Promise<MediaStreamTrack | null> {
     const id = deviceId ?? this.cameraDeviceId;
-    const video: MediaTrackConstraints = id
-      ? { ...VIDEO_CONSTRAINTS, facingMode: undefined, deviceId: { exact: id } }
-      : { ...VIDEO_CONSTRAINTS, facingMode: this.state.facing };
+    await this.pickTier();
+    const size = cameraConstraints(this.state.videoTier);
+    const video: MediaTrackConstraints = id ? { ...size, deviceId: { exact: id } } : { ...size, facingMode: this.state.facing };
     const stream = await this.opts.rtc.getUserMedia({ video, audio: false });
     return stream.getVideoTracks()[0] ?? null;
   }
@@ -671,6 +705,60 @@ export class CallManager {
     } catch {
       return null;
     }
+  }
+
+  /** Send 1080p regardless (true), or let battery and network decide (false). */
+  async setHdAlways(on: boolean) {
+    if (on === this.hdAlways) return;
+    this.hdAlways = on;
+    this.set({});
+    await this.retier();
+  }
+
+  /** Decide 1080p or 720p for now. Returns whether it changed. */
+  private async pickTier(): Promise<boolean> {
+    let tier: VideoTier = 'high';
+    if (!this.hdAlways) {
+      try {
+        tier = (await this.opts.rtc.videoQuality?.()) ?? 'high';
+      } catch {
+        tier = 'standard';
+      }
+    }
+    if (tier === this.state.videoTier) return false;
+    this.set({ videoTier: tier });
+    return true;
+  }
+
+  /** Re-decide the tier mid-call and move the camera and encoder to it. */
+  private async retier() {
+    if (!(await this.pickTier())) return;
+    const track = this.cameraTrack;
+    if (track && !this.screenTrack) {
+      await track.applyConstraints?.(cameraConstraints(this.state.videoTier)).catch((e) => this.log('camera size not changed', e));
+    }
+    await this.applyCameraQuality();
+  }
+
+  /** The camera's bitrate and frame rate for its tier. Not while a screen share has the sender. */
+  private async applyCameraQuality() {
+    if (this.screenTrack || !this.cameraTrack) return;
+    const q = CAMERA[this.state.videoTier];
+    await this.updateEncoding(this.videoTx, (e) => ({ ...e, maxBitrate: q.maxBitrate, maxFramerate: q.fps }), {
+      degradationPreference: 'balanced',
+    });
+  }
+
+  private watchTier() {
+    if (this.tierTimer) return;
+    this.tierTimer = setInterval(() => {
+      if (!this.isBusy()) {
+        clearInterval(this.tierTimer);
+        this.tierTimer = undefined;
+        return;
+      }
+      if (this.cameraTrack && this.state.local.camera) void this.retier();
+    }, TIER_CHECK_MS);
   }
 
   private async applyShareQuality() {
@@ -813,9 +901,10 @@ export class CallManager {
 
   private async acquireLocalMedia(media: CallMedia) {
     if (this.state.localStream) return;
+    if (media === 'video') await this.pickTier();
     const stream = await this.opts.rtc.getUserMedia({
       audio: AUDIO_CONSTRAINTS,
-      video: media === 'video' ? VIDEO_CONSTRAINTS : false,
+      video: media === 'video' ? { ...cameraConstraints(this.state.videoTier), facingMode: 'user' } : false,
     });
     this.cameraTrack = stream.getVideoTracks()[0] ?? null;
     const mic = stream.getAudioTracks()[0];
@@ -862,6 +951,21 @@ export class CallManager {
       const audio = stream.getAudioTracks()[0];
       this.audioTx = pc.addTransceiver(audio ?? 'audio', { direction: 'sendrecv', streams: [stream] });
       this.videoTx = pc.addTransceiver(this.cameraTrack ?? 'video', { direction: 'sendrecv', streams: [stream] });
+      this.preferCodec(this.videoTx);
+    }
+  }
+
+  /** Put this device's preferred video codec first (see RtcAdapter.preferVideoCodec). */
+  private preferCodec(tx: RTCRtpTransceiver | null) {
+    const want = this.opts.rtc.preferVideoCodec?.toLowerCase();
+    if (!tx || !want || !tx.setCodecPreferences) return;
+    try {
+      const codecs = this.opts.rtc.videoSendCodecs?.() ?? [];
+      const first = codecs.filter((c) => c.mimeType.toLowerCase() === want);
+      if (!first.length) return;
+      tx.setCodecPreferences([...first, ...codecs.filter((c) => c.mimeType.toLowerCase() !== want)]);
+    } catch (e) {
+      this.log('codec preference not applied', e);
     }
   }
 
@@ -870,7 +974,7 @@ export class CallManager {
     const callId = this.state.call?.id;
     if (!pc || !callId) return;
     const created = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
-    const offer = { type: created.type, sdp: opusForMedia(created.sdp ?? '') };
+    const offer = { type: created.type, sdp: opusForMedia(created.sdp ?? '', this.state.media === 'audio') };
     await pc.setLocalDescription(offer);
     await this.send({ type: 'sdp', callId, description: { type: offer.type, sdp: offer.sdp } });
   }
@@ -883,7 +987,7 @@ export class CallManager {
     if (description.type === 'offer') {
       if (!this.audioTx || !this.videoTx) this.bindCalleeTransceivers(pc);
       const created = await pc.createAnswer();
-      const answer = { type: created.type, sdp: opusForMedia(created.sdp ?? '') };
+      const answer = { type: created.type, sdp: opusForMedia(created.sdp ?? '', this.state.media === 'audio') };
       await pc.setLocalDescription(answer);
       const callId = this.state.call!.id;
       await this.send({ type: 'sdp', callId, description: { type: answer.type, sdp: answer.sdp } });
@@ -900,6 +1004,7 @@ export class CallManager {
       if (kind === 'audio' && !this.audioTx) this.audioTx = t;
       if (kind === 'video' && !this.videoTx) this.videoTx = t;
     }
+    this.preferCodec(this.videoTx);
     const audio = stream.getAudioTracks()[0] ?? null;
     for (const [tx, track] of [
       [this.audioTx, audio],
@@ -932,6 +1037,8 @@ export class CallManager {
       this.broadcastMediaState();
       void this.detectRoute();
       if (!this.audioMix) void this.setAudioBitrate(VOICE_BITRATE);
+      void this.applyCameraQuality();
+      this.watchTier();
     } else if (s === 'disconnected') {
       this.set({ phase: 'reconnecting' });
       this.reconnectTimer = setTimeout(() => this.restartIce(), RECONNECT_GRACE_MS);
@@ -1042,6 +1149,8 @@ export class CallManager {
   private teardown() {
     clearTimeout(this.ringTimer);
     clearTimeout(this.reconnectTimer);
+    clearInterval(this.tierTimer);
+    this.tierTimer = undefined;
     this.state.localStream?.getTracks().forEach((t) => t.stop());
     this.cameraTrack?.stop();
     this.screenTrack?.stop();
@@ -1059,7 +1168,7 @@ export class CallManager {
   }
 
   private set(patch: Partial<CallState>) {
-    this.state = { ...this.state, ...patch };
+    this.state = { ...this.state, ...patch, hdAlways: this.hdAlways };
     for (const fn of [...this.listeners]) fn();
   }
 

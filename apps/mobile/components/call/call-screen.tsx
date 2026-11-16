@@ -3,7 +3,7 @@ import { useCallCards, useCallManager, useCallState, useCouple, useFeature } fro
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { Bluetooth, Check, ChevronDown, Ear, Headphones, Layers, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, Smartphone, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StatusBar, useWindowDimensions, View } from 'react-native';
+import { AppState, Modal, Pressable, StatusBar, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -204,6 +204,25 @@ function useCallAudio(state: CallState) {
   useEffect(() => {
     if (active) startCallService(`Call with ${partner.display_name}`, video);
   }, [active, video, partner.display_name]);
+  // In the background nobody sees my camera's preview, and keeping it running
+  // costs battery: pause it (my partner sees my photo) and resume on return.
+  const pausedCamera = useRef(false);
+  useEffect(() => {
+    if (!active) return;
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'background' && m.getState().local.camera && !m.getState().local.screen) {
+        pausedCamera.current = true;
+        void m.toggleCamera();
+      } else if (s === 'active' && pausedCamera.current) {
+        pausedCamera.current = false;
+        if (!m.getState().local.camera) void m.toggleCamera();
+      }
+    });
+    return () => sub.remove();
+  }, [active, m]);
+  useEffect(() => {
+    if (!active) pausedCamera.current = false;
+  }, [active]);
   // The app is showing this call now: stop any lock-screen ringing for it.
   const callId = state.call?.id ?? null;
   useEffect(() => {
@@ -448,6 +467,16 @@ function Surface({
                   onPress={() => void m.switchCamera()}
                 >
                   <SwitchCamera size={20} color="#FCFAFB" />
+                </IconButton>
+              )}
+              {live && state.local.camera && (
+                <IconButton
+                  label={state.hdAlways ? 'HD always on. Tap to let battery and Wi-Fi decide' : `Sending ${state.videoTier === 'high' ? '1080p' : '720p'}. Tap for HD always`}
+                  selected={state.hdAlways}
+                  tone={state.hdAlways ? 'nightOff' : 'night'}
+                  onPress={() => void m.setHdAlways(!state.hdAlways)}
+                >
+                  <Text className={cn('font-sans-semibold text-micro', state.hdAlways ? 'text-plum-900' : 'text-paper')}>HD</Text>
                 </IconButton>
               )}
               {live && (

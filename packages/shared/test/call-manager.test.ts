@@ -707,9 +707,15 @@ describe('opusForMedia', () => {
 
   it('lets Opus carry stereo music, once, and leaves other codecs alone', () => {
     const out = opusForMedia(opusForMedia(sdp));
-    expect(out).toContain('a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=128000\r\n');
+    expect(out).toContain('a=fmtp:111 minptime=10;stereo=1;sprop-stereo=1;maxaveragebitrate=128000;useinbandfec=1\r\n');
     expect(out.match(/stereo=1/g)).toHaveLength(2); // stereo + sprop-stereo, not doubled
+    expect(out.match(/useinbandfec=1/g)).toHaveLength(1);
     expect(out).toContain('a=fmtp:63 111/111');
+  });
+
+  it('sends next to nothing in silence on voice calls (DTX), once', () => {
+    expect(opusForMedia(opusForMedia(sdp, true), true).match(/usedtx=1/g)).toHaveLength(1);
+    expect(opusForMedia(sdp)).not.toContain('usedtx');
   });
 
   it('leaves an SDP without Opus untouched', () => {
