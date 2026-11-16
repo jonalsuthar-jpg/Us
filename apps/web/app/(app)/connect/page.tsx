@@ -47,10 +47,10 @@ export default function ConnectPage() {
       ) : null}
       <DailyGames />
       {draw ? (
-        <div className="space-y-3">
+        <>
           <DrawingsStrip />
           <DailyDoodleCard />
-        </div>
+        </>
       ) : null}
       {daily ? <DailyQuestion /> : draw || quizzes ? null : <FeatureOff />}
     </div>

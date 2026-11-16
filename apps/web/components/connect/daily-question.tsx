@@ -2,7 +2,7 @@
 
 import { answerDaily, dailyState, DAILY_ANSWER_MAX, fromDateKey, getDaily, type DailyEntry } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { ChevronRight, Flame, Hourglass, Lock } from 'lucide-react';
+import { Flame, Hourglass, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { ErrorNote } from '@/components/app/module-header';
@@ -10,7 +10,6 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { TextAreaField } from '@/components/ui/field';
-import { PrivacyBadge } from '@/components/ui/privacy';
 import { Sheet } from '@/components/ui/sheet';
 
 export const dayLabel = (key: string, long = false) =>
@@ -22,22 +21,39 @@ export function useDaily() {
   return useCoupleData('connect:daily', () => getDaily(sb), [sb]);
 }
 
-/** Today's question, with Our answers beside it. */
+/** Today's question, with a link to Our answers (and the streak) beside the heading. */
 export function DailyQuestion() {
   const daily = useDaily();
-  if (daily.error && !daily.data) return <ErrorNote>{daily.error}</ErrorNote>;
-  if (!daily.data)
-    return (
-      <div className="grid gap-5 lg:grid-cols-[2fr_1fr]" aria-busy>
-        <Sheet tone="inset" pad="lg" className="h-72 animate-pulse" />
-        <Sheet tone="inset" pad="lg" className="h-72 animate-pulse" />
-      </div>
-    );
   return (
-    <section aria-label="Daily question" className="grid gap-3 sm:gap-5 lg:grid-cols-[2fr_1fr]">
-      <TodayQuestion daily={daily} />
-      <AnswersCard past={daily.data.past} streak={daily.data.streak} together={daily.data.together} />
+    <section aria-labelledby="todays-question" className="space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id="todays-question" className="font-display text-heading text-ink">
+          Today’s question
+        </h2>
+        {daily.data ? <AnswersLink together={daily.data.together} streak={daily.data.streak} /> : null}
+      </div>
+      {daily.error && !daily.data ? (
+        <ErrorNote>{daily.error}</ErrorNote>
+      ) : daily.data ? (
+        <TodayQuestion daily={daily} />
+      ) : (
+        <Sheet tone="inset" pad="lg" className="h-64 animate-pulse" aria-busy />
+      )}
     </section>
+  );
+}
+
+function AnswersLink({ together, streak }: { together: number; streak: number }) {
+  return (
+    <Link href="/connect/questions" className="inline-flex shrink-0 items-center gap-1.5 text-small font-semibold text-teal-700 hover:text-teal-800">
+      Our answers · {together}
+      {streak > 1 ? (
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-gold-50 px-2 py-0.5 text-micro font-bold text-gold-700" aria-label={`${streak} days in a row`}>
+          <Flame className="h-3 w-3 text-gold-500" aria-hidden />
+          {streak}
+        </span>
+      ) : null}
+    </Link>
   );
 }
 
@@ -65,22 +81,20 @@ function TodayQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
   }
 
   return (
-    <Sheet pad="none" className="space-y-4 rounded-[24px] p-5 sm:space-y-5 sm:p-8">
+    <Sheet pad="none" className="space-y-4 rounded-[26px] p-5 shadow-[0_18px_40px_-32px_rgba(36,25,51,0.55)] sm:space-y-5 sm:p-7">
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-small font-semibold text-teal-700">
           <span className="h-2 w-2 rounded-full bg-teal-500" aria-hidden />
-          Today’s question<span className="hidden sm:inline"> · {dayLabel(today.for_date)}</span>
+          {dayLabel(today.for_date)}
         </p>
-        <PrivacyBadge privacy="private-until-reveal" partnerName={partner.display_name} className="hidden sm:inline-flex" />
-        {/* Phones: the short form, so the row never wraps. */}
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-plum-50 px-2.5 py-1 text-micro font-medium text-plum-600 sm:hidden">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-plum-50 px-2.5 py-1 text-micro font-medium text-plum-600">
           <Lock className="h-3 w-3" aria-hidden />
           <span>
             Hidden until both<span className="sr-only"> of you have answered</span>
           </span>
         </span>
       </div>
-      <h2 className="text-balance font-serif text-[25px] leading-[1.25] text-ink sm:text-[32px] sm:leading-tight">{today.prompt}</h2>
+      <p className="text-balance font-serif text-[24px] leading-[1.25] text-ink sm:text-[30px] sm:leading-tight">{today.prompt}</p>
 
       {state === 'ask' || state === 'nudge' ? (
         <form
@@ -115,7 +129,7 @@ function TodayQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
           </div>
         </form>
       ) : (
-        <Answers entry={today} myName={me.display_name} partnerName={partner.display_name} />
+        <AnswerBubbles entry={today} partnerName={partner.display_name} />
       )}
 
       <Dialog
@@ -137,66 +151,26 @@ function TodayQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
   );
 }
 
-/** Streak, how many we've answered together, and the last few prompts. Opens the archive. */
-function AnswersCard({ past, streak, together }: { past: DailyEntry[]; streak: number; together: number }) {
+/** Today, once mine is in: my answer, and theirs beside it when they have answered too. */
+function AnswerBubbles({ entry, partnerName }: { entry: DailyEntry; partnerName: string }) {
   return (
-    <>
-      {/* Phones: one row, like the app. */}
-      <Link
-        href="/connect/questions"
-        className="flex items-center gap-4 rounded-[24px] bg-gold-50 p-4 text-ink active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 sm:hidden"
-      >
-        <span className="flex h-[60px] w-[60px] shrink-0 flex-col items-center justify-center rounded-[18px] bg-paper-raised">
-          <span className="font-display text-[24px] leading-[26px]">{together}</span>
-          <span className="text-[10px] leading-3 text-ink-muted">answered</span>
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-lead font-semibold">Our answers</span>
-          <span className="flex items-center gap-1.5 text-micro text-gold-700">
-            {streak > 1 ? <Flame className="h-3.5 w-3.5 shrink-0 text-gold-500" aria-hidden /> : null}
-            <span className="truncate">{streak > 1 ? `${streak} days in a row · every question` : 'Every question, both answers'}</span>
-          </span>
-        </span>
-        <ChevronRight className="h-5 w-5 shrink-0 text-gold-700" aria-hidden />
-      </Link>
-      <AnswersPanel past={past} streak={streak} together={together} />
-    </>
-  );
-}
-
-function AnswersPanel({ past, streak, together }: { past: DailyEntry[]; streak: number; together: number }) {
-  return (
-    <Link
-      href="/connect/questions"
-      className="group hidden flex-col gap-4 rounded-[24px] bg-gold-50 p-6 sm:flex text-ink transition-shadow hover:shadow-[0_12px_32px_-18px_rgba(124,80,6,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-    >
-      <span className="flex items-center justify-between">
-        <span className="text-small font-semibold text-gold-700">Our answers</span>
-        <ChevronRight className="h-5 w-5 text-gold-700 transition-transform group-hover:translate-x-0.5" aria-hidden />
-      </span>
-      <span className="flex items-baseline gap-2.5">
-        <span className="font-display text-[52px] leading-none tracking-tight">{together}</span>
-        <span className="text-small text-ink-soft">{together === 1 ? 'question answered together' : 'questions answered together'}</span>
-      </span>
-      {streak > 1 ? (
-        <span className="inline-flex items-center gap-2 self-start rounded-full bg-paper-raised px-3 py-1.5 text-micro font-semibold">
-          <Flame className="h-4 w-4 text-gold-500" aria-hidden />
-          {streak} days in a row
-        </span>
-      ) : null}
-      {past.length ? (
-        <ul className="space-y-2">
-          {past.slice(0, 3).map((e) => (
-            <li key={e.question_id} className="truncate rounded-control bg-paper-raised px-3 py-2.5 font-serif text-small">
-              {e.prompt}
-            </li>
-          ))}
-        </ul>
+    <div className="flex flex-col gap-2">
+      <div className="max-w-[88%] self-start whitespace-pre-wrap rounded-[18px] rounded-bl-md bg-rose-50 px-4 py-2.5 text-body text-ink">
+        <span className="block text-micro font-bold text-rose-700">You</span>
+        {entry.my_answer}
+      </div>
+      {entry.partner_answer !== null ? (
+        <div className="max-w-[88%] self-end whitespace-pre-wrap rounded-[18px] rounded-br-md bg-teal-50 px-4 py-2.5 text-body text-ink">
+          <span className="block text-micro font-bold text-teal-700">{partnerName}</span>
+          {entry.partner_answer}
+        </div>
       ) : (
-        <span className="font-serif text-small italic text-ink-soft">Your answers collect here, a little archive of the two of you.</span>
+        <p className="inline-flex items-center gap-2 text-small text-ink-muted">
+          <Hourglass className="h-4 w-4" aria-hidden />
+          You’ll see {partnerName}’s when they answer.
+        </p>
       )}
-      <span className="mt-auto text-small font-semibold text-gold-700">Open our answers</span>
-    </Link>
+    </div>
   );
 }
 

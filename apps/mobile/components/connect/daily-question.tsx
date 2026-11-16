@@ -1,7 +1,7 @@
 import { answerDaily, dailyState, DAILY_ANSWER_MAX, fromDateKey, getDaily, type DailyEntry } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
 import { router } from 'expo-router';
-import { ChevronRight, Flame, Hourglass, Lock } from 'lucide-react-native';
+import { Flame, Hourglass, Lock } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { ErrorNote } from '../module-screen';
@@ -23,8 +23,26 @@ export function DailyQuestion({ daily }: { daily: ReturnType<typeof useDaily> })
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
-  if (daily.error && !daily.data) return <ErrorNote>{daily.error}</ErrorNote>;
-  if (!daily.data) return <Sheet tone="inset" className="h-48" />;
+  const header = (
+    <View className="flex-row items-baseline justify-between gap-3">
+      <Display className="text-heading">Today’s question</Display>
+      {daily.data ? <AnswersLink together={daily.data.together} streak={daily.data.streak} /> : null}
+    </View>
+  );
+  if (daily.error && !daily.data)
+    return (
+      <View className="gap-3">
+        {header}
+        <ErrorNote>{daily.error}</ErrorNote>
+      </View>
+    );
+  if (!daily.data)
+    return (
+      <View className="gap-3">
+        {header}
+        <Sheet tone="inset" className="h-48" />
+      </View>
+    );
 
   const { today } = daily.data;
   const state = dailyState(today);
@@ -51,81 +69,97 @@ export function DailyQuestion({ daily }: { daily: ReturnType<typeof useDaily> })
   }
 
   return (
-    <Sheet className="gap-4 rounded-[24px] p-5">
-      <View className="flex-row items-center justify-between gap-2">
-        <View className="flex-row items-center gap-2">
-          <View className="h-2 w-2 rounded-full bg-teal-500" />
-          <Text className="font-sans-semibold text-small text-teal-700">Today’s question</Text>
+    <View className="gap-3">
+      {header}
+      <Sheet className="gap-4 rounded-[26px] p-5">
+        <View className="flex-row items-center justify-between gap-2">
+          <View className="flex-row items-center gap-2">
+            <View className="h-2 w-2 rounded-full bg-teal-500" />
+            <Text className="font-sans-semibold text-small text-teal-700">{dayLabel(today.for_date)}</Text>
+          </View>
+          {/* The short form of the privacy badge, so the row never wraps. */}
+          <View accessible accessibilityLabel="Hidden until you’ve both answered" className="flex-row items-center gap-1.5 rounded-full bg-plum-50 py-1 pl-2 pr-2.5">
+            <Lock size={12} color={c.onPlum} strokeWidth={2.25} />
+            <Text className="font-sans-medium text-micro text-plum-600">Hidden until both</Text>
+          </View>
         </View>
-        {/* The short form of the privacy badge, so the row never wraps. */}
-        <View
-          accessible
-          accessibilityLabel="Hidden until you’ve both answered"
-          className="flex-row items-center gap-1.5 rounded-full bg-plum-50 py-1 pl-2 pr-2.5"
-        >
-          <Lock size={12} color={c.onPlum} strokeWidth={2.25} />
-          <Text className="font-sans-medium text-micro text-plum-600">Hidden until both</Text>
-        </View>
-      </View>
-      <Display light className="text-[25px] leading-[32px]">
-        {today.prompt}
-      </Display>
+        <Display light className="text-[25px] leading-[32px]">
+          {today.prompt}
+        </Display>
 
-      {state === 'ask' || state === 'nudge' ? (
-        <View className="gap-3">
-          {state === 'nudge' ? (
-            <View className="flex-row items-center gap-2.5 rounded-control bg-teal-50 px-3 py-2.5">
-              <Avatar name={partner.display_name} slot={partnerSlot} size="sm" />
-              <Text className="flex-1 text-small text-teal-800">{`${partner.display_name} has answered. Yours unlocks theirs.`}</Text>
-            </View>
-          ) : null}
-          <Field
-            label="Your answer"
-            value={answer}
-            onChangeText={setAnswer}
-            multiline
-            inputClassName="h-28 py-3"
-            maxLength={DAILY_ANSWER_MAX}
-            placeholder="Take your time…"
-            hint="Hidden until you’ve both answered. Sealed once sent."
-          />
-          {error ? <ErrorNote>{error}</ErrorNote> : null}
-          <Button disabled={!answer.trim()} loading={sending} onPress={send} className="bg-teal-600 active:bg-teal-700">
-            Send my answer
-          </Button>
-        </View>
-      ) : (
-        <Answers entry={today} myName={me.display_name} partnerName={partner.display_name} />
-      )}
-    </Sheet>
+        {state === 'ask' || state === 'nudge' ? (
+          <View className="gap-3">
+            {state === 'nudge' ? (
+              <View className="flex-row items-center gap-2.5 rounded-control bg-teal-50 px-3 py-2.5">
+                <Avatar name={partner.display_name} slot={partnerSlot} size="sm" />
+                <Text className="flex-1 text-small text-teal-800">{`${partner.display_name} has answered. Yours unlocks theirs.`}</Text>
+              </View>
+            ) : null}
+            <Field
+              label="Your answer"
+              value={answer}
+              onChangeText={setAnswer}
+              multiline
+              inputClassName="h-28 py-3"
+              maxLength={DAILY_ANSWER_MAX}
+              placeholder="Take your time…"
+              hint="Hidden until you’ve both answered. Sealed once sent."
+            />
+            {error ? <ErrorNote>{error}</ErrorNote> : null}
+            <Button disabled={!answer.trim()} loading={sending} onPress={send} className="bg-teal-600 active:bg-teal-700">
+              Send my answer
+            </Button>
+          </View>
+        ) : (
+          <AnswerBubbles entry={today} partnerName={partner.display_name} />
+        )}
+      </Sheet>
+    </View>
   );
 }
 
-/** How many we've answered together and the streak. Opens the archive. */
-export function AnswersCard({ daily }: { daily: ReturnType<typeof useDaily> }) {
+/** Today, once mine is in: my answer, and theirs beside it when they have answered too. */
+function AnswerBubbles({ entry, partnerName }: { entry: DailyEntry; partnerName: string }) {
   const c = usePalette();
-  if (!daily.data) return null;
-  const { together, streak } = daily.data;
+  return (
+    <View className="gap-2">
+      <View className="max-w-[88%] self-start rounded-[18px] rounded-bl-md bg-rose-50 px-4 py-2.5">
+        <Text className="font-sans-bold text-micro text-rose-700">You</Text>
+        <Text className="text-body">{entry.my_answer}</Text>
+      </View>
+      {entry.partner_answer !== null ? (
+        <View className="max-w-[88%] self-end rounded-[18px] rounded-br-md bg-teal-50 px-4 py-2.5">
+          <Text className="font-sans-bold text-micro text-teal-700">{partnerName}</Text>
+          <Text className="text-body">{entry.partner_answer}</Text>
+        </View>
+      ) : (
+        <View className="flex-row items-center gap-2">
+          <Hourglass size={14} color={c.inkMuted} />
+          <Text className="flex-1 text-small text-ink-muted">{`You’ll see ${partnerName}’s when they answer.`}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** "Our answers · 47" with the streak, beside the heading. Opens the archive. */
+function AnswersLink({ together, streak }: { together: number; streak: number }) {
+  const c = usePalette();
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole="link"
       accessibilityLabel={`Our answers. ${together} answered together${streak > 1 ? `, ${streak} days in a row` : ''}`}
       onPress={() => router.push('/questions')}
-      className="flex-row items-center gap-4 rounded-[24px] bg-gold-50 p-4 active:opacity-80"
+      hitSlop={8}
+      className="flex-row items-center gap-1.5 active:opacity-70"
     >
-      <View className="h-14 w-14 items-center justify-center rounded-[18px] bg-paper-raised">
-        <Display className="text-[26px] leading-[30px]">{String(together)}</Display>
-      </View>
-      <View className="flex-1 gap-0.5">
-        <Text className="font-sans-semibold text-lead">Our answers</Text>
-        <View className="flex-row items-center gap-1.5">
-          {streak > 1 ? <Flame size={13} color={c.gold} /> : null}
-          <Text className="flex-1 text-micro text-gold-700" numberOfLines={1}>
-            {streak > 1 ? `${together} together · ${streak} days in a row` : `${together} answered together`}
-          </Text>
+      <Text className="font-sans-semibold text-small text-teal-700">{`Our answers · ${together}`}</Text>
+      {streak > 1 ? (
+        <View className="flex-row items-center gap-0.5 rounded-full bg-gold-50 px-2 py-0.5">
+          <Flame size={11} color={c.gold} />
+          <Text className="font-sans-bold text-micro text-gold-700">{String(streak)}</Text>
         </View>
-      </View>
-      <ChevronRight size={20} color={c.onGold} />
+      ) : null}
     </Pressable>
   );
 }
@@ -150,11 +184,7 @@ export function Answers({ entry, myName, partnerName, compact }: { entry: DailyE
     <View className={compact ? 'gap-2' : 'gap-4'}>
       <View>
         <Text className="font-sans-medium text-micro text-ink-muted">{myName}</Text>
-        {entry.my_answer !== null ? (
-          <Text className={size}>{entry.my_answer}</Text>
-        ) : (
-          <Text className={`${size} italic text-ink-muted`}>Didn’t answer</Text>
-        )}
+        {entry.my_answer !== null ? <Text className={size}>{entry.my_answer}</Text> : <Text className={`${size} italic text-ink-muted`}>Didn’t answer</Text>}
       </View>
       <View>
         <Text className="font-sans-medium text-micro text-ink-muted">{partnerName}</Text>

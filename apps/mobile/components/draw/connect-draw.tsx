@@ -1,7 +1,7 @@
 import { useCouple, useDailyDoodle, useDrawGames, useDrawings, usePartnerDrawing } from '@us/shared/react';
 import { router } from 'expo-router';
-import { MessageCircleQuestion, PenLine, Plus } from 'lucide-react-native';
-import { useState } from 'react';
+import { Clock, Lock, MessageCircleQuestion, PenLine, Plus } from 'lucide-react-native';
+import { useState, type ReactNode } from 'react';
 import { Image, Pressable, ScrollView, View } from 'react-native';
 import { usePalette } from '../ui/palette';
 import { Display, Text } from '../ui/text';
@@ -77,16 +77,15 @@ export function DrawTiles() {
   );
 }
 
-/** "Our drawings" with a "Leave a doodle" tile at the end. */
+/** "Our drawings": a "Leave a doodle" tile first, then the latest drawings. */
 export function DrawingsStrip() {
   const { partner } = useCouple();
-  const c = usePalette();
   const { drawings, urls } = useDrawings();
   const [doodle, setDoodle] = useState(false);
   const shown = drawings.filter((d) => d.kind !== 'guess' || d.answered_at).slice(0, 6);
 
   return (
-    <View className="gap-2.5">
+    <View className="gap-3">
       <View className="flex-row items-baseline justify-between">
         <Display className="text-heading">Our drawings</Display>
         {drawings.length ? (
@@ -95,50 +94,135 @@ export function DrawingsStrip() {
           </Pressable>
         ) : null}
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2.5">
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="items-center gap-2.5">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Leave ${partner.display_name} a doodle`}
+          onPress={() => setDoodle(true)}
+          className="h-[112px] w-[84px] items-center justify-center gap-1.5 rounded-[16px] border-2 border-dashed border-rose-300 bg-rose-50 active:opacity-80"
+        >
+          <View className="h-8 w-8 items-center justify-center rounded-full bg-rose-400">
+            <Plus size={17} color="#fff" />
+          </View>
+          <Text className="text-center font-sans-bold text-micro leading-[15px] text-rose-700">{'Leave a\ndoodle'}</Text>
+        </Pressable>
         {shown.map((d) => (
           <Pressable
             key={d.id}
             accessibilityRole="button"
             accessibilityLabel={d.title ?? 'A drawing'}
             onPress={() => router.push({ pathname: '/draw/[id]', params: { id: d.id } })}
-            className="h-[120px] w-[90px] overflow-hidden rounded-[14px] border border-paper-edge bg-white"
+            className="h-[112px] w-[84px] overflow-hidden rounded-[16px] border border-paper-edge bg-white"
           >
-            {urls[d.png_path] ? <Image source={{ uri: urls[d.png_path] }} style={{ width: 90, height: 120 }} /> : null}
+            {urls[d.png_path] ? <Image source={{ uri: urls[d.png_path] }} style={{ width: 84, height: 112 }} /> : null}
           </Pressable>
         ))}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Leave ${partner.display_name} a doodle`}
-          onPress={() => setDoodle(true)}
-          className="h-[120px] w-[90px] items-center justify-center gap-1.5 rounded-[14px] border-2 border-dashed border-rose-300"
-        >
-          <Plus size={22} color={c.onRose} />
-          <Text className="text-center font-sans-semibold text-micro leading-[16px] text-rose-600">{'Leave a\ndoodle'}</Text>
-        </Pressable>
+        {!shown.length ? (
+          <Display light italic className="px-2 text-small text-ink-soft">
+            Your doodles collect here.
+          </Display>
+        ) : null}
       </ScrollView>
       <DoodleSheet open={doodle} onClose={() => setDoodle(false)} />
     </View>
   );
 }
 
-/** Today's doodle prompt, revealed when we've both drawn it. */
+/** Today's doodle prompt: my frame and theirs. Theirs stays hidden until I've drawn mine. */
 export function DailyDoodleCard() {
-  const { partner } = useCouple();
+  const { me, partner } = useCouple();
+  const c = usePalette();
   const daily = useDailyDoodle();
   const name = partner.display_name;
-  const line =
-    daily.mine && daily.partner
-      ? 'You both drew it. Tap to see them side by side.'
-      : daily.mine
-        ? `Yours is in. ${name}’s shows here when they draw theirs.`
-        : daily.partner
-          ? `${name} drew theirs. Draw yours to see it.`
-          : `Draw it, then see ${name}’s.`;
+  const mine = daily.drawings.find((d) => d.created_by === me.id);
+  const theirs = daily.drawings.find((d) => d.created_by !== me.id);
+  const waiting = daily.mine && !daily.partner;
+  const cta = daily.mine && daily.partner ? 'See side by side' : waiting ? `Waiting for ${name}` : 'Draw it';
+  const open = () => router.push('/draw/daily');
+
   return (
-    <Pressable accessibilityRole="button" onPress={() => router.push('/draw/daily')} className="gap-1 rounded-[20px] bg-paper-sunken px-4 py-3.5 active:opacity-80">
-      <Text className="font-sans-semibold text-body">{`Today’s doodle: “${daily.prompt}”`}</Text>
-      <Text className="text-small text-ink-soft">{line}</Text>
-    </Pressable>
+    <View className="gap-3">
+      <View className="flex-row items-baseline justify-between">
+        <Display className="text-heading">Today’s doodle</Display>
+        <Text className="font-sans-semibold text-micro text-ink-muted">New prompt every day</Text>
+      </View>
+      <View className="gap-4 rounded-[26px] border border-rose-100 bg-rose-50 p-4">
+        <View className="gap-1">
+          <Text className="font-sans-bold text-micro text-rose-700">Draw it, then see theirs</Text>
+          <Display light className="text-[26px] leading-[32px]">{`“${daily.prompt}”`}</Display>
+        </View>
+        <View className="flex-row gap-2.5">
+          <DoodleFrame who="You" dot="bg-rose-400">
+            {daily.mine ? (
+              <Thumb url={mine ? daily.urls[mine.png_path] : undefined} />
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={open}
+                className="flex-1 items-center justify-center gap-2 rounded-[18px] border-2 border-dashed border-rose-300 bg-paper-raised active:opacity-80"
+              >
+                <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-rose-400">
+                  <PenLine size={19} color="#fff" />
+                </View>
+                <Text className="font-sans-bold text-small text-rose-700">Draw yours</Text>
+              </Pressable>
+            )}
+          </DoodleFrame>
+          <DoodleFrame who={name} dot="bg-teal-500">
+            {daily.partner && daily.mine ? (
+              <Thumb url={theirs ? daily.urls[theirs.png_path] : undefined} />
+            ) : daily.partner ? (
+              <View className="flex-1 items-center justify-center overflow-hidden rounded-[18px] border border-paper-edge bg-white">
+                <View className="absolute opacity-15">
+                  <CoupleDoodle width={90} />
+                </View>
+                <View className="items-center gap-1.5 p-2">
+                  <View className="h-9 w-9 items-center justify-center rounded-full bg-teal-600">
+                    <Lock size={16} color="#fff" />
+                  </View>
+                  <Text className="text-center font-sans-bold text-micro text-teal-700">{'Drawn · draw\nyours to see'}</Text>
+                </View>
+              </View>
+            ) : (
+              <View className="flex-1 items-center justify-center gap-2 rounded-[18px] border border-paper-edge bg-paper-raised">
+                <Clock size={20} color={c.inkMuted} />
+                <Text className="px-2 text-center font-sans-semibold text-micro text-ink-muted">{`Waiting for ${name}`}</Text>
+              </View>
+            )}
+          </DoodleFrame>
+        </View>
+        {waiting ? (
+          <View className="h-12 items-center justify-center rounded-full border border-paper-edge bg-paper-raised">
+            <Text className="font-sans-semibold text-small text-ink-muted">{cta}</Text>
+          </View>
+        ) : (
+          <Pressable accessibilityRole="button" onPress={open} className="h-12 items-center justify-center rounded-full bg-rose-600 active:bg-rose-700">
+            <Text className="font-sans-bold text-small text-white">{cta}</Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function DoodleFrame({ who, dot, children }: { who: string; dot: string; children: ReactNode }) {
+  return (
+    <View className="flex-1 gap-1.5">
+      <View className="h-[168px]">{children}</View>
+      <View className="flex-row items-center gap-1.5">
+        <View className={`h-[7px] w-[7px] rounded-full ${dot}`} />
+        <Text className="flex-1 font-sans-bold text-micro text-ink" numberOfLines={1}>
+          {who}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function Thumb({ url }: { url: string | undefined }) {
+  return (
+    <View className="flex-1 overflow-hidden rounded-[18px] border border-paper-edge bg-white">
+      {url ? <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} resizeMode="contain" /> : null}
+    </View>
   );
 }

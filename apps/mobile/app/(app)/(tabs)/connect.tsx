@@ -4,7 +4,7 @@ import { HeartHandshake, Settings } from 'lucide-react-native';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CLEAR_CHAT_FAB } from '@/components/chat/chat-fab';
-import { AnswersCard, DailyQuestion, useDaily } from '@/components/connect/daily-question';
+import { DailyQuestion, useDaily } from '@/components/connect/daily-question';
 import { DailyDoodleCard, DrawingsStrip, DrawTiles } from '@/components/draw/connect-draw';
 import { FeatureOff } from '@/components/feature-off';
 import { DailyGames } from '@/components/games/daily-games';
@@ -56,17 +56,14 @@ export default function Connect() {
       <DailyGames />
 
       {draw ? (
-        <View className="gap-3">
+        <>
           <DrawingsStrip />
           <DailyDoodleCard />
-        </View>
+        </>
       ) : null}
 
       {on ? (
-        <View className="gap-3">
-          <DailyQuestion daily={daily} />
-          <AnswersCard daily={daily} />
-        </View>
+        <DailyQuestion daily={daily} />
       ) : draw || quizzes ? null : (
         <FeatureOff />
       )}
