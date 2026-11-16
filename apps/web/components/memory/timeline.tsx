@@ -20,7 +20,7 @@ import {
   type MemoryRating,
 } from '@us/shared';
 import { useBirthdayStoryMemories, useCouple, useCoupleData } from '@us/shared/react';
-import { Heart, ImagePlus, Plus, Sparkles, X } from 'lucide-react';
+import { BookHeart, Heart, ImagePlus, Plane, Plus, Sparkles, Wine, X, type LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { EmptyNote, ErrorNote } from '@/components/app/module-header';
@@ -29,7 +29,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Photo } from '@/components/ui/lightbox';
 import { Field, TextAreaField } from '@/components/ui/field';
 import { PrivacyBadge } from '@/components/ui/privacy';
-import { Chip, Segmented } from '@/components/ui/segmented';
+import { Segmented } from '@/components/ui/segmented';
 import { Sheet } from '@/components/ui/sheet';
 import { shrinkPhoto } from '@/lib/image';
 import { cn } from '@/lib/cn';
@@ -70,50 +70,83 @@ export function MemoryTimeline() {
   const shown = filter === 'all' ? all : all.filter((m) => m.kind === filter);
   const groups = groupByMonth(shown);
 
+  const count = (f: Filter) => (f === 'all' ? all.length : all.filter((m) => m.kind === f).length);
+  const photos = all.filter((m) => m.photo_path).length;
+
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
+      <section className="rounded-[30px] bg-paper-raised p-4 shadow-[0_24px_50px_-30px_rgba(122,75,58,0.55)] sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2.5 font-display text-[22px] font-extrabold text-ink">
+            <BookHeart className="h-6 w-6 text-rose-500" aria-hidden />
+            Our story
+          </h2>
+          <span className="text-small font-medium text-ink-muted">
+            {photos} {photos === 1 ? 'photo' : 'photos'}
+          </span>
+        </div>
+        <div role="group" aria-label="Show" className="mt-4 grid grid-cols-4 gap-2 sm:gap-3">
+          {TILES.map((t) => {
+            const selected = filter === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setFilter(t.value)}
+                className={cn(
+                  'flex flex-col items-center gap-1 rounded-[18px] px-1 py-3 transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+                  t.wash,
+                  selected && 'ring-2 ring-offset-2 ring-offset-paper-raised',
+                  selected && t.ring,
+                )}
+              >
+                <span className={cn('flex h-9 w-9 items-center justify-center rounded-full text-white shadow-[0_6px_12px_-6px_rgba(36,25,51,0.5)]', t.fill)}>
+                  <t.Icon className="h-[18px] w-[18px]" aria-hidden />
+                </span>
+                <span className="text-[20px] font-extrabold leading-6 text-ink">{count(t.value)}</span>
+                <span className="text-micro font-semibold text-ink-soft">{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditing({})}
+          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-b from-rose-500 to-rose-600 text-body font-extrabold text-white shadow-[0_14px_26px_-14px_rgba(196,29,85,0.9)] transition-transform hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+        >
+          <Plus className="h-5 w-5" strokeWidth={2.6} /> Keep a memory
+        </button>
+      </section>
+
       {resurfaced.length > 0 && (
-        <section aria-labelledby="on-this-day">
-          <Sheet tone="note" accent="gold" pad="md" className="space-y-3">
-            <h2 id="on-this-day" className="flex items-center gap-2 text-small font-medium text-gold-700">
-              <Sparkles className="h-4 w-4" aria-hidden /> On this day
-            </h2>
-            <ul className="space-y-3">
-              {resurfaced.map((m) => (
-                <li key={m.id}>
-                  <button type="button" onClick={() => setViewing(m)} className="flex w-full items-center gap-4 rounded-control text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400">
-                    {m.photo_path && urls[m.photo_path] ? (
-                      <img src={urls[m.photo_path]} alt="" className="h-16 w-16 shrink-0 rounded-control object-cover" />
-                    ) : null}
-                    <span>
-                      <span className="block font-display text-heading text-ink">{m.title}</span>
-                      <span className="text-small text-ink-soft">
-                        {m.yearsAgo === 1 ? 'A year ago today' : `${m.yearsAgo} years ago today`}
-                      </span>
+        <section aria-labelledby="on-this-day" className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#FFE7AE] to-[#FFF6E0] p-4 shadow-[0_18px_36px_-26px_rgba(174,111,8,0.7)] ring-1 ring-white/70 dark:from-gold-50 dark:to-paper-raised dark:ring-paper-edge sm:p-5">
+          <Sparkles className="pointer-events-none absolute -right-2 -top-2 h-20 w-20 text-gold-300/50" aria-hidden />
+          <h2 id="on-this-day" className="relative flex items-center gap-2 text-body font-extrabold text-gold-700">
+            <Sparkles className="h-5 w-5" aria-hidden /> On this day
+          </h2>
+          <ul className="relative mt-3 space-y-2.5">
+            {resurfaced.map((m) => (
+              <li key={m.id}>
+                <button type="button" onClick={() => setViewing(m)} className="flex w-full items-center gap-3.5 rounded-[18px] bg-white/70 p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 dark:bg-paper-raised">
+                  {m.photo_path && urls[m.photo_path] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={urls[m.photo_path]} alt="" className="h-14 w-14 shrink-0 rounded-[14px] object-cover" />
+                  ) : (
+                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px] bg-gold-100 text-gold-700">
+                      <Sparkles className="h-6 w-6" aria-hidden />
                     </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Sheet>
+                  )}
+                  <span className="min-w-0">
+                    <span className="block truncate text-[17px] font-extrabold text-ink">{m.title}</span>
+                    <span className="text-small text-ink-soft">{m.yearsAgo === 1 ? 'A year ago today' : `${m.yearsAgo} years ago today`}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
-
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Show">
-          <Chip selected={filter === 'all'} onClick={() => setFilter('all')}>
-            Everything
-          </Chip>
-          {MEMORY_KINDS.map((k) => (
-            <Chip key={k.value} selected={filter === k.value} onClick={() => setFilter(k.value)}>
-              {k.label}s
-            </Chip>
-          ))}
-        </div>
-        <Button onClick={() => setEditing({})}>
-          <Plus className="h-4 w-4" /> Keep a memory
-        </Button>
-      </div>
 
       {memories.error && <ErrorNote>{memories.error}</ErrorNote>}
 
@@ -122,15 +155,19 @@ export function MemoryTimeline() {
           The small moments that turned out to be big ones. Add a photo, a line, the date — {partner.display_name} sees it too.
         </EmptyNote>
       ) : (
-        <div className="space-y-10">
+        <div className="space-y-8 pt-2">
           {groups.map((g) => (
-            <section key={g.key} aria-label={g.label}>
-              <h2 className="mb-4 font-serif text-lead italic text-ink-soft">{g.label}</h2>
-              <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {g.items.map((m) => (
+            <section key={g.key} aria-label={g.label} className="space-y-4">
+              <h2 className="flex items-center gap-2.5 font-display text-[20px] font-extrabold text-ink">
+                <span aria-hidden className="h-6 w-1 rounded-full bg-rose-500" />
+                {g.label}
+              </h2>
+              <ul className="grid grid-cols-2 gap-x-3 gap-y-4 sm:gap-x-5 sm:gap-y-6 lg:grid-cols-3">
+                {g.items.map((m, i) => (
                   <li key={m.id}>
                     <MemoryCard
                       memory={m}
+                      index={i}
                       url={m.photo_path ? urls[m.photo_path] : undefined}
                       rated={!!ratings.data?.[m.id]}
                       story={stories.has(m.id)}
@@ -199,32 +236,53 @@ export function MemoryTimeline() {
   );
 }
 
-function MemoryCard({ memory, url, rated, story, onOpen }: { memory: Memory; url?: string; rated: boolean; story: boolean; onOpen: () => void }) {
+const TILES: { value: Filter; label: string; Icon: LucideIcon; wash: string; fill: string; ring: string }[] = [
+  { value: 'all', label: 'All', Icon: BookHeart, wash: 'bg-plum-50', fill: 'bg-plum-500', ring: 'ring-plum-400' },
+  { value: 'moment', label: 'Moments', Icon: Heart, wash: 'bg-rose-50', fill: 'bg-rose-500', ring: 'ring-rose-400' },
+  { value: 'date', label: 'Dates', Icon: Wine, wash: 'bg-gold-50', fill: 'bg-gold-500', ring: 'ring-gold-400' },
+  { value: 'trip', label: 'Trips', Icon: Plane, wash: 'bg-teal-50', fill: 'bg-teal-500', ring: 'ring-teal-400' },
+];
+
+/** A memory without a photo still gets a picture: its kind, on a soft wash. */
+const KIND_ART: Record<MemoryKind, { Icon: LucideIcon; wash: string; ink: string; badge: string }> = {
+  moment: { Icon: Heart, wash: 'from-[#FFD9E3] to-[#FFF0F4]', ink: 'text-rose-400', badge: 'text-rose-700' },
+  date: { Icon: Wine, wash: 'from-[#FFE7B0] to-[#FFF6E0]', ink: 'text-gold-500', badge: 'text-gold-700' },
+  trip: { Icon: Plane, wash: 'from-[#C8F2EA] to-[#EEFBF8]', ink: 'text-teal-500', badge: 'text-teal-700' },
+};
+
+/** A polaroid: the photo (or the kind's picture), the title in the margin. */
+function MemoryCard({ memory, index, url, rated, story, onOpen }: { memory: Memory; index: number; url?: string; rated: boolean; story: boolean; onOpen: () => void }) {
+  const art = KIND_ART[memory.kind];
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 rounded-sheet"
+      className={cn(
+        'group block w-full rounded-[10px] bg-paper-raised p-2 pb-3 text-left shadow-[0_16px_30px_-20px_rgba(122,75,58,0.65)] ring-1 ring-paper-edge transition-transform duration-base ease-out hover:rotate-0 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+        index % 2 ? 'rotate-[1.2deg]' : '-rotate-[1.2deg]',
+      )}
     >
-      <Sheet pad="none" className="overflow-hidden transition-transform duration-base ease-out group-hover:-translate-y-0.5">
+      <span className="relative block aspect-square overflow-hidden rounded-[6px] bg-paper-sunken">
         {memory.photo_path ? (
-          <div className="aspect-[4/3] bg-paper-sunken">
-            {url ? <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" /> : null}
-          </div>
+          // eslint-disable-next-line @next/next/no-img-element
+          url ? <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" /> : null
+        ) : (
+          <span className={cn('flex h-full w-full items-center justify-center bg-gradient-to-br', art.wash)}>
+            <art.Icon className={cn('h-12 w-12', art.ink)} aria-hidden />
+          </span>
+        )}
+        <span className={cn('absolute left-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-extrabold', art.badge)}>{KIND_LABEL[memory.kind]}</span>
+        {rated ? (
+          <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white/90">
+            <Heart className="h-3.5 w-3.5 fill-rose-400 text-rose-400" aria-label="You left a private note" />
+          </span>
         ) : null}
-        <div className="space-y-1.5 p-5">
-          <div className="flex items-center justify-between gap-2 text-micro text-ink-muted">
-            <span>{formatDay(memory.happened_on)}</span>
-            <span className="flex items-center gap-1.5">
-              {rated && <Heart className="h-3 w-3 fill-current text-rose-400" aria-label="You left a private note" />}
-              {memory.kind !== 'moment' && <span className="rounded-full bg-gold-50 px-2 py-0.5 font-medium text-gold-700">{KIND_LABEL[memory.kind]}</span>}
-            </span>
-          </div>
-          <h3 className="font-display text-heading text-ink">{memory.title}</h3>
-          {memory.body ? <p className="line-clamp-3 text-small text-ink-soft">{memory.body}</p> : null}
-          {story ? <p className="pt-1 text-small font-medium text-rose-600">Open the story 🎂</p> : null}
-        </div>
-      </Sheet>
+      </span>
+      <span className="block px-1 pt-2.5">
+        <span className="line-clamp-2 text-[15px] font-extrabold leading-5 text-ink">{memory.title}</span>
+        <span className="mt-0.5 block text-micro text-ink-muted">{formatDay(memory.happened_on)}</span>
+        {story ? <span className="mt-1 block text-micro font-bold text-rose-600">Open the story 🎂</span> : null}
+      </span>
     </button>
   );
 }
