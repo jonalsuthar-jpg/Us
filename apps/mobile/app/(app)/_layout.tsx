@@ -1,7 +1,7 @@
 import { clearMediaVault, getCall, getCoupleContext, getMyAccess, preloadChatKey, tokens, type CoupleContext, type MyAccess } from '@us/shared';
 import { AccessProvider, CallProvider, clearDataCache, CoupleProvider, currentCallManager, hydrateDataCache, setDataCacheStore, useCallManager, useCallState, useCouple } from '@us/shared/react';
 import * as Linking from 'expo-linking';
-import { router, Stack, usePathname } from 'expo-router';
+import { router, Stack, usePathname, type ErrorBoundaryProps } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Platform, ToastAndroid, View } from 'react-native';
 import { AppLock } from '@/components/app-lock';
@@ -19,6 +19,8 @@ import { stopCallAudio } from '@/lib/audio-route';
 import { onCallHandledElsewhere, onHangupRequested, stopCallService } from '@/modules/us-call';
 import { supabase } from '@/lib/supabase';
 import { usePalette } from '@/components/ui/palette';
+import { Button } from '@/components/ui/button';
+import { Display, Text } from '@/components/ui/text';
 
 // Every screen's last-known data survives a cold start.
 setDataCacheStore(dataCacheStore);
@@ -34,6 +36,24 @@ function releaseClosedCall() {
 
 // Opened straight into chat from a notification, the tabs are still behind it for Back.
 export const unstable_settings = { anchor: '(tabs)' };
+
+/**
+ * A screen that throws shows this instead of closing the app, with a way
+ * back in. Expo Router uses it for every screen under (app).
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => console.error('[us] screen crashed', error), [error]);
+  return (
+    <View className="flex-1 items-center justify-center gap-4 bg-paper px-8">
+      <Display className="text-center text-heading">Something went wrong here</Display>
+      <Text className="text-center text-small text-ink-soft">The rest of Us is fine. Try again, or go back home.</Text>
+      <Button onPress={() => void retry()}>Try again</Button>
+      <Button variant="quiet" onPress={() => router.replace('/home')}>
+        Go home
+      </Button>
+    </View>
+  );
+}
 
 /** A short note at the bottom of the screen. */
 function notice(text: string) {

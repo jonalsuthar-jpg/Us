@@ -83,11 +83,11 @@ export async function getBirthdayStory(sb: UsClient, memoryId: string): Promise<
   return data ? toRoom(data) : null;
 }
 
-/** Which memories open a story: memory id → room id. */
-export async function birthdayStoryMemories(sb: UsClient): Promise<Set<string>> {
+/** The memories that open a story (their ids). */
+export async function birthdayStoryMemories(sb: UsClient): Promise<string[]> {
   const { data, error } = await sb.from('birthday_rooms').select('memory_id').not('memory_id', 'is', null);
   if (error) throw error;
-  return new Set((data ?? []).map((r) => r.memory_id as string));
+  return (data ?? []).map((r) => r.memory_id as string);
 }
 
 export function birthdayUrls(sb: UsClient, paths: string[]): Promise<Record<string, string>> {

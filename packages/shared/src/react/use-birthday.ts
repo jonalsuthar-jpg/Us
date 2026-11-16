@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { birthdayStoryMemories, getBirthdayStory, type BirthdayRoom } from '../api/birthday';
 import { usSoFar, type UsSoFar } from '../birthday/stats';
 import { useChatKey } from './chat-key-provider';
@@ -15,9 +15,10 @@ export function useBirthdayStory(memoryId: string): { room: BirthdayRoom | null;
 /** The memories that open a birthday story. */
 export function useBirthdayStoryMemories(): Set<string> {
   const { sb } = useCouple();
-  return useCoupleData('birthday:stories', () => birthdayStoryMemories(sb), [sb]).data ?? EMPTY;
+  // Cached as a plain list: the cache is saved as JSON, which a Set doesn't survive.
+  const ids = useCoupleData('birthday:stories', () => birthdayStoryMemories(sb), [sb]).data;
+  return useMemo(() => new Set(Array.isArray(ids) ? ids : []), [ids]);
 }
-const EMPTY = new Set<string>();
 
 /** "Us, so far", read on this device (see birthday/stats.ts). */
 export function useUsSoFar(enabled: boolean): UsSoFar | null {
