@@ -20,14 +20,15 @@ import {
   type FeatureKey,
 } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { CalendarDays, ChevronRight, Dices, HeartHandshake, ListChecks, Plus, ReceiptText, Wallet } from 'lucide-react-native';
+import { CalendarDays, ChevronRight, Dices, Heart, HeartHandshake, ListChecks, Plus, ReceiptText, Wallet } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { cn } from '../ui/cn';
 import { FormSheet } from '../ui/form-sheet';
 import { usePalette } from '../ui/palette';
 import { Display, Text } from '../ui/text';
-import { GroupLabel, Initial, SplitBar } from './bits';
+import { BagArt, Burst, CoinsArt, DinnerArt, GradientView, WheelArt } from './art';
+import { Initial, SplitBar } from './bits';
 import { KIND_STYLE, SLOT_FILL, TONE, toneIcon, type Tone } from './tones';
 
 export type PlanSection = 'calendar' | 'lists' | 'decide' | 'labour' | 'costs';
@@ -81,14 +82,17 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
   const myShare = mySlot === 'a' ? lb.aShare : 1 - lb.aShare;
   const feed = planActivity(ctx, { items: items.data, expenses: expenses.data, labor: labor.data });
 
+  const shadow = { shadowColor: '#3F2C66', shadowOpacity: 0.14, shadowRadius: 16, shadowOffset: { width: 0, height: 10 }, elevation: 4 };
+
   const cards: { s: PlanSection; node: ReactNode }[] = [];
   if (on('lists'))
     cards.push({
       s: 'lists',
       node: (
-        <HubCard tone="teal" Icon={ListChecks} label="Lists" onPress={() => onOpen({ section: 'lists' })}>
-          <Display className="text-[24px] leading-[30px]">{open.length ? `${open.length} open` : 'All done'}</Display>
-          <Text className="text-micro text-ink-soft" numberOfLines={2}>
+        <HubCard from={c.scheme === 'dark' ? '#241933' : '#EFE8FB'} to={c.scheme === 'dark' ? '#19141D' : '#F8F4FE'} Icon={ListChecks} iconColor={c.onPlum} art={<BagArt size={96} />} onPress={() => onOpen({ section: 'lists' })}>
+          <Text className="font-sans-semibold text-body">Lists</Text>
+          <Text className="font-sans-bold text-[28px] leading-[34px]">{open.length ? `${open.length} open` : 'All done'}</Text>
+          <Text className="text-small leading-5 text-ink-soft" numberOfLines={2}>
             {openBy.length ? openBy.slice(0, 2).map((x) => `${LISTS[x.n].title} · ${x.count}`).join('\n') : 'Add the next thing'}
           </Text>
         </HubCard>
@@ -98,11 +102,16 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
     cards.push({
       s: 'costs',
       node: (
-        <HubCard tone="rose" Icon={Wallet} label={balance ? (iOwe ? `You owe ${partner.display_name}` : `${partner.display_name} owes you`) : 'Money'} wash onPress={() => onOpen({ section: 'costs' })}>
-          <Display className={cn('text-[24px] leading-[30px]', balance && (iOwe ? 'text-rose-700' : 'text-teal-700'))}>
+        <HubCard from={c.scheme === 'dark' ? '#3B1424' : '#FFE1EA'} to={c.scheme === 'dark' ? '#19141D' : '#FFF1F5'} Icon={Wallet} iconColor={c.roseStrong} art={<CoinsArt width={112} height={88} />} onPress={() => onOpen({ section: 'costs' })}>
+          <Text className="font-sans-semibold text-body" numberOfLines={1}>
+            {balance ? (iOwe ? `You owe ${partner.display_name}` : `${partner.display_name} owes you`) : 'Money'}
+          </Text>
+          <Text className={cn('font-sans-bold text-[28px] leading-[34px]', balance && (iOwe ? 'text-rose-600' : 'text-teal-700'))} numberOfLines={1} adjustsFontSizeToFit>
             {balance ? formatMoney(balance.amount_cents, balance.currency) : 'All square'}
-          </Display>
-          <Text className="text-micro text-ink-soft">{balance ? 'Tap to settle up' : 'Log a shared cost'}</Text>
+          </Text>
+          <View className={cn('mt-1 h-9 self-start justify-center rounded-full px-4', balance ? 'bg-rose-600' : 'bg-paper-raised')}>
+            <Text className={cn('font-sans-bold text-small', balance ? 'text-white' : 'text-rose-700')}>{balance ? 'Settle up' : 'Log a cost'}</Text>
+          </View>
         </HubCard>
       ),
     });
@@ -110,38 +119,36 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
     cards.push({
       s: 'decide',
       node: (
-        <Pressable accessibilityRole="button" onPress={() => onOpen({ section: 'decide' })} className="min-h-[150px] gap-2.5 rounded-sheet bg-plum-800 p-4 active:opacity-90">
-          <View className="h-9 w-9 items-center justify-center rounded-xl bg-white/10">
-            <Dices size={20} color="#FFD98A" />
-          </View>
-          <Text className="text-small text-paper/70">{firstCat ? `Can’t pick ${firstCat.toLowerCase()}?` : 'Can’t decide?'}</Text>
-          <Display italic className="text-[22px] leading-[28px] text-gold-200">
+        <HubCard from="#4E3A7A" to="#2E2148" Icon={Dices} iconColor="#fff" iconWash="bg-white/15" art={<WheelArt width={100} height={108} />} onPress={() => onOpen({ section: 'decide' })}>
+          <Text className="text-body text-white/85">{firstCat ? `Can’t pick ${firstCat.toLowerCase()}?` : 'Can’t decide?'}</Text>
+          <Display italic className="text-[27px] leading-[34px] text-gold-300">
             Spin for it
           </Display>
-          <Text className="text-micro text-paper/70">{firstCat ? `${optionCount} options ready` : 'Make a list to spin'}</Text>
-        </Pressable>
+          <Text className="text-small text-white/75">{firstCat ? `${optionCount} options ready` : 'Make a list to spin'}</Text>
+        </HubCard>
       ),
     });
   if (on('labour'))
     cards.push({
       s: 'labour',
       node: (
-        <HubCard tone="sage" Icon={HeartHandshake} label="Share the load" onPress={() => onOpen({ section: 'labour' })}>
-          <Display italic className="text-[20px] leading-[26px]">
-            {!lb.total ? 'Notice something' : myShare >= 0.4 && myShare <= 0.6 ? 'Pretty even' : myShare > 0.6 ? 'You’re carrying more' : `${partner.display_name} is carrying more`}
+        <HubCard from={c.scheme === 'dark' ? '#0C2B28' : '#DDF5EF'} to={c.scheme === 'dark' ? '#19141D' : '#F1FBF8'} Icon={Heart} iconColor={c.onTeal} art={<Burst />} artAt="burst" wide onPress={() => onOpen({ section: 'labour' })}>
+          <Text className="font-sans-semibold text-body">Share the load</Text>
+          <Display italic className="text-[24px] leading-[31px]">
+            {!lb.total ? 'Notice something' : myShare >= 0.4 && myShare <= 0.6 ? 'Pretty even' : myShare > 0.6 ? 'You’re carrying more' : `${partner.display_name} carries more`}
           </Display>
           {lb.total ? (
-            <View className="gap-1">
-              <SplitBar left={myShare} leftColor={SLOT_FILL[mySlot]} rightColor={SLOT_FILL[partnerSlot]} />
+            <View className="mt-1 gap-1.5">
+              <SplitBar left={myShare} leftColor={SLOT_FILL[mySlot]} rightColor={SLOT_FILL[partnerSlot]} height={10} />
               <View className="flex-row justify-between">
-                <Text className="text-micro text-ink-soft">You {Math.round(myShare * 100)}</Text>
-                <Text className="text-micro text-ink-soft">
-                  {partner.display_name} {100 - Math.round(myShare * 100)}
+                <Text className="text-small text-ink-soft">You {Math.round(myShare * 100)}%</Text>
+                <Text className="text-small text-ink-soft">
+                  {partner.display_name} {100 - Math.round(myShare * 100)}%
                 </Text>
               </View>
             </View>
           ) : (
-            <Text className="text-micro text-ink-soft">A balance, never a scoreboard</Text>
+            <Text className="text-small text-ink-soft">A balance, never a scoreboard</Text>
           )}
         </HubCard>
       ),
@@ -153,61 +160,76 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
     { s: 'costs', tone: 'gold', Icon: ReceiptText, title: 'Log a cost', sub: 'Split it in seconds' },
     { s: 'labour', tone: 'sage', Icon: HeartHandshake, title: 'Notice something', sub: 'Thank them for a chore' },
   ];
+  const NextIcon = next ? KIND_STYLE[next.kind ?? 'other'].Icon : null;
 
   return (
     <View className="gap-4">
       {on('calendar') ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Open calendar" onPress={() => onOpen({ section: 'calendar' })} className="gap-3 rounded-sheet border border-paper-edge bg-paper-raised p-4 active:bg-paper-sunken">
-          <GroupLabel right={<ChevronRight size={18} color={c.inkMuted} />}>This week</GroupLabel>
-          <View className="flex-row">
+        <View className="rounded-[30px] bg-paper-raised p-4" style={shadow}>
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center gap-2">
+              <CalendarDays size={22} color={c.onPlum} />
+              <Text className="font-sans-bold text-[20px]">This week</Text>
+            </View>
+            <Pressable accessibilityRole="button" onPress={() => onOpen({ section: 'calendar' })} hitSlop={8} className="flex-row items-center">
+              <Text className="font-sans-bold text-body text-rose-600">Calendar</Text>
+              <ChevronRight size={18} color={c.roseStrong} />
+            </Pressable>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open calendar" onPress={() => onOpen({ section: 'calendar' })} className="mt-3 flex-row gap-1.5">
             {week.map((d, i) => {
               const k = toDateKey(d);
               return (
-                <View key={k} className="flex-1 items-center gap-1">
-                  <Text className="text-micro text-ink-muted">{d.toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
-                  <View className={cn('h-9 w-9 items-center justify-center rounded-full', i === 0 && 'bg-rose-600')}>
-                    <Text className={cn('text-small', i === 0 ? 'font-sans-semibold text-white' : 'font-sans-medium')}>{d.getDate()}</Text>
+                <View key={k} className="flex-1 items-center gap-1.5">
+                  <Text className="font-sans-semibold text-small text-ink-soft">{d.toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
+                  <View
+                    className={cn('h-11 w-full items-center justify-center rounded-[13px]', i === 0 ? 'bg-rose-600' : 'border border-paper-edge bg-paper-raised')}
+                    style={i === 0 ? { shadowColor: '#C41D55', shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 } : undefined}
+                  >
+                    <Text className={cn('font-sans-bold text-[16px]', i === 0 && 'text-white')}>{d.getDate()}</Text>
                   </View>
-                  <View className="h-1.5 flex-row gap-0.5">
+                  <View className="h-2 flex-row gap-1">
                     {(dots.get(k) ?? []).slice(0, 3).map((color, j) => (
-                      <View key={j} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+                      <View key={j} className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
                     ))}
                   </View>
                 </View>
               );
             })}
-          </View>
-          {next ? (
-            <View className="flex-row items-center gap-3.5 rounded-2xl bg-plum-800 px-4 py-3.5">
-              <View className="h-[52px] w-12 items-center justify-center rounded-xl bg-white/10">
-                <Text className="font-sans-semibold text-[10px] uppercase tracking-[0.8px] text-gold-200">
-                  {new Date(next.starts_at).toLocaleDateString(undefined, { weekday: 'short' })}
-                </Text>
-                <Text className="font-sans-bold text-[20px] leading-[24px] text-paper">{new Date(next.starts_at).getDate()}</Text>
-              </View>
-              <View className="flex-1">
-                <Text className="text-micro font-sans-medium text-gold-200">Next up · {whenLabel(daysUntil(toDateKey(new Date(next.starts_at)))).toLowerCase()}</Text>
-                <Text numberOfLines={1} className="mt-0.5 font-sans-semibold text-lead text-paper">
-                  {next.title}
-                </Text>
-                <Text className="mt-0.5 text-micro text-paper/70">
-                  {formatEventTime(next)} · {next.created_by === ctx.me.id ? 'you planned it' : `${partner.display_name} planned it`}
-                </Text>
-              </View>
-              {(() => {
-                const K = KIND_STYLE[next.kind ?? 'other'].Icon;
-                return <K size={22} color="#FFD98A" />;
-              })()}
-            </View>
+          </Pressable>
+          {next && NextIcon ? (
+            <Pressable accessibilityRole="button" onPress={() => onOpen({ section: 'calendar' })} className="mt-3">
+              <GradientView from="#3A2A5E" to="#4B3468" radius={22} className="flex-row items-center gap-3.5 px-3.5 py-3.5">
+                <View className="absolute bottom-0 right-0" pointerEvents="none">
+                  {next.kind === 'date' || next.kind === 'other' || !next.kind ? <DinnerArt width={150} height={84} /> : <NextIcon size={48} color="rgba(252,194,79,0.6)" />}
+                </View>
+                <View className="h-[64px] w-[58px] items-center justify-center rounded-[16px] bg-white/10">
+                  <Text className="font-sans-bold text-small uppercase text-gold-300">{new Date(next.starts_at).toLocaleDateString(undefined, { weekday: 'short' })}</Text>
+                  <Text className="font-sans-bold text-[24px] leading-[28px] text-white">{new Date(next.starts_at).getDate()}</Text>
+                </View>
+                <View className="h-12 w-px bg-white/20" />
+                <View className="flex-1 pr-16">
+                  <Text className="font-sans-semibold text-small text-gold-300" numberOfLines={1}>
+                    Next up · {whenLabel(daysUntil(toDateKey(new Date(next.starts_at)))).toLowerCase()}
+                  </Text>
+                  <Text className="mt-0.5 font-sans-bold text-[18px] text-white" numberOfLines={1}>
+                    {next.title}
+                  </Text>
+                  <Text className="mt-0.5 text-small text-white/75" numberOfLines={1}>
+                    {formatEventTime(next)} · {next.created_by === ctx.me.id ? 'you planned it' : `${partner.display_name} planned it`}
+                  </Text>
+                </View>
+              </GradientView>
+            </Pressable>
           ) : (
-            <View className="rounded-2xl border border-dashed border-paper-edge px-4 py-3.5">
+            <Pressable accessibilityRole="button" onPress={() => onOpen({ section: 'calendar', adding: true })} className="mt-3 rounded-[22px] border-2 border-dashed border-paper-edge px-4 py-3.5">
               <Display italic className="text-lead">
                 Nothing planned yet.
               </Display>
               <Text className="text-small text-ink-soft">Tap to plan something together.</Text>
-            </View>
+            </Pressable>
           )}
-        </Pressable>
+        </View>
       ) : null}
 
       {cards.length ? (
@@ -220,29 +242,38 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
         </View>
       ) : null}
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => setAdding(true)}
-        className="h-12 flex-row items-center justify-center gap-2 rounded-control border border-dashed border-plum-300 active:bg-paper-sunken"
-      >
-        <Plus size={18} color={c.inkSoft} />
-        <Text className="font-sans-medium text-ink-soft">Add something</Text>
-      </Pressable>
-
-      {feed.length ? (
-        <View className="gap-1">
-          <GroupLabel>Lately</GroupLabel>
-          {feed.map((f) => (
-            <View key={f.id} className="flex-row items-center gap-3 border-b border-paper-edge py-2.5">
+      <View className="gap-3 pt-1">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2.5">
+            <View className="h-6 w-1 rounded-full bg-rose-500" />
+            <Text className="font-sans-bold text-[20px]">Lately</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add something"
+            onPress={() => setAdding(true)}
+            className="h-14 w-14 items-center justify-center rounded-full bg-rose-600 active:scale-95"
+            style={{ shadowColor: '#C41D55', shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 8 }, elevation: 6 }}
+          >
+            <Plus size={28} color="#fff" strokeWidth={2.6} />
+          </Pressable>
+        </View>
+        {feed.length ? (
+          feed.map((f) => (
+            <View key={f.id} className="flex-row items-center gap-3 rounded-full border border-paper-edge bg-paper-raised py-2.5 pl-2.5 pr-4">
               <Initial slot={f.mine ? mySlot : partnerSlot} name={f.mine ? ctx.me.display_name : partner.display_name} />
-              <Text numberOfLines={2} className="flex-1 text-small">
+              <Text numberOfLines={1} className="flex-1 text-small">
                 {f.text}
               </Text>
               <Text className="text-micro text-ink-muted">{shortAgo(f.at)}</Text>
             </View>
-          ))}
-        </View>
-      ) : null}
+          ))
+        ) : (
+          <View className="rounded-full border border-paper-edge bg-paper-raised px-5 py-3">
+            <Text className="text-small text-ink-soft">What you both do in Plan shows up here.</Text>
+          </View>
+        )}
+      </View>
 
       <FormSheet open={adding} title="Add something" onClose={() => setAdding(false)}>
         <View className="flex-row flex-wrap justify-between gap-y-3">
@@ -271,35 +302,48 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
   );
 }
 
+/** One of the four illustrated cards: an icon tile, words, a picture in the corner. */
 function HubCard({
-  tone,
+  from,
+  to,
   Icon,
-  label,
-  wash,
+  iconColor,
+  iconWash = 'bg-paper-raised',
+  art,
+  artAt = 'corner',
+  wide,
   onPress,
   children,
 }: {
-  tone: Tone;
+  from: string;
+  to: string;
   Icon: typeof Plus;
-  label: string;
-  wash?: boolean;
+  iconColor: string;
+  iconWash?: string;
+  art: ReactNode;
+  artAt?: 'corner' | 'burst';
+  wide?: boolean;
   onPress: () => void;
   children: ReactNode;
 }) {
-  const c = usePalette();
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      className={cn('min-h-[150px] gap-2.5 rounded-sheet p-4 active:opacity-85', wash ? TONE[tone].wash : 'border border-paper-edge bg-paper-raised')}
+      style={({ pressed }) => [
+        { borderRadius: 26, backgroundColor: to, shadowColor: '#3F2C66', shadowOpacity: 0.14, shadowRadius: 14, shadowOffset: { width: 0, height: 10 }, elevation: 4 },
+        pressed && { transform: [{ scale: 0.98 }] },
+      ]}
     >
-      <View className={cn('h-9 w-9 items-center justify-center rounded-xl', wash ? 'bg-paper-raised' : TONE[tone].wash)}>
-        <Icon size={20} color={toneIcon(c, tone)} />
-      </View>
-      <Text className="text-small text-ink-soft" numberOfLines={1}>
-        {label}
-      </Text>
-      {children}
+      <GradientView from={from} to={to} radius={26} className="min-h-[206px] gap-1 p-4">
+        <View pointerEvents="none" style={artAt === 'burst' ? { position: 'absolute', right: 16, top: 70 } : { position: 'absolute', right: -2, bottom: -4 }}>
+          {art}
+        </View>
+        <View className={cn('mb-2 h-11 w-11 items-center justify-center rounded-[14px]', iconWash)}>
+          <Icon size={22} color={iconColor} />
+        </View>
+        <View className={cn('gap-0.5', wide ? 'w-full' : 'w-[80%]')}>{children}</View>
+      </GradientView>
     </Pressable>
   );
 }

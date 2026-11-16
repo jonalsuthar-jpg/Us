@@ -22,11 +22,12 @@ import {
   type FeatureKey,
 } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { CalendarDays, ChevronRight, Dices, HeartHandshake, ListChecks, Plus, ReceiptText, Wallet, type LucideIcon } from 'lucide-react';
+import { CalendarDays, ChevronRight, Dices, Heart, HeartHandshake, ListChecks, Plus, ReceiptText, Wallet, type LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { cn } from '@/lib/cn';
-import { GroupLabel, Initial, SplitBar } from './bits';
+import { BagArt, Burst, CoinsArt, DinnerArt, WheelArt } from './art';
+import { Initial, SplitBar } from './bits';
 import { KIND_STYLE, SLOT_FILL, TONE, type Tone } from './tones';
 
 export type PlanSection = 'calendar' | 'lists' | 'decide' | 'labour' | 'costs';
@@ -83,11 +84,18 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
     cards.push({
       s: 'lists',
       node: (
-        <HubCard tone="teal" Icon={ListChecks} label="Lists" onClick={() => onOpen({ section: 'lists' })}>
-          <p className="font-display text-[26px] leading-tight text-ink">{open.length ? `${open.length} open` : 'All done'}</p>
-          <p className="whitespace-pre-line text-micro text-ink-soft">
+        <HubCard
+          className="bg-gradient-to-br from-[#EFE8FB] to-[#F8F4FE] dark:from-plum-50 dark:to-paper-raised"
+          Icon={ListChecks}
+          iconTone="text-plum-600"
+          art={<BagArt className="absolute -bottom-2 right-1 h-[104px] w-[104px]" />}
+          onClick={() => onOpen({ section: 'lists' })}
+        >
+          <span className="text-body font-semibold text-ink">Lists</span>
+          <span className="font-display text-[30px] font-extrabold leading-9 text-ink">{open.length ? `${open.length} open` : 'All done'}</span>
+          <span className="whitespace-pre-line text-small leading-5 text-ink-soft">
             {openBy.length ? openBy.slice(0, 2).map((x) => `${LISTS[x.n].title} · ${x.count}`).join('\n') : 'Add the next thing'}
-          </p>
+          </span>
         </HubCard>
       ),
     });
@@ -95,11 +103,20 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
     cards.push({
       s: 'costs',
       node: (
-        <HubCard tone="rose" wash Icon={Wallet} label={balance ? (iOwe ? `You owe ${partner.display_name}` : `${partner.display_name} owes you`) : 'Money'} onClick={() => onOpen({ section: 'costs' })}>
-          <p className={cn('font-display text-[26px] leading-tight', balance ? (iOwe ? 'text-rose-700' : 'text-teal-700') : 'text-ink')}>
+        <HubCard
+          className="bg-gradient-to-br from-[#FFE1EA] to-[#FFF1F5] dark:from-rose-50 dark:to-paper-raised"
+          Icon={Wallet}
+          iconTone="text-rose-600"
+          art={<CoinsArt className="absolute -bottom-1 -right-1 h-[92px] w-[118px]" />}
+          onClick={() => onOpen({ section: 'costs' })}
+        >
+          <span className="text-body font-semibold text-ink">{balance ? (iOwe ? `You owe ${partner.display_name}` : `${partner.display_name} owes you`) : 'Money'}</span>
+          <span className={cn('font-display text-[30px] font-extrabold leading-9', balance ? (iOwe ? 'text-rose-600' : 'text-teal-700') : 'text-ink')}>
             {balance ? formatMoney(balance.amount_cents, balance.currency) : 'All square'}
-          </p>
-          <p className="text-micro text-ink-soft">{balance ? 'Settle up anytime' : 'Log a shared cost'}</p>
+          </span>
+          <span className={cn('mt-1 inline-flex h-10 items-center rounded-full px-5 text-small font-extrabold shadow-[0_10px_20px_-12px_rgba(196,29,85,0.9)]', balance ? 'bg-rose-600 text-white' : 'bg-paper-raised text-rose-700')}>
+            {balance ? 'Settle up' : 'Log a cost'}
+          </span>
         </HubCard>
       ),
     });
@@ -107,40 +124,48 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
     cards.push({
       s: 'decide',
       node: (
-        <button
-          type="button"
+        <HubCard
+          className="bg-gradient-to-br from-[#4E3A7A] to-[#2E2148] text-white"
+          Icon={Dices}
+          iconTone="text-white"
+          iconWash="bg-white/15"
+          art={<WheelArt className="absolute -bottom-2 -right-1 h-[118px] w-[108px]" />}
           onClick={() => onOpen({ section: 'decide' })}
-          className="flex h-full min-h-[160px] w-full flex-col items-start gap-2.5 rounded-sheet bg-plum-800 p-5 text-left transition-transform duration-quick hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-gold-200">
-            <Dices className="h-5 w-5" />
-          </span>
-          <span className="text-small text-paper/70">{firstCat ? `Can’t pick ${firstCat.toLowerCase()}?` : 'Can’t decide?'}</span>
-          <span className="font-serif text-[24px] italic leading-tight text-gold-200">Spin for it</span>
-          <span className="text-micro text-paper/70">{firstCat ? `${optionCount} options ready` : 'Make a list to spin'}</span>
-        </button>
+          <span className="text-body text-white/85">{firstCat ? `Can’t pick ${firstCat.toLowerCase()}?` : 'Can’t decide?'}</span>
+          <span className="font-serif text-[30px] italic leading-9 text-gold-300">Spin for it</span>
+          <span className="text-small text-white/75">{firstCat ? `${optionCount} options ready` : 'Make a list to spin'}</span>
+        </HubCard>
       ),
     });
   if (on('labour'))
     cards.push({
       s: 'labour',
       node: (
-        <HubCard tone="sage" Icon={HeartHandshake} label="Share the load" onClick={() => onOpen({ section: 'labour' })}>
-          <p className="font-serif text-[22px] italic leading-tight text-ink">
-            {!lb.total ? 'Notice something' : myShare >= 0.4 && myShare <= 0.6 ? 'Pretty even' : myShare > 0.6 ? 'You’re carrying more' : `${partner.display_name} is carrying more`}
-          </p>
+        <HubCard
+          className="bg-gradient-to-br from-[#DDF5EF] to-[#F1FBF8] dark:from-teal-50 dark:to-paper-raised"
+          Icon={Heart}
+          iconTone="text-teal-600"
+          art={<Burst className="absolute right-5 top-[72px] h-6 w-6" />}
+          wide
+          onClick={() => onOpen({ section: 'labour' })}
+        >
+          <span className="text-body font-semibold text-ink">Share the load</span>
+          <span className="font-serif text-[28px] italic leading-9 text-ink">
+            {!lb.total ? 'Notice something' : myShare >= 0.4 && myShare <= 0.6 ? 'Pretty even' : myShare > 0.6 ? 'You’re carrying more' : `${partner.display_name} carries more`}
+          </span>
           {lb.total ? (
-            <div className="w-full space-y-1">
-              <SplitBar left={myShare} leftColor={SLOT_FILL[mySlot]} rightColor={SLOT_FILL[partnerSlot]} />
-              <p className="flex justify-between text-micro text-ink-soft">
-                <span>You {Math.round(myShare * 100)}</span>
+            <span className="mt-1 block w-full space-y-1.5">
+              <SplitBar left={myShare} leftColor={SLOT_FILL[mySlot]} rightColor={SLOT_FILL[partnerSlot]} height={10} />
+              <span className="flex justify-between text-small text-ink-soft">
+                <span>You {Math.round(myShare * 100)}%</span>
                 <span>
-                  {partner.display_name} {100 - Math.round(myShare * 100)}
+                  {partner.display_name} {100 - Math.round(myShare * 100)}%
                 </span>
-              </p>
-            </div>
+              </span>
+            </span>
           ) : (
-            <p className="text-micro text-ink-soft">A balance, never a scoreboard</p>
+            <span className="text-small text-ink-soft">A balance, never a scoreboard</span>
           )}
         </HubCard>
       ),
@@ -154,89 +179,113 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
   ];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="space-y-5">
-        {on('calendar') ? (
-          <button
-            type="button"
-            onClick={() => onOpen({ section: 'calendar' })}
-            className="block w-full space-y-4 rounded-sheet border border-paper-edge bg-paper-raised p-5 text-left transition-shadow duration-quick hover:shadow-[0_12px_32px_-18px_rgba(36,25,51,0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-          >
-            <GroupLabel right={<ChevronRight className="h-4 w-4 text-ink-muted" />}>This week</GroupLabel>
-            <div className="grid grid-cols-7">
-              {week.map((d, i) => {
-                const k = toDateKey(d);
-                return (
-                  <div key={k} className="flex flex-col items-center gap-1">
-                    <span className="text-micro text-ink-muted">{d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
-                    <span className={cn('flex h-9 w-9 items-center justify-center rounded-full text-small', i === 0 ? 'bg-rose-600 font-semibold text-white' : 'font-medium text-ink')}>{d.getDate()}</span>
-                    <span className="flex h-1.5 gap-0.5">
-                      {(dots.get(k) ?? []).slice(0, 3).map((color, j) => (
-                        <span key={j} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
-                      ))}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            {next && NextIcon ? (
-              <div className="flex items-center gap-4 rounded-2xl bg-plum-800 px-4 py-3.5 text-paper">
-                <span className="flex h-[52px] w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-white/10">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gold-200">{new Date(next.starts_at).toLocaleDateString(undefined, { weekday: 'short' })}</span>
-                  <span className="text-[20px] font-bold leading-6">{new Date(next.starts_at).getDate()}</span>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-micro font-medium text-gold-200">Next up · {whenLabel(daysUntil(toDateKey(new Date(next.starts_at)))).toLowerCase()}</span>
-                  <span className="mt-0.5 block truncate text-lead font-semibold">{next.title}</span>
-                  <span className="mt-0.5 block text-micro text-paper/70">
-                    {formatEventTime(next)} · {next.created_by === ctx.me.id ? 'you planned it' : `${partner.display_name} planned it`}
+    <div className="space-y-5">
+      {on('calendar') ? (
+        <section className="rounded-[30px] bg-paper-raised p-4 shadow-[0_24px_50px_-30px_rgba(63,44,102,0.55)] sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2.5 font-display text-[22px] font-extrabold text-ink">
+              <CalendarDays className="h-6 w-6 text-plum-600" aria-hidden />
+              This week
+            </h2>
+            <button type="button" onClick={() => onOpen({ section: 'calendar' })} className="inline-flex items-center gap-0.5 text-body font-bold text-rose-600 hover:text-rose-700">
+              Calendar <ChevronRight className="h-5 w-5" aria-hidden />
+            </button>
+          </div>
+          <button type="button" onClick={() => onOpen({ section: 'calendar' })} className="mt-4 grid w-full grid-cols-7 gap-1.5 sm:gap-3" aria-label="Open calendar">
+            {week.map((d, i) => {
+              const k = toDateKey(d);
+              return (
+                <span key={k} className="flex flex-col items-center gap-2">
+                  <span className="text-small font-semibold text-ink-soft">{d.toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
+                  <span
+                    className={cn(
+                      'flex h-11 w-full max-w-[52px] items-center justify-center rounded-[14px] text-[17px] font-bold',
+                      i === 0 ? 'bg-gradient-to-b from-rose-500 to-rose-600 text-white shadow-[0_8px_16px_-8px_rgba(196,29,85,0.9)]' : 'bg-paper-raised text-ink shadow-[0_4px_12px_-6px_rgba(36,25,51,0.35)] ring-1 ring-paper-edge',
+                    )}
+                  >
+                    {d.getDate()}
+                  </span>
+                  <span className="flex h-2 gap-1">
+                    {(dots.get(k) ?? []).slice(0, 3).map((color, j) => (
+                      <span key={j} className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                    ))}
                   </span>
                 </span>
-                <NextIcon className="h-6 w-6 shrink-0 text-gold-200" />
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-paper-edge px-4 py-3.5">
-                <p className="font-serif text-lead italic text-ink">Nothing planned yet.</p>
-                <p className="text-small text-ink-soft">Click to plan something together.</p>
-              </div>
-            )}
+              );
+            })}
           </button>
-        ) : null}
+          {next && NextIcon ? (
+            <button
+              type="button"
+              onClick={() => onOpen({ section: 'calendar' })}
+              className="relative mt-4 flex w-full items-center gap-4 overflow-hidden rounded-[22px] bg-gradient-to-r from-[#3A2A5E] to-[#4B3468] px-4 py-4 text-left text-white"
+            >
+              {next.kind === 'date' || next.kind === 'other' || !next.kind ? (
+                <DinnerArt className="pointer-events-none absolute -right-2 bottom-0 h-full w-[46%] opacity-90" />
+              ) : (
+                <NextIcon className="pointer-events-none absolute right-6 top-1/2 h-14 w-14 -translate-y-1/2 text-gold-300/60" aria-hidden />
+              )}
+              <span className="relative flex h-[68px] w-16 shrink-0 flex-col items-center justify-center rounded-[16px] bg-white/10">
+                <span className="text-small font-bold uppercase text-gold-300">{new Date(next.starts_at).toLocaleDateString(undefined, { weekday: 'short' })}</span>
+                <span className="text-[26px] font-extrabold leading-7">{new Date(next.starts_at).getDate()}</span>
+              </span>
+              <span aria-hidden className="relative h-12 w-px shrink-0 bg-white/20" />
+              <span className="relative min-w-0 flex-1 pr-[30%]">
+                <span className="block text-small font-semibold text-gold-300">Next up · {whenLabel(daysUntil(toDateKey(new Date(next.starts_at)))).toLowerCase()}</span>
+                <span className="mt-0.5 block truncate text-[20px] font-extrabold">{next.title}</span>
+                <span className="mt-0.5 block truncate text-small text-white/75">
+                  {formatEventTime(next)} · {next.created_by === ctx.me.id ? 'you planned it' : `${partner.display_name} planned it`}
+                </span>
+              </span>
+            </button>
+          ) : (
+            <button type="button" onClick={() => onOpen({ section: 'calendar', adding: true })} className="mt-4 block w-full rounded-[22px] border-2 border-dashed border-paper-edge px-4 py-4 text-left">
+              <span className="block font-serif text-lead italic text-ink">Nothing planned yet.</span>
+              <span className="text-small text-ink-soft">Plan something together.</span>
+            </button>
+          )}
+        </section>
+      ) : null}
 
-        {cards.length ? (
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            {cards.map(({ s, node }, i) => (
-              <div key={s} className={cn(cards.length % 2 === 1 && i === cards.length - 1 && 'col-span-2 xl:col-span-1')}>
-                {node}
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
+      {cards.length ? (
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          {cards.map(({ s, node }, i) => (
+            <div key={s} className={cn(cards.length % 2 === 1 && i === cards.length - 1 && 'col-span-2')}>
+              {node}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
-      <aside className="space-y-4">
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-control border border-dashed border-plum-300 text-ink-soft transition-colors hover:bg-paper-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-        >
-          <Plus className="h-4 w-4" /> Add something
-        </button>
+      <section className="space-y-3 pt-2">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2.5 font-display text-[22px] font-extrabold text-ink">
+            <span aria-hidden className="h-6 w-1 rounded-full bg-rose-500" />
+            Lately
+          </h2>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            aria-label="Add something"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-b from-rose-500 to-rose-600 text-white shadow-[0_14px_28px_-12px_rgba(196,29,85,0.9)] transition-transform hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+          >
+            <Plus className="h-7 w-7" strokeWidth={2.6} />
+          </button>
+        </div>
         {feed.length ? (
-          <section className="space-y-1">
-            <GroupLabel>Lately</GroupLabel>
-            <ul>
-              {feed.map((f) => (
-                <li key={f.id} className="flex items-center gap-3 border-b border-paper-edge py-2.5">
-                  <Initial slot={f.mine ? mySlot : partnerSlot} name={f.mine ? ctx.me.display_name : partner.display_name} />
-                  <span className="min-w-0 flex-1 text-small text-ink">{f.text}</span>
-                  <span className="shrink-0 text-micro text-ink-muted">{shortAgo(f.at)}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-      </aside>
+          <ul className="space-y-2">
+            {feed.map((f) => (
+              <li key={f.id} className="flex items-center gap-3 rounded-full bg-paper-raised py-2.5 pl-2.5 pr-5 shadow-[0_8px_20px_-16px_rgba(36,25,51,0.6)] ring-1 ring-paper-edge">
+                <Initial slot={f.mine ? mySlot : partnerSlot} name={f.mine ? ctx.me.display_name : partner.display_name} size={32} />
+                <span className="min-w-0 flex-1 truncate text-small text-ink">{f.text}</span>
+                <span className="shrink-0 text-micro text-ink-muted">{shortAgo(f.at)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="rounded-full bg-paper-raised px-5 py-3 text-small text-ink-soft ring-1 ring-paper-edge">What you both do in Plan shows up here.</p>
+        )}
+      </section>
 
       <Dialog open={adding} onOpenChange={setAdding} title="Add something">
         <div className="grid grid-cols-2 gap-3">
@@ -265,21 +314,43 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
   );
 }
 
-function HubCard({ tone, Icon, label, wash, onClick, children }: { tone: Tone; Icon: LucideIcon; label: string; wash?: boolean; onClick: () => void; children: ReactNode }) {
+/** One of the four illustrated cards: an icon tile, words, a picture in the corner. */
+function HubCard({
+  className,
+  Icon,
+  iconTone,
+  iconWash = 'bg-paper-raised',
+  art,
+  wide,
+  onClick,
+  children,
+}: {
+  className: string;
+  Icon: LucideIcon;
+  iconTone: string;
+  iconWash?: string;
+  art: ReactNode;
+  /** Words may run the full width (the split bar). */
+  wide?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'flex h-full min-h-[160px] w-full flex-col items-start gap-2.5 rounded-sheet p-5 text-left transition-transform duration-quick hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
-        wash ? TONE[tone].wash : 'border border-paper-edge bg-paper-raised',
+        'relative isolate flex h-full min-h-[214px] w-full flex-col items-start gap-1 overflow-hidden rounded-[26px] p-4 text-left shadow-[0_18px_36px_-26px_rgba(63,44,102,0.6)] ring-1 ring-white/60 transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 dark:ring-paper-edge sm:p-5',
+        className,
       )}
     >
-      <span className={cn('flex h-9 w-9 items-center justify-center rounded-xl', wash ? 'bg-paper-raised' : TONE[tone].wash, TONE[tone].ink)}>
-        <Icon className="h-5 w-5" />
+      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        {art}
       </span>
-      <span className="w-full truncate text-small text-ink-soft">{label}</span>
-      {children}
+      <span className={cn('mb-2 flex h-11 w-11 items-center justify-center rounded-[14px] shadow-[0_6px_14px_-8px_rgba(36,25,51,0.5)]', iconWash, iconTone)}>
+        <Icon className="h-6 w-6" />
+      </span>
+      <span className={cn('flex flex-col gap-0.5', wide ? 'w-full' : 'max-w-[78%]')}>{children}</span>
     </button>
   );
 }
