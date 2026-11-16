@@ -19,10 +19,18 @@ import { Field } from '../ui/field';
 import { FormSheet } from '../ui/form-sheet';
 import { usePalette } from '../ui/palette';
 import { Chip } from '../ui/segmented';
-import { Sheet } from '../ui/sheet';
-import { Display, Text } from '../ui/text';
+import { Text } from '../ui/text';
 
 type Mutate = <R>(write: () => Promise<R>) => Promise<R>;
+
+/** Each countdown gets its own wash, so the list reads at a glance. */
+const TONES = [
+  { wash: 'bg-teal-50', ink: 'text-teal-700' },
+  { wash: 'bg-rose-50', ink: 'text-rose-700' },
+  { wash: 'bg-gold-50', ink: 'text-gold-700' },
+  { wash: 'bg-plum-50', ink: 'text-plum-600' },
+  { wash: 'bg-sage-50', ink: 'text-sage-700' },
+];
 
 const longDate = (key: string) => fromDateKey(key).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'long' });
 
@@ -33,17 +41,24 @@ export function ComingUp({ countdowns, mutate }: { countdowns: Countdown[]; muta
   const items = upcoming(countdowns, couple.paired_at, new Date(), 5);
 
   return (
-    <Sheet className="gap-3">
+    <View
+      className="gap-3 rounded-[26px] border border-paper-edge bg-paper-raised p-4"
+      style={{ shadowColor: '#634882', shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 10 }, elevation: 3 }}
+    >
       <View className="flex-row items-center justify-between">
-        <Display className="text-heading">Coming up</Display>
-        <Button size="sm" variant="secondary" onPress={() => setEditing('new')}>
-          + Countdown
-        </Button>
+        <View className="flex-row items-center gap-2.5">
+          <View className="h-5 w-1 rounded-full bg-gold-400" />
+          <Text className="font-sans-bold text-[19px]">Coming up</Text>
+        </View>
+        <Pressable accessibilityRole="button" onPress={() => setEditing('new')} className="rounded-full bg-gold-50 px-3 py-1.5 active:opacity-70">
+          <Text className="font-sans-bold text-small text-gold-700">+ Countdown</Text>
+        </Pressable>
       </View>
-      {items.map((u) => {
+      {items.map((u, i) => {
+        const tone = TONES[i % TONES.length]!;
         const inner = (
           <View className="flex-row items-center gap-3 py-1.5">
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-gold-50">
+            <View className={cn('h-[46px] w-[46px] items-center justify-center rounded-[15px]', tone.wash)}>
               <Text className="text-[22px] leading-[28px]">{u.emoji}</Text>
             </View>
             <View className="flex-1">
@@ -54,12 +69,14 @@ export function ComingUp({ countdowns, mutate }: { countdowns: Countdown[]; muta
               <Text className="text-micro text-ink-muted">{longDate(u.date)}</Text>
             </View>
             {u.daysLeft > 1 ? (
-              <View className="items-end">
-                <Display className="text-lead">{String(u.daysLeft)}</Display>
-                <Text className="text-micro text-ink-muted">days</Text>
+              <View className={cn('min-w-[56px] items-center rounded-[14px] px-2.5 py-1.5', tone.wash)}>
+                <Text className={cn('font-sans-bold text-[18px] leading-5', tone.ink)}>{String(u.daysLeft)}</Text>
+                <Text className={cn('font-sans-bold text-[10px]', tone.ink)}>days</Text>
               </View>
             ) : (
-              <Display className="text-lead text-rose-700">{describeDaysLeft(u.daysLeft)}</Display>
+              <View className="rounded-[14px] bg-rose-600 px-3 py-2">
+                <Text className="font-sans-bold text-small text-white">{describeDaysLeft(u.daysLeft)}</Text>
+              </View>
             )}
           </View>
         );
@@ -74,7 +91,7 @@ export function ComingUp({ countdowns, mutate }: { countdowns: Countdown[]; muta
       <FormSheet centered open={editing !== null} title={editing === 'new' ? 'New countdown' : 'Countdown'} onClose={() => setEditing(null)}>
         {editing ? <CountdownForm initial={editing === 'new' ? null : editing} mutate={mutate} onDone={() => setEditing(null)} /> : null}
       </FormSheet>
-    </Sheet>
+    </View>
   );
 }
 

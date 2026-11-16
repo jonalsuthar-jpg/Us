@@ -2,7 +2,6 @@
 
 import {
   daysTogether,
-  formatEventTime,
   freshStatus,
   getHome,
   sendTap,
@@ -16,7 +15,7 @@ import {
   type Status,
 } from '@us/shared';
 import { useAccess, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
-import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Pencil, Phone, Sparkles, Video } from 'lucide-react';
+import { Camera, HeartPulse, MessageCircleHeart, Pencil, Phone, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { MobileSettingsLink } from '@/components/app/app-shell';
@@ -35,6 +34,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
 import { shrinkPhoto } from '@/lib/image';
 import { ComingUp } from './countdowns';
+import { MemoryCard, NextUpCard, QuestionCard } from './home-cards';
 import { SafetyCard } from './safety';
 
 function greeting(now = new Date()) {
@@ -257,46 +257,9 @@ export function Home() {
 
       {d ? (
         <div className="grid gap-4 md:grid-cols-3">
-          {has('calendar') && (
-          <Card
-            href="/plan"
-            icon={<CalendarHeart className="h-5 w-5 text-plum-700" />}
-            eyebrow="Next up"
-            title={d.nextEvent ? d.nextEvent.title : 'Nothing planned yet'}
-            detail={
-              d.nextEvent
-                ? `${new Date(d.nextEvent.starts_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatEventTime(d.nextEvent)}`
-                : 'Plan a date, a trip, or a quiet night in.'
-            }
-          />
-          )}
-          {has('memories') && (
-          <Link
-            href="/memory"
-            className="group block rounded-sheet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-          >
-            <Sheet pad="none" className="h-full overflow-hidden transition-transform duration-base group-hover:-translate-y-0.5">
-              {d.memoryPhotoUrl ? <img src={d.memoryPhotoUrl} alt="" className="aspect-[16/9] w-full object-cover" /> : null}
-              <div className="space-y-1 p-5">
-                <p className="flex items-center gap-1.5 text-micro font-medium text-gold-700">
-                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                  {d.memory?.yearsAgo ? `On this day · ${d.memory.yearsAgo} ${d.memory.yearsAgo === 1 ? 'year' : 'years'} ago` : 'A memory'}
-                </p>
-                <p className="line-clamp-2 font-display text-heading text-ink">{d.memory ? d.memory.title : 'Keep your first memory'}</p>
-                {!d.memory ? <p className="text-small text-ink-soft">A photo, a line, the date — the start of your story.</p> : null}
-              </div>
-            </Sheet>
-          </Link>
-          )}
-          {has('daily_question') && (
-          <Card
-            href="/connect"
-            icon={<HeartHandshake className="h-5 w-5 text-teal-700" />}
-            eyebrow="Connect"
-            title="Today’s question"
-            detail="One question a day. Your answers open once you’ve both replied."
-          />
-          )}
+          {has('calendar') && <NextUpCard event={d.nextEvent} />}
+          {has('memories') && <MemoryCard memory={d.memory} photoUrl={d.memoryPhotoUrl} />}
+          {has('daily_question') && <QuestionCard />}
         </div>
       ) : null}
 
@@ -475,23 +438,5 @@ function Action({ label, href, onClick, badge, children }: { label: string; href
     <button type="button" onClick={onClick} className={cls}>
       {inner}
     </button>
-  );
-}
-
-function Card({ href, icon, eyebrow, title, detail }: { href: string; icon: ReactNode; eyebrow: string; title: string; detail: string }) {
-  return (
-    <Link href={href} className="group block rounded-sheet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400">
-      <Sheet pad="sm" className="flex h-full items-start gap-4 transition-transform duration-base group-hover:-translate-y-0.5">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-plum-50" aria-hidden>
-          {icon}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-micro font-medium text-ink-muted">{eyebrow}</span>
-          <span className="block truncate font-display text-lead text-ink">{title}</span>
-          <span className="mt-0.5 block line-clamp-2 text-small text-ink-soft">{detail}</span>
-        </span>
-        <ChevronRight className="mt-3 h-5 w-5 shrink-0 text-ink-muted" aria-hidden />
-      </Sheet>
-    </Link>
   );
 }

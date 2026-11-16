@@ -28,8 +28,8 @@ import { ErrorNote } from '../module-screen';
 import { Button } from '../ui/button';
 import { usePalette } from '../ui/palette';
 import { PrivacyBadge } from '../ui/privacy';
-import { Sheet } from '../ui/sheet';
-import { Display, Text } from '../ui/text';
+import { GradientView } from '../plan/art';
+import { Text } from '../ui/text';
 import { currentPosition, getHomeSpot, quietPosition, setHomeSpot, watchPosition } from '@/lib/geo';
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -115,11 +115,18 @@ export function SafetyCard() {
   const myCoords = here ?? (d?.mine?.lat != null && d.mine.lng != null ? { lat: d.mine.lat, lng: d.mine.lng } : null);
 
   return (
-    <Sheet className="gap-4">
+    <GradientView
+      from={c.scheme === 'dark' ? '#0F2A1A' : '#E6F7EC'}
+      to={c.scheme === 'dark' ? '#19141D' : '#F6FCF8'}
+      radius={26}
+      className="gap-4 border border-sage-100 p-4 dark:border-paper-edge"
+    >
       <View className="flex-row flex-wrap items-center justify-between gap-2">
-        <View className="flex-row items-center gap-2">
-          <HomeIcon size={18} color={c.onTeal} />
-          <Display className="text-heading">Safe home</Display>
+        <View className="flex-row items-center gap-3">
+          <View className="h-11 w-11 items-center justify-center rounded-[15px] bg-sage-500">
+            <HomeIcon size={22} color="#fff" />
+          </View>
+          <Text className="font-sans-bold text-[19px]">Safe home</Text>
         </View>
         <PrivacyBadge privacy="shared" partnerName={partner.display_name} />
       </View>
@@ -248,13 +255,13 @@ export function SafetyCard() {
       )}
 
       {error || safety.error ? <ErrorNote>{error ?? safety.error}</ErrorNote> : null}
-    </Sheet>
+    </GradientView>
   );
 }
 
 function Row({ text, detail, children }: { text: string; detail?: string; children: ReactNode }) {
   return (
-    <View className="gap-2 rounded-control bg-paper-sunken px-4 py-3">
+    <View className="gap-2 rounded-[18px] bg-paper-raised px-4 py-3">
       <Text className="text-small">{text}</Text>
       {detail ? <Text className="text-micro text-ink-muted">{detail}</Text> : null}
       {children}

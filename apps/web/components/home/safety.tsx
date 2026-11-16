@@ -27,7 +27,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ErrorNote } from '@/components/app/module-header';
 import { Button } from '@/components/ui/button';
 import { PrivacyBadge } from '@/components/ui/privacy';
-import { Sheet } from '@/components/ui/sheet';
 import { currentPosition, getHomeSpot, locationAllowed, setHomeSpot } from '@/lib/geo';
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -114,10 +113,13 @@ export function SafetyCard() {
   const myCoords = here ?? (d?.mine?.lat != null && d.mine.lng != null ? { lat: d.mine.lat, lng: d.mine.lng } : null);
 
   return (
-    <Sheet pad="md" className="space-y-5">
+    <section className="space-y-5 rounded-[26px] border border-sage-100 bg-gradient-to-br from-[#E6F7EC] to-[#F6FCF8] p-4 shadow-[0_18px_36px_-26px_rgba(37,143,76,0.55)] dark:border-paper-edge dark:from-sage-50 dark:to-paper-raised sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 font-display text-heading text-ink">
-          <HomeIcon className="h-5 w-5 text-teal-700" aria-hidden /> Safe home
+        <h2 className="flex items-center gap-3 font-display text-[20px] font-extrabold text-ink">
+          <span className="flex h-11 w-11 items-center justify-center rounded-[15px] bg-sage-500 text-white shadow-[0_6px_14px_-8px_rgba(37,143,76,0.8)]">
+            <HomeIcon className="h-[22px] w-[22px]" aria-hidden />
+          </span>
+          Safe home
         </h2>
         <PrivacyBadge privacy="shared" partnerName={partner.display_name} compact />
       </div>
@@ -211,7 +213,7 @@ export function SafetyCard() {
         </p>
       </div>
 
-      <div className="h-px bg-paper-edge" />
+      <div className="h-px bg-sage-100 dark:bg-paper-edge" />
 
       {/* Location sharing */}
       <div className="space-y-3">
@@ -267,7 +269,7 @@ export function SafetyCard() {
       </div>
 
       {error || safety.error ? <ErrorNote>{error ?? safety.error}</ErrorNote> : null}
-    </Sheet>
+    </section>
   );
 }
 
@@ -275,7 +277,7 @@ const placeOf = (c: Pick<ArrivalCheck, 'label'>) => (c.label === 'home' ? 'home'
 
 function ArrivalRow({ text, detail, action }: { text: string; detail?: string; action: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-control bg-paper-sunken px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-paper-raised px-4 py-3 shadow-[0_6px_16px_-12px_rgba(36,25,51,0.5)]">
       <div className="min-w-0 flex-1">
         <p className="text-small text-ink">{text}</p>
         {detail ? <p className="mt-0.5 text-micro text-ink-muted">{detail}</p> : null}

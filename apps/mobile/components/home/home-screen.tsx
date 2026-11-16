@@ -1,6 +1,5 @@
 import {
   daysTogether,
-  formatEventTime,
   freshStatus,
   getHome,
   sendTap,
@@ -17,7 +16,7 @@ import { useAccess, useCallManager, useCouple, useCoupleData, useFeatures, useTy
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from '@/lib/image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Pencil, Phone, Settings, Sparkles, Video } from 'lucide-react-native';
+import { Camera, HeartPulse, MessageCircleHeart, Pencil, Phone, Settings, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,6 +37,7 @@ import { Chip } from '../ui/segmented';
 import { Sheet } from '../ui/sheet';
 import { Display, Text } from '../ui/text';
 import { ComingUp } from './countdowns';
+import { MemoryCard, NextUpCard, QuestionCard } from './home-cards';
 import { SafetyCard } from './safety';
 
 function greeting(now = new Date()) {
@@ -249,52 +249,11 @@ export function HomeScreen() {
       {d && has('countdowns') ? <ComingUp countdowns={d.countdowns} mutate={home.mutate} /> : null}
       {d && (has('location') || has('arrival')) ? <SafetyCard /> : null}
 
-      {d && has('calendar') ? (
-        <Card
-          icon={<CalendarHeart size={18} color={c.onPlum} />}
-          eyebrow="Next up"
-          title={d.nextEvent ? d.nextEvent.title : 'Nothing planned yet'}
-          detail={
-            d.nextEvent
-              ? `${new Date(d.nextEvent.starts_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatEventTime(d.nextEvent)}`
-              : 'Plan a date, a trip, or a quiet night in.'
-          }
-          onPress={() => router.push('/plan')}
-        />
-      ) : null}
+      {d && has('calendar') ? <NextUpCard event={d.nextEvent} /> : null}
 
-      {d && has('memories') ? (
-        <Pressable accessibilityRole="button" onPress={() => router.push('/memory')}>
-          <Sheet pad="none" className="overflow-hidden">
-            {d.memoryPhotoUrl ? <Image source={{ uri: d.memoryPhotoUrl }} className="aspect-[16/9] w-full" resizeMode="cover" /> : null}
-            <View className="flex-row items-center gap-3 p-5">
-              <View className="flex-1 gap-1">
-                <View className="flex-row items-center gap-1.5">
-                  <Sparkles size={14} color={c.onGold} />
-                  <Text className="font-sans-medium text-micro text-gold-700">
-                    {d.memory?.yearsAgo ? `On this day · ${d.memory.yearsAgo} ${d.memory.yearsAgo === 1 ? 'year' : 'years'} ago` : 'A memory'}
-                  </Text>
-                </View>
-                <Display className="text-heading" numberOfLines={2}>
-                  {d.memory ? d.memory.title : 'Keep your first memory'}
-                </Display>
-                {!d.memory ? <Text className="text-small text-ink-soft">A photo, a line, the date — the start of your story.</Text> : null}
-              </View>
-              <ChevronRight size={20} color={c.inkMuted} />
-            </View>
-          </Sheet>
-        </Pressable>
-      ) : null}
+      {d && has('memories') ? <MemoryCard memory={d.memory} photoUrl={d.memoryPhotoUrl} /> : null}
 
-      {has('daily_question') ? (
-        <Card
-          icon={<HeartHandshake size={18} color={c.onTeal} />}
-          eyebrow="Connect"
-          title="Today’s question"
-          detail="One question a day. Your answers open once you’ve both replied."
-          onPress={() => router.push('/connect')}
-        />
-      ) : null}
+      {has('daily_question') ? <QuestionCard /> : null}
 
       {d && has('plant') ? (
         <View
@@ -459,27 +418,6 @@ function Action({ label, onPress, badge, children }: { label: string; onPress: (
           <Text className="text-[11px] font-sans-semibold leading-[13px] text-white">{badge > 99 ? '99+' : badge}</Text>
         </View>
       ) : null}
-    </Pressable>
-  );
-}
-
-function Card({ icon, eyebrow, title, detail, onPress }: { icon: ReactNode; eyebrow: string; title: string; detail: string; onPress: () => void }) {
-  const c = usePalette();
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress}>
-      <Sheet className="flex-row items-center gap-4">
-        <View className="h-11 w-11 items-center justify-center rounded-full bg-plum-50">{icon}</View>
-        <View className="flex-1 gap-0.5">
-          <Text className="font-sans-medium text-micro text-ink-muted">{eyebrow}</Text>
-          <Display className="text-lead" numberOfLines={1}>
-            {title}
-          </Display>
-          <Text className="text-small text-ink-soft" numberOfLines={2}>
-            {detail}
-          </Text>
-        </View>
-        <ChevronRight size={20} color={c.inkMuted} />
-      </Sheet>
     </Pressable>
   );
 }

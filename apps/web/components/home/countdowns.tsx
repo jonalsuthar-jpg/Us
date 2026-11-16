@@ -19,8 +19,16 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Chip } from '@/components/ui/segmented';
-import { Sheet } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
+
+/** Each countdown gets its own wash, so the list reads at a glance. */
+const TONES = [
+  { wash: 'bg-teal-50', ink: 'text-teal-700' },
+  { wash: 'bg-rose-50', ink: 'text-rose-700' },
+  { wash: 'bg-gold-50', ink: 'text-gold-700' },
+  { wash: 'bg-plum-50', ink: 'text-plum-600' },
+  { wash: 'bg-sage-50', ink: 'text-sage-700' },
+];
 
 const longDate = (key: string) => fromDateKey(key).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'long' });
 
@@ -31,18 +39,26 @@ export function ComingUp({ countdowns, mutate }: { countdowns: Countdown[]; muta
   const items = upcoming(countdowns, couple.paired_at, new Date(), 5);
 
   return (
-    <Sheet pad="md" className="space-y-4">
+    <section className="space-y-3 rounded-[26px] border border-paper-edge bg-paper-raised p-4 shadow-[0_18px_36px_-26px_rgba(99,72,130,0.55)] sm:p-5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-heading text-ink">Coming up</h2>
-        <Button size="sm" variant="secondary" onClick={() => setEditing('new')}>
-          <Plus className="h-4 w-4" /> Countdown
-        </Button>
+        <h2 className="flex items-center gap-2.5 font-display text-[20px] font-extrabold text-ink">
+          <span aria-hidden className="h-5 w-1 rounded-full bg-gold-400" />
+          Coming up
+        </h2>
+        <button
+          type="button"
+          onClick={() => setEditing('new')}
+          className="inline-flex items-center gap-1 rounded-full bg-gold-50 px-3 py-1.5 text-small font-extrabold text-gold-700 hover:bg-gold-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+        >
+          <Plus className="h-4 w-4" strokeWidth={2.6} /> Countdown
+        </button>
       </div>
-      <ul className="space-y-2">
-        {items.map((u) => {
+      <ul className="space-y-1">
+        {items.map((u, i) => {
+          const tone = TONES[i % TONES.length]!;
           const inner = (
             <>
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gold-50 text-[22px]" aria-hidden>
+              <span className={cn('flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[15px] text-[22px]', tone.wash)} aria-hidden>
                 {u.emoji}
               </span>
               <span className="min-w-0 flex-1">
@@ -52,16 +68,14 @@ export function ComingUp({ countdowns, mutate }: { countdowns: Countdown[]; muta
                 </span>
                 <span className="block text-micro text-ink-muted">{longDate(u.date)}</span>
               </span>
-              <span className={cn('shrink-0 text-right font-display text-lead', u.daysLeft <= 1 ? 'text-rose-700' : 'text-ink')}>
-                {u.daysLeft > 1 ? (
-                  <>
-                    {u.daysLeft}
-                    <span className="block text-micro font-sans text-ink-muted">days</span>
-                  </>
-                ) : (
-                  describeDaysLeft(u.daysLeft)
-                )}
-              </span>
+              {u.daysLeft > 1 ? (
+                <span className={cn('min-w-[56px] shrink-0 rounded-[14px] px-2.5 py-1.5 text-center', tone.wash, tone.ink)}>
+                  <span className="block text-[18px] font-extrabold leading-5">{u.daysLeft}</span>
+                  <span className="text-[10px] font-bold">days</span>
+                </span>
+              ) : (
+                <span className="shrink-0 rounded-[14px] bg-rose-600 px-3 py-2 text-small font-extrabold text-white">{describeDaysLeft(u.daysLeft)}</span>
+              )}
             </>
           );
           return (
@@ -89,7 +103,7 @@ export function ComingUp({ countdowns, mutate }: { countdowns: Countdown[]; muta
       >
         {editing ? <CountdownForm initial={editing === 'new' ? null : editing} mutate={mutate} onDone={() => setEditing(null)} /> : null}
       </Dialog>
-    </Sheet>
+    </section>
   );
 }
 
