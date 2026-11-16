@@ -33,7 +33,7 @@ object CallAudio {
     while (cls != null) {
       try {
         return cls.getDeclaredField(name).apply { isAccessible = true }.get(target)
-      } catch (_: NoSuchFieldException) {
+      } catch (e: NoSuchFieldException) {
         cls = cls.superclass
       }
     }
@@ -117,6 +117,6 @@ object CallAudio {
     preferMic(context, "auto")
     try {
       playout()?.setPreferredDevice(null)
-    } catch (_: Exception) {}
+    } catch (e: Exception) {}
   }
 }
