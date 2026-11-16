@@ -78,8 +78,8 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
   return (
     <View className="gap-5">
       <GradientView from={c.scheme === 'dark' ? '#3B1424' : '#FFD6E2'} to={c.scheme === 'dark' ? '#19141D' : '#FFF1F5'} radius={28} className="items-center gap-3 p-5">
-        <View className="absolute -bottom-1 -right-1" pointerEvents="none">
-          <CoinsArt width={104} height={82} />
+        <View className="absolute right-2 top-2" pointerEvents="none">
+          <CoinsArt width={72} height={57} />
         </View>
         {main ? (
           <>
