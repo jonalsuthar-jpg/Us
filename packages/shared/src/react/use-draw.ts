@@ -18,6 +18,7 @@ import type { DrawGame, Drawing, Sticker } from '../database.types';
 import { openChatMedia } from '../api/chat-media';
 import { listStickers, STICKERS_TOPIC } from '../api/stickers';
 import { gameStoreFor, GameStore } from '../draw/game-store';
+import { useForegroundTick } from './use-foreground-tick';
 import { DrawHub, HERE_EVERY_MS, HERE_TTL_MS, LIVE_CANVAS, type DrawSession, type DrawState, type PartnerCursor } from '../draw/session';
 import type { CoupleChannel } from '../realtime/couple-channel';
 import { useChatKey } from './chat-key-provider';
@@ -79,12 +80,9 @@ export function useDrawSession(sid: string = LIVE_CANVAS, opts: { announce?: boo
     };
   }, [session, announce, connection]);
 
-  // Partner presence goes stale on its own; re-check now and then.
+  // Partner presence goes stale on its own; re-check now and then (on screen only).
   const [, tick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), 5_000);
-    return () => clearInterval(t);
-  }, []);
+  useForegroundTick(() => tick((n) => n + 1), 5_000);
 
   return { session, state, cursor, partnerHere: session.partnerHere };
 }
@@ -93,15 +91,10 @@ export function useDrawSession(sid: string = LIVE_CANVAS, opts: { announce?: boo
 export function usePartnerDrawing(): boolean {
   const hub = useDrawHub();
   const [on, setOn] = useState(() => hub.has(LIVE_CANVAS) && hub.session(LIVE_CANVAS).partnerHere);
-  useEffect(() => {
-    const check = () => setOn(hub.has(LIVE_CANVAS) && hub.session(LIVE_CANVAS).partnerHere);
-    const off = hub.onActivity((sid) => sid === LIVE_CANVAS && check());
-    const t = setInterval(check, HERE_TTL_MS / 5);
-    return () => {
-      off();
-      clearInterval(t);
-    };
-  }, [hub]);
+  const check = useCallback(() => setOn(hub.has(LIVE_CANVAS) && hub.session(LIVE_CANVAS).partnerHere), [hub]);
+  useEffect(() => hub.onActivity((sid) => sid === LIVE_CANVAS && check()), [hub, check]);
+  // These tabs stay mounted: look again only while the app is on screen.
+  useForegroundTick(check, HERE_TTL_MS / 5);
   return on;
 }
 

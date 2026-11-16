@@ -2,6 +2,7 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import type { Database, UsClient } from '@us/shared';
+import { currentCallManager } from '@us/shared/react';
 import { AppState, Platform } from 'react-native';
 import { env, isConfigured } from './env';
 
@@ -18,10 +19,12 @@ export const supabase: UsClient = createClient<Database>(
   },
 );
 
-// Only refresh tokens while the app is in the foreground.
+// Only refresh tokens while the app is in the foreground, or a call is on:
+// a call can carry on for hours with the app in the background or closed,
+// and its signaling and call-row checks need a live session.
 if (Platform.OS !== 'web') {
   AppState.addEventListener('change', (state) => {
-    if (state === 'active') void supabase.auth.startAutoRefresh();
+    if (state === 'active' || currentCallManager()?.isOnCall()) void supabase.auth.startAutoRefresh();
     else void supabase.auth.stopAutoRefresh();
   });
 }
