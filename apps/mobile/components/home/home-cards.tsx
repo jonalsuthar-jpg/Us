@@ -71,7 +71,7 @@ export function MemoryCard({ memory, photoUrl }: { memory: HomeData['memory']; p
       <View className="overflow-hidden rounded-[26px] border border-paper-edge bg-paper-raised">
         <View className="h-[150px] overflow-hidden" style={{ backgroundColor: '#EE9C82' }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
           {photoUrl ? (
-            <Image source={{ uri: photoUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+            <Image source={{ uri: photoUrl }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} resizeMode="cover" />
           ) : width ? (
             <Svg width={width} height={150} viewBox="0 0 354 150" preserveAspectRatio="xMidYMid slice">
               <Circle cx={80} cy={104} r={56} fill="#FFE4A8" opacity={0.5} />

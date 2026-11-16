@@ -12,7 +12,7 @@ import {
 import { useCouple, useCoupleData } from '@us/shared/react';
 import { Heart, Plus, RotateCw, X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Pressable, TextInput, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming, ZoomIn } from 'react-native-reanimated';
 import Svg, { Circle, G, Path, Polygon, Text as SvgText } from 'react-native-svg';
 import { EmptyNote, ErrorNote } from '../module-screen';
@@ -28,6 +28,12 @@ const SIZE = 280;
 const SPIN_MS = 3200;
 const WEIGHTS = ['Sure', 'Keen', 'Really keen'];
 
+/** A slice's label is drawn at its outer edge; in the bottom half it's turned round so it never reads upside down. */
+const upright = (i: number, n: number) => {
+  const mid = ((i + 0.5) / n) * 360;
+  return mid <= 90 || mid >= 270;
+};
+
 export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
   const { sb, couple } = useCouple();
   const c = usePalette();
@@ -36,6 +42,9 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
   const categories = decisionCategories(all);
   const [category, setCategory] = useState<string | null>(initialCategory ?? null);
   const [newList, setNewList] = useState('');
+  const [naming, setNaming] = useState(false);
+  // Lists made here but not yet given an option: a list only exists through its options, so keep them for now.
+  const [fresh, setFresh] = useState<string[]>([]);
   const [label, setLabel] = useState('');
   const [picked, setPicked] = useState<DecisionOption | null>(null);
   const [phase, setPhase] = useState<'idle' | 'spinning' | 'reveal' | 'locked'>('idle');
@@ -51,6 +60,8 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const current = category ?? '';
+  const lists = [...new Set([...categories, ...fresh, ...(current ? [current] : [])])];
+  const countOf = (cat: string) => all.filter((o) => o.category === cat).length;
   const inList = all.filter((o) => o.category === current);
   const fail = (e: Error) => setError(e.message);
 
@@ -85,40 +96,61 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
 
   return (
     <View className="gap-5">
-      <View className="gap-4 rounded-sheet bg-plum-800 p-5">
-        <Display light italic className="text-[26px] leading-[32px] text-paper">
+      {/* Which list: its own row, wrapping, so it never sits over the wheel. */}
+      {lists.length || current ? (
+        <View className="gap-2.5">
+          <View className="flex-row flex-wrap gap-2">
+            {lists.map((cat) => {
+              const on = cat === current;
+              return (
+                <Pressable
+                  key={cat}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  onPress={() => switchTo(cat)}
+                  className={cn('h-10 flex-row items-center gap-1.5 rounded-full px-4', on ? 'bg-plum-800' : 'border border-paper-edge bg-paper-raised')}
+                >
+                  <Text className={cn('font-sans-bold text-small', on ? 'text-white' : 'text-ink')}>{cat}</Text>
+                  <Text className={cn('text-micro', on ? 'text-white/70' : 'text-ink-muted')}>{String(countOf(cat))}</Text>
+                </Pressable>
+              );
+            })}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setNaming((x) => !x)}
+              className="h-10 flex-row items-center gap-1 rounded-full border border-dashed border-plum-300 px-4"
+            >
+              <Plus size={14} color={c.inkSoft} />
+              <Text className="font-sans-bold text-small text-ink-soft">New list</Text>
+            </Pressable>
+          </View>
+          {naming ? (
+            <View className="flex-row items-center gap-2 rounded-2xl border border-paper-edge bg-paper-raised py-1 pl-4 pr-1">
+              <TextInput
+                autoFocus
+                value={newList}
+                onChangeText={setNewList}
+                maxLength={60}
+                placeholder="Film night, weekend plans…"
+                placeholderTextColor={c.placeholder}
+                accessibilityLabel="New list"
+                returnKeyType="done"
+                onSubmitEditing={makeList}
+                style={{ paddingVertical: 0 }}
+                className="h-11 flex-1 font-sans text-body text-ink"
+              />
+              <Button size="sm" disabled={!newList.trim()} onPress={makeList}>
+                Make it
+              </Button>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      <View className="items-center gap-4 rounded-[28px] bg-plum-800 p-5">
+        <Display light italic className="self-stretch text-[24px] leading-[30px] text-paper">
           {current ? `Can’t decide on ${current.toLowerCase()}?` : 'Can’t decide?'}
         </Display>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5" contentContainerClassName="items-center gap-2 px-5">
-          {categories.map((cat) => (
-            <Pressable
-              key={cat}
-              accessibilityRole="button"
-              accessibilityState={{ selected: cat === current }}
-              onPress={() => switchTo(cat)}
-              className={cn('h-10 justify-center rounded-full border px-4', cat === current ? 'border-paper bg-paper' : 'border-white/25')}
-            >
-              <Text className={cn('font-sans-medium text-small', cat === current ? 'text-plum-800' : 'text-paper/85')}>{cat}</Text>
-            </Pressable>
-          ))}
-          <TextInput
-            value={newList}
-            onChangeText={setNewList}
-            maxLength={60}
-            placeholder="+ New list"
-            placeholderTextColor="rgba(252,250,251,0.6)"
-            accessibilityLabel="New list"
-            returnKeyType="done"
-            onSubmitEditing={() => {
-              const name = newList.trim();
-              if (!name) return;
-              switchTo(name);
-              setNewList('');
-            }}
-            className="h-10 min-w-[110px] rounded-full border border-dashed border-white/35 px-4 font-sans text-small text-paper"
-          />
-        </ScrollView>
-
         {current && inList.length > 1 ? (
           <>
             <View className="items-center">
@@ -131,12 +163,13 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
                         <Path d={wheelSlicePath(i, inList.length, SIZE / 2 - 6, SIZE / 2)} fill={FILLS[i % FILLS.length]} stroke="#241933" strokeWidth={2} />
                         <SvgText
                           x={SIZE / 2}
-                          y={46}
+                          y={upright(i, inList.length) ? 46 : SIZE - 46}
                           fill="#170F21"
                           fontSize={13}
-                          fontWeight="600"
+                          fontWeight="700"
                           textAnchor="middle"
-                          transform={`rotate(${(360 / inList.length) * (i + 0.5)} ${SIZE / 2} ${SIZE / 2})`}
+                          alignmentBaseline="middle"
+                          transform={`rotate(${(360 / inList.length) * (i + 0.5) + (upright(i, inList.length) ? 0 : 180)} ${SIZE / 2} ${SIZE / 2})`}
                         >
                           {o.label.length > 12 ? `${o.label.slice(0, 11)}…` : o.label}
                         </SvgText>
@@ -152,7 +185,7 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
             </View>
 
             {(phase === 'reveal' || phase === 'locked') && picked ? (
-              <Animated.View entering={ZoomIn.springify()} className="items-center rounded-sheet bg-gold-50 p-4">
+              <Animated.View entering={ZoomIn.springify()} className="items-center self-stretch rounded-sheet bg-gold-50 p-4">
                 <Text className="text-small font-sans-medium text-gold-700">It’s</Text>
                 <Display italic className="mt-0.5 text-center text-[32px] leading-[38px]">
                   {picked.label}
@@ -190,7 +223,7 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
                   setVetoes(1);
                   void spin();
                 }}
-                className={cn('h-14 flex-row items-center justify-center gap-2 rounded-control bg-gold-200 active:opacity-85', phase === 'spinning' && 'opacity-60')}
+                className={cn('h-14 flex-row items-center justify-center gap-2 self-stretch rounded-full bg-gold-200 active:opacity-85', phase === 'spinning' && 'opacity-60')}
               >
                 <RotateCw size={20} color="#241933" />
                 <Text className="font-sans-bold text-lead text-plum-800">{phase === 'spinning' ? 'Spinning…' : phase === 'idle' ? 'Spin for us' : 'Spin again'}</Text>
@@ -198,7 +231,7 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
             ) : null}
           </>
         ) : current ? (
-          <Text className="text-small text-paper/75">Add at least two options below to spin.</Text>
+          <Text className="self-start text-small text-paper/75">Add at least two options below to spin.</Text>
         ) : null}
       </View>
 
@@ -273,6 +306,15 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
       {error || options.error ? <ErrorNote>{error ?? options.error}</ErrorNote> : null}
     </View>
   );
+
+  function makeList() {
+    const name = newList.trim();
+    if (!name) return;
+    if (!lists.some((l) => l.toLowerCase() === name.toLowerCase())) setFresh((f) => [...f, name]);
+    switchTo(lists.find((l) => l.toLowerCase() === name.toLowerCase()) ?? name);
+    setNewList('');
+    setNaming(false);
+  }
 
   function addOption() {
     if (!label.trim()) return;

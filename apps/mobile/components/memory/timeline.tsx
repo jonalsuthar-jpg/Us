@@ -278,7 +278,7 @@ function MemoryCard({ memory, index, url, rated, story, onOpen }: { memory: Memo
     >
       <View className="aspect-square overflow-hidden rounded-[6px] bg-paper-sunken">
         {memory.photo_path ? (
-          url ? <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : null
+          url ? <Image source={{ uri: url }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} resizeMode="cover" /> : null
         ) : (
           <GradientView from={art.from} to={art.to} className="h-full w-full items-center justify-center">
             <art.Icon size={44} color={art.ink} />

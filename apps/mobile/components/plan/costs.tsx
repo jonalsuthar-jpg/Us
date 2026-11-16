@@ -33,10 +33,14 @@ import { DateStepper, FormSheet } from '../ui/form-sheet';
 import { usePalette } from '../ui/palette';
 import { Segmented } from '../ui/segmented';
 import { Display, Text } from '../ui/text';
+import { CoinsArt, GradientView } from './art';
 import { AddPill, GroupLabel, Initial, Pick, SplitBar } from './bits';
 import { CATEGORY_STYLE, SLOT_FILL, TONE, toneIcon } from './tones';
 
 const LAST_CURRENCY = 'us:last-currency';
+/** A soft lift under the white cards. */
+const CARD = { shadowColor: '#3F2C66', shadowOpacity: 0.1, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 3 };
+
 const METHODS = ['UPI', 'Cash', 'Bank transfer', 'Other'];
 
 export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () => void }) {
@@ -47,6 +51,8 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
   const list = expenses.data ?? [];
   const balances = settleUp(list, couple).filter((b) => b.debtor);
   const [sheet, setSheet] = useState<'add' | 'settle' | null>(null);
+  // The balance Settle up opened with: once it's recorded the live balance clears, and the sheet still has to say so.
+  const [settling, setSettling] = useState<CurrencyBalance | null>(null);
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +77,10 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
 
   return (
     <View className="gap-5">
-      <View className="items-center gap-3 rounded-sheet bg-rose-50 p-5">
+      <GradientView from={c.scheme === 'dark' ? '#3B1424' : '#FFD6E2'} to={c.scheme === 'dark' ? '#19141D' : '#FFF1F5'} radius={28} className="items-center gap-3 p-5">
+        <View className="absolute -bottom-1 -right-1" pointerEvents="none">
+          <CoinsArt width={104} height={82} />
+        </View>
         {main ? (
           <>
             <View className="flex-row items-center gap-2.5">
@@ -96,7 +105,13 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
         )}
         <View className="w-full flex-row gap-2">
           {main ? (
-            <Button className="flex-1" onPress={() => setSheet('settle')}>
+            <Button
+              className="flex-1"
+              onPress={() => {
+                setSettling(main);
+                setSheet('settle');
+              }}
+            >
               Settle up
             </Button>
           ) : null}
@@ -111,10 +126,10 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
               Also {b.debtor === mySlot ? `you owe ${formatMoney(b.amount_cents, b.currency)}` : `${partner.display_name} owes you ${formatMoney(b.amount_cents, b.currency)}`}
             </Text>
           ))}
-      </View>
+      </GradientView>
 
       {month.total ? (
-        <View className="gap-3 rounded-sheet border border-paper-edge bg-paper-raised p-4">
+        <View className="gap-3 rounded-[24px] border border-paper-edge bg-paper-raised p-4" style={CARD}>
           <GroupLabel>{`${new Date().toLocaleDateString(undefined, { month: 'long' })} so far`}</GroupLabel>
           <Display className="text-[30px] leading-[36px]">{formatMoney(month.total, currency)}</Display>
           <View accessible accessibilityLabel="Spending by category" className="h-3 flex-row gap-0.5 overflow-hidden rounded-full">
@@ -164,7 +179,7 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
         groups.map((g) => (
           <View key={g.m} className="gap-1.5">
             <GroupLabel>{new Date(g.m + '-15T12:00:00').toLocaleDateString(undefined, { month: 'long', year: g.m.startsWith(String(new Date().getFullYear())) ? undefined : 'numeric' })}</GroupLabel>
-            <View className="rounded-sheet border border-paper-edge bg-paper-raised px-3.5">
+            <View className="rounded-[24px] border border-paper-edge bg-paper-raised px-3.5" style={CARD}>
               {g.rows.map((x) => (
                 expenseRow(x, () =>
                   Alert.alert(`Remove “${x.description}”?`, 'It comes off the balance for both of you.', [
@@ -193,7 +208,7 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
         ) : null}
       </FormSheet>
       <FormSheet open={sheet === 'settle'} title="Settle up" onClose={close}>
-        {sheet === 'settle' && main ? <SettleUp balance={main} onSave={(row) => expenses.mutate(() => addExpense(sb, row))} onDone={close} /> : null}
+        {sheet === 'settle' && settling ? <SettleUp balance={settling} onSave={(row) => expenses.mutate(() => addExpense(sb, row))} onDone={close} /> : null}
       </FormSheet>
     </View>
   );

@@ -119,12 +119,12 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
     cards.push({
       s: 'decide',
       node: (
-        <HubCard from="#4E3A7A" to="#2E2148" Icon={Dices} iconColor="#fff" iconWash="bg-white/15" art={<WheelArt width={100} height={108} />} onPress={() => onOpen({ section: 'decide' })}>
+        <HubCard from="#4E3A7A" to="#2E2148" Icon={Dices} iconColor="#fff" iconWash="bg-white/15" art={<WheelArt width={78} height={84} />} onPress={() => onOpen({ section: 'decide' })}>
           <Text className="text-body text-white/85">{firstCat ? `Can’t pick ${firstCat.toLowerCase()}?` : 'Can’t decide?'}</Text>
-          <Display italic className="text-[27px] leading-[34px] text-gold-300">
+          <Display italic className="text-[24px] leading-[30px] text-gold-300">
             Spin for it
           </Display>
-          <Text className="text-small text-white/75">{firstCat ? `${optionCount} options ready` : 'Make a list to spin'}</Text>
+          <Text className="text-small text-white/75">{firstCat ? `${optionCount} ${optionCount === 1 ? 'option' : 'options'} ready` : 'Make a list to spin'}</Text>
         </HubCard>
       ),
     });

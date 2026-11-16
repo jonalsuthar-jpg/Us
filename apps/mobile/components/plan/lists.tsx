@@ -14,22 +14,25 @@ import {
 import { useCouple, useCoupleData } from '@us/shared/react';
 import { BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, Clapperboard, Dices, Globe, Plus, ShoppingBag, X, type LucideIcon } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Pressable, TextInput, View } from 'react-native';
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 import { ErrorNote } from '../module-screen';
 import { Button, IconButton } from '../ui/button';
 import { cn } from '../ui/cn';
 import { usePalette } from '../ui/palette';
 import { Display, Text } from '../ui/text';
-import { Ring } from './bits';
+import { GradientView } from './art';
 import { SLOT_BG, TONE, toneIcon, type Tone } from './tones';
 
-const STYLE: Record<ListName, { tone: Tone; Icon: LucideIcon; ring: string; decide?: string }> = {
-  groceries: { tone: 'teal', Icon: ShoppingBag, ring: '#0C8F82' },
-  bucket: { tone: 'gold', Icon: Globe, ring: '#F3A823' },
-  watch: { tone: 'rose', Icon: Clapperboard, ring: '#F5547C', decide: 'Film night' },
-  read: { tone: 'plum', Icon: BookOpen, ring: '#7A5E9A', decide: 'Next book' },
+/** Each list's colour: a gradient for its tile when it's open, the deep stop for its ticks and add button. */
+const STYLE: Record<ListName, { tone: Tone; Icon: LucideIcon; ring: string; from: string; decide?: string }> = {
+  groceries: { tone: 'teal', Icon: ShoppingBag, ring: '#0A776D', from: '#22B8A6' },
+  bucket: { tone: 'gold', Icon: Globe, ring: '#E0950F', from: '#FCCB5A' },
+  watch: { tone: 'rose', Icon: Clapperboard, ring: '#E2336A', from: '#F7709A', decide: 'Film night' },
+  read: { tone: 'plum', Icon: BookOpen, ring: '#4B3468', from: '#8A6BB8', decide: 'Next book' },
 };
+
+const CARD = { shadowColor: '#3F2C66', shadowOpacity: 0.1, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 3 };
 
 /** Shared lists: groceries, a bucket list, things to watch and read. */
 export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
@@ -80,12 +83,32 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
 
   return (
     <View className="gap-4">
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5" contentContainerClassName="gap-2.5 px-5">
+      {/* All four lists at once, two by two. */}
+      <View className="flex-row flex-wrap justify-between gap-y-2.5">
         {LIST_NAMES.map((n) => {
-          const s = STYLE[n];
+          const st = STYLE[n];
           const of = all.filter((i) => i.list === n);
           const left = of.filter((i) => !i.done_at).length;
           const on = n === list;
+          const pct = of.length ? (of.length - left) / of.length : 0;
+          const body = (
+            <>
+              <View className={cn('h-10 w-10 items-center justify-center rounded-[13px]', on ? 'bg-white' : TONE[st.tone].wash)}>
+                <st.Icon size={20} color={on ? st.ring : toneIcon(c, st.tone)} />
+              </View>
+              <View className="flex-1 gap-1">
+                <Text className={cn('font-sans-bold text-small', on ? 'text-white' : 'text-ink')} numberOfLines={1}>
+                  {LISTS[n].title}
+                </Text>
+                <View className="flex-row items-center gap-1.5">
+                  <View className={cn('h-[5px] flex-1 overflow-hidden rounded-full', on ? 'bg-white/30' : TONE[st.tone].wash)}>
+                    <View className="h-full rounded-full" style={{ width: `${Math.round(pct * 100)}%`, backgroundColor: on ? '#fff' : st.ring }} />
+                  </View>
+                  <Text className={cn('font-sans-bold text-[11px]', on ? 'text-white' : TONE[st.tone].ink)}>{left ? `${left} left` : of.length ? 'Done' : 'Empty'}</Text>
+                </View>
+              </View>
+            </>
+          );
           return (
             <Pressable
               key={n}
@@ -93,22 +116,22 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
               accessibilityState={{ selected: on }}
               accessibilityLabel={`${LISTS[n].title}, ${left} left`}
               onPress={() => (setList(n), setShowDone(false))}
-              className={cn('w-[132px] gap-2.5 rounded-sheet border-[1.5px] p-3.5', on ? cn(TONE[s.tone].wash, 'border-transparent') : 'border-paper-edge bg-paper-raised')}
+              className="w-[48.5%]"
+              style={[{ borderRadius: 20, backgroundColor: on ? st.ring : c.paperRaised }, CARD]}
             >
-              <View className="flex-row items-center justify-between">
-                <s.Icon size={22} color={on ? toneIcon(c, s.tone) : c.inkSoft} />
-                <Ring value={of.length ? (of.length - left) / of.length : 0} color={s.ring} track={on ? c.paperRaised : c.paperSunken} />
-              </View>
-              <View>
-                <Text className={cn('font-sans-semibold', on && TONE[s.tone].ink)}>{LISTS[n].title}</Text>
-                <Text className="mt-0.5 text-micro text-ink-soft">{left ? `${left} left` : of.length ? 'All done' : 'Empty'}</Text>
-              </View>
+              {on ? (
+                <GradientView from={st.from} to={st.ring} radius={20} className="flex-row items-center gap-2.5 p-2.5">
+                  {body}
+                </GradientView>
+              ) : (
+                <View className="flex-row items-center gap-2.5 rounded-[20px] bg-paper-raised p-2.5">{body}</View>
+              )}
             </Pressable>
           );
         })}
-      </ScrollView>
+      </View>
 
-      <View className="flex-row items-center gap-2">
+      <View className="flex-row items-center gap-2 rounded-[20px] bg-paper-raised py-1.5 pl-1.5 pr-1.5" style={CARD}>
         <TextInput
           accessibilityLabel={`Add to ${meta.title}`}
           value={text}
@@ -119,9 +142,9 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
           maxLength={200}
           placeholder={meta.placeholder}
           placeholderTextColor={c.placeholder}
-          className="h-[52px] flex-1 rounded-2xl border-[1.5px] border-paper-edge bg-paper-raised px-4 font-sans text-body text-ink"
+          className="h-12 flex-1 px-3 font-sans text-body text-ink"
         />
-        <Pressable accessibilityRole="button" accessibilityLabel="Add" onPress={add} className="h-[52px] w-[52px] items-center justify-center rounded-2xl bg-rose-600 active:bg-rose-700">
+        <Pressable accessibilityRole="button" accessibilityLabel="Add" onPress={add} className="h-12 w-12 items-center justify-center rounded-[15px] active:opacity-80" style={{ backgroundColor: style.ring }}>
           <Plus size={22} color="#fff" strokeWidth={2.4} />
         </Pressable>
       </View>
@@ -154,7 +177,8 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
       ) : null}
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-      <View className="rounded-sheet border border-paper-edge bg-paper-raised px-3.5">
+      <View className="rounded-[24px] bg-paper-raised px-3.5 pt-2" style={CARD}>
+        {open.length ? <Text className="px-1 pb-1 pt-1.5 font-sans-bold text-[12px] uppercase tracking-[1px] text-plum-600">{`To ${list === 'groceries' ? 'get' : 'do'} · ${open.length}`}</Text> : null}
         {open.length === 0 && !items.loading ? (
           <View className="items-center py-6">
             <Display italic className="text-lead">
@@ -172,7 +196,7 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
                 onPress={() => void items.mutate(() => setListItemDone(sb, i.id, me.id)).catch(fail)}
                 className="h-11 w-11 items-center justify-center"
               >
-                <View className="h-6 w-6 rounded-full border-2 border-plum-300" />
+                <View className="h-[26px] w-[26px] rounded-full border-[2.5px]" style={{ borderColor: style.ring }} />
               </Pressable>
               <View className="flex-1">
                 <Text>{i.text}</Text>
@@ -203,7 +227,7 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
                       onPress={() => void items.mutate(() => setListItemDone(sb, i.id, null)).catch(fail)}
                       className="h-11 w-11 items-center justify-center"
                     >
-                      <View className="h-6 w-6 items-center justify-center rounded-full bg-sage-500">
+                      <View className="h-[26px] w-[26px] items-center justify-center rounded-full" style={{ backgroundColor: style.ring }}>
                         <Check size={14} color="#fff" strokeWidth={3} />
                       </View>
                     </Pressable>

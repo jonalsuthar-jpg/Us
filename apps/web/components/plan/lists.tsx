@@ -20,14 +20,14 @@ import { ErrorNote } from '@/components/app/module-header';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
-import { Ring } from './bits';
 import { SLOT_BG, TONE, type Tone } from './tones';
 
-const STYLE: Record<ListName, { tone: Tone; Icon: LucideIcon; ring: string; decide?: string }> = {
-  groceries: { tone: 'teal', Icon: ShoppingBag, ring: '#0C8F82' },
-  bucket: { tone: 'gold', Icon: Globe, ring: '#F3A823' },
-  watch: { tone: 'rose', Icon: Clapperboard, ring: '#F5547C', decide: 'Film night' },
-  read: { tone: 'plum', Icon: BookOpen, ring: '#7A5E9A', decide: 'Next book' },
+/** Each list's colour: a gradient for its tile when it's open, the deep stop for its bar. */
+const STYLE: Record<ListName, { tone: Tone; Icon: LucideIcon; ring: string; tile: string; decide?: string }> = {
+  groceries: { tone: 'teal', Icon: ShoppingBag, ring: '#0A776D', tile: 'from-[#22B8A6] to-[#0A776D]' },
+  bucket: { tone: 'gold', Icon: Globe, ring: '#E0950F', tile: 'from-[#FCCB5A] to-[#E0950F]' },
+  watch: { tone: 'rose', Icon: Clapperboard, ring: '#E2336A', tile: 'from-[#F7709A] to-[#E2336A]', decide: 'Film night' },
+  read: { tone: 'plum', Icon: BookOpen, ring: '#4B3468', tile: 'from-[#8A6BB8] to-[#4B3468]', decide: 'Next book' },
 };
 
 /** Shared lists: groceries, a bucket list, things to watch and read. Either of you ticks things off. */
@@ -84,12 +84,14 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
 
   return (
     <div className="space-y-5">
-      <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:px-0">
+      {/* All four lists at once: two by two on phones, a row on wider screens. */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
         {LIST_NAMES.map((n) => {
           const s = STYLE[n];
           const of = all.filter((i) => i.list === n);
           const left = of.filter((i) => !i.done_at).length;
           const on = n === list;
+          const pct = of.length ? Math.round(((of.length - left) / of.length) * 100) : 0;
           return (
             <button
               key={n}
@@ -97,17 +99,21 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
               aria-pressed={on}
               onClick={() => (setList(n), setShowDone(false))}
               className={cn(
-                'flex w-[140px] shrink-0 flex-col gap-3 rounded-sheet border-[1.5px] p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 sm:w-auto',
-                on ? cn(TONE[s.tone].wash, 'border-transparent') : 'border-paper-edge bg-paper-raised hover:bg-paper-sunken',
+                'flex items-center gap-2.5 rounded-[20px] p-2.5 text-left shadow-[0_10px_22px_-16px_rgba(63,44,102,0.7)] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+                on ? cn('bg-gradient-to-br text-white', s.tile) : 'bg-paper-raised text-ink',
               )}
             >
-              <span className="flex items-center justify-between">
-                <s.Icon className={cn('h-[22px] w-[22px]', on ? TONE[s.tone].ink : 'text-ink-soft')} />
-                <Ring value={of.length ? (of.length - left) / of.length : 0} color={s.ring} />
+              <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px]', on ? 'bg-white' : TONE[s.tone].wash)}>
+                <s.Icon className={cn('h-5 w-5', on ? '' : TONE[s.tone].ink)} style={on ? { color: s.ring } : undefined} />
               </span>
-              <span>
-                <span className={cn('block font-semibold', on ? TONE[s.tone].ink : 'text-ink')}>{LISTS[n].title}</span>
-                <span className="mt-0.5 block text-micro text-ink-soft">{left ? `${left} left` : of.length ? 'All done' : 'Empty'}</span>
+              <span className="min-w-0 flex-1 space-y-1">
+                <span className="block truncate text-small font-extrabold">{LISTS[n].title}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className={cn('h-[5px] flex-1 overflow-hidden rounded-full', on ? 'bg-white/30' : TONE[s.tone].wash)}>
+                    <span className="block h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: on ? '#fff' : s.ring }} />
+                  </span>
+                  <span className={cn('text-[11px] font-bold', on ? 'text-white' : TONE[s.tone].ink)}>{left ? `${left} left` : of.length ? 'Done' : 'Empty'}</span>
+                </span>
               </span>
             </button>
           );

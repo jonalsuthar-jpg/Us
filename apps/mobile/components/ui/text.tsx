@@ -9,9 +9,13 @@ import { cn } from './cn';
 const HAS_COLOR = /(^|\s)text-(ink|paper|white|black|transparent|rose|teal|gold|sage|plum)(-|\/|\s|$)/;
 const ink = (className?: string) => (className && HAS_COLOR.test(className) ? null : 'text-ink');
 
+/** A text size in className. Same reason: the default size is only added when none is given (else text-[44px] can lose to text-body). */
+const HAS_SIZE = /(^|\s)text-(\[\d|(micro|small|body|lead|heading|title|xs|sm|base|lg|[2-9]?xl)(\s|$))/;
+const size = (className?: string) => (className && HAS_SIZE.test(className) ? null : 'text-body');
+
 /** Body copy in Inter. */
 export function Text({ className, ...props }: TextProps & { className?: string }) {
-  return <RNText className={cn('font-sans text-body', ink(className), className)} {...props} />;
+  return <RNText className={cn('font-sans', size(className), ink(className), className)} {...props} />;
 }
 
 /**

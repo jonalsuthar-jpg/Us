@@ -45,6 +45,8 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
   const list = expenses.data ?? [];
   const balances = settleUp(list, couple).filter((b) => b.debtor);
   const [sheet, setSheet] = useState<'add' | 'settle' | null>(null);
+  // The balance Settle up opened with: once it's recorded the live balance clears, and the dialog still has to say so.
+  const [settling, setSettling] = useState<CurrencyBalance | null>(null);
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,13 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
           )}
           <div className="flex w-full gap-2">
             {main ? (
-              <Button className="flex-1" onClick={() => setSheet('settle')}>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  setSettling(main);
+                  setSheet('settle');
+                }}
+              >
                 Settle up
               </Button>
             ) : null}
@@ -226,7 +234,7 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
         ) : null}
       </Dialog>
       <Dialog open={sheet === 'settle'} onOpenChange={(o) => !o && close()} title="Settle up" className="max-h-[92dvh] overflow-y-auto">
-        {sheet === 'settle' && main ? <SettleUp balance={main} onSave={(row) => expenses.mutate(() => addExpense(sb, row))} onDone={close} /> : null}
+        {sheet === 'settle' && settling ? <SettleUp balance={settling} onSave={(row) => expenses.mutate(() => addExpense(sb, row))} onDone={close} /> : null}
       </Dialog>
     </div>
   );

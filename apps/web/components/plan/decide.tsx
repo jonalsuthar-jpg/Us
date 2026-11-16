@@ -26,6 +26,12 @@ const SIZE = 300;
 const SPIN_MS = 3200;
 const WEIGHTS = ['Sure', 'Keen', 'Really keen'];
 
+/** A slice's label is drawn at its outer edge; in the bottom half it's turned round so it never reads upside down. */
+const upright = (i: number, n: number) => {
+  const mid = ((i + 0.5) / n) * 360;
+  return mid <= 90 || mid >= 270;
+};
+
 /** A wheel for the small decisions. The server picks (weighted, fair), the wheel shows it. */
 export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
   const { sb, couple } = useCouple();
@@ -34,6 +40,8 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
   const categories = decisionCategories(all);
   const [category, setCategory] = useState<string | null>(initialCategory ?? null);
   const [newList, setNewList] = useState('');
+  // Lists made here but not yet given an option: a list only exists through its options, so keep them for now.
+  const [fresh, setFresh] = useState<string[]>([]);
   const [label, setLabel] = useState('');
   const [picked, setPicked] = useState<DecisionOption | null>(null);
   const [phase, setPhase] = useState<'idle' | 'spinning' | 'reveal' | 'locked'>('idle');
@@ -48,6 +56,8 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const current = category ?? '';
+  const lists = [...new Set([...categories, ...fresh, ...(current ? [current] : [])])];
+  const countOf = (cat: string) => all.filter((o) => o.category === cat).length;
   const inList = all.filter((o) => o.category === current);
   const fail = (e: Error) => setError(e.message);
 
@@ -96,7 +106,7 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
       <div className="space-y-4 rounded-sheet bg-plum-800 p-5 text-paper sm:p-6">
         <h2 className="font-serif text-[28px] font-light italic leading-tight">{current ? `Can’t decide on ${current.toLowerCase()}?` : 'Can’t decide?'}</h2>
         <div className="flex flex-wrap items-center gap-2">
-          {categories.map((cat) => (
+          {lists.map((cat) => (
             <button
               key={cat}
               type="button"
@@ -107,7 +117,7 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
                 cat === current ? 'border-paper bg-paper text-plum-800' : 'border-white/25 text-paper/85 hover:border-white/50',
               )}
             >
-              {cat}
+              {cat} <span className="opacity-60">{countOf(cat)}</span>
             </button>
           ))}
           <form
@@ -115,7 +125,9 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
               e.preventDefault();
               const name = newList.trim();
               if (!name) return;
-              switchTo(name);
+              const same = lists.find((l) => l.toLowerCase() === name.toLowerCase());
+              if (!same) setFresh((f) => [...f, name]);
+              switchTo(same ?? name);
               setNewList('');
             }}
           >
@@ -125,7 +137,7 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
               maxLength={60}
               placeholder="+ New list"
               aria-label="New list"
-              className="h-10 w-32 rounded-full border border-dashed border-white/35 bg-transparent px-4 text-small text-paper placeholder:text-paper/60 focus:border-white/70 focus:outline-none"
+              className="h-10 w-36 rounded-full border border-dashed border-white/35 bg-transparent px-4 text-small text-paper placeholder:text-paper/70 focus:border-white/70 focus:outline-none"
             />
           </form>
         </div>
@@ -147,12 +159,13 @@ export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
                     <path d={wheelSlicePath(i, inList.length, SIZE / 2 - 6, SIZE / 2)} fill={FILLS[i % FILLS.length]} stroke="#241933" strokeWidth={2} />
                     <text
                       x={SIZE / 2}
-                      y={50}
+                      y={upright(i, inList.length) ? 50 : SIZE - 50}
                       fill="#170F21"
                       fontSize={13}
-                      fontWeight={600}
+                      fontWeight={700}
                       textAnchor="middle"
-                      transform={`rotate(${(360 / inList.length) * (i + 0.5)} ${SIZE / 2} ${SIZE / 2})`}
+                      dominantBaseline="middle"
+                      transform={`rotate(${(360 / inList.length) * (i + 0.5) + (upright(i, inList.length) ? 0 : 180)} ${SIZE / 2} ${SIZE / 2})`}
                     >
                       {o.label.length > 12 ? `${o.label.slice(0, 11)}…` : o.label}
                     </text>
