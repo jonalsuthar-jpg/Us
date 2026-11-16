@@ -1,9 +1,9 @@
-import { clearMediaVault, getCoupleContext, getMyAccess, preloadChatKey, tokens, type CoupleContext, type MyAccess } from '@us/shared';
+import { clearMediaVault, getCall, getCoupleContext, getMyAccess, preloadChatKey, tokens, type CoupleContext, type MyAccess } from '@us/shared';
 import { AccessProvider, CallProvider, clearDataCache, CoupleProvider, currentCallManager, hydrateDataCache, setDataCacheStore, useCallManager, useCallState, useCouple } from '@us/shared/react';
 import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Platform, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Platform, ToastAndroid, View } from 'react-native';
 import { CallScreen } from '@/components/call/call-screen';
 import { ChatKeyApproval } from '@/components/chat/chat-key';
 import { DrawBridge, drawRoute } from '@/components/draw/draw-bridge';
@@ -15,7 +15,7 @@ import { initPush, onPush } from '@/lib/push';
 import { nativeRtc } from '@/lib/rtc';
 import { playChime, startRing, stopRing } from '@/lib/sounds';
 import { stopCallAudio } from '@/lib/audio-route';
-import { onHangupRequested, stopCallService } from '@/modules/us-call';
+import { onCallHandledElsewhere, onHangupRequested, stopCallService } from '@/modules/us-call';
 import { supabase } from '@/lib/supabase';
 import { usePalette } from '@/components/ui/palette';
 
@@ -33,6 +33,12 @@ function releaseClosedCall() {
 
 // Opened straight into chat from a notification, the tabs are still behind it for Back.
 export const unstable_settings = { anchor: '(tabs)' };
+
+/** A short note at the bottom of the screen. */
+function notice(text: string) {
+  if (Platform.OS === 'android') ToastAndroid.show(text, ToastAndroid.SHORT);
+  else Alert.alert(text);
+}
 
 /** Resolves access and the couple, then mounts realtime + calls for every screen (tabs and settings). */
 export default function AppLayout() {
@@ -148,7 +154,7 @@ export default function AppLayout() {
 
 /** Push registration, ringing, the chime, and notification deep links. */
 function Bridge() {
-  const { me, partner, channel } = useCouple();
+  const { sb, me, partner, channel } = useCouple();
   const call = useCallState();
   const calls = useCallManager();
   const pathname = usePathname();
@@ -186,6 +192,36 @@ function Bridge() {
     setCallAction(null);
     void (callAction.action === 'answer' ? calls.accept() : calls.decline());
   }, [callAction, call.phase, call.call?.id, calls]);
+
+  // Answer tapped on a call that's no longer ringing (taken on my other
+  // device, or given up on): say so, rather than open on nothing.
+  useEffect(() => {
+    if (!callAction) return;
+    const { callId, action } = callAction;
+    const t = setTimeout(() => {
+      setCallAction((a) => (a?.callId === callId ? null : a));
+      if (action !== 'answer') return;
+      void getCall(sb, callId)
+        .then((row) => {
+          if (!row || row.status === 'ringing') return;
+          notice(row.status === 'active' ? 'Answered on your other device' : 'That call has ended');
+        })
+        .catch(() => {});
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [callAction, sb]);
+
+  // Answered or declined on my other device, while this one rang.
+  useEffect(
+    () =>
+      onCallHandledElsewhere((callId) => {
+        stopRing();
+        void getCall(sb, callId)
+          .then((row) => row && calls.syncFromRow(row))
+          .catch(() => {});
+      }),
+    [sb, calls],
+  );
 
   useEffect(
     () =>

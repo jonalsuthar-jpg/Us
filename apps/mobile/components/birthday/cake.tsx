@@ -11,7 +11,6 @@ const CANDLES = ['#F3B33D', '#3FA6A0', '#E46B8A', '#8E6BB8', '#7FB069'];
 export function Cake({ size, lit }: { size: number; lit: boolean }) {
   const u = size / 100;
   const tierTop = 34 * u;
-  const cakeHeight = 52 * u;
   return (
     <View style={{ width: size, height: size }} accessibilityRole="image" accessibilityLabel={lit ? 'A birthday cake with lit candles' : 'A birthday cake'}>
       {/* plate */}

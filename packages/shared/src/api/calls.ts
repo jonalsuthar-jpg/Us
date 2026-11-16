@@ -27,6 +27,19 @@ export async function setCallStatus(sb: UsClient, callId: string, status: CallSt
   return data;
 }
 
+/** This app, for as long as it runs: tells my phone's answer from my laptop's. */
+const THIS_DEVICE = uuid();
+
+/**
+ * Answer a call ringing for me. First come: if my other device got there
+ * first, this throws "call_already_answered".
+ */
+export async function answerCall(sb: UsClient, callId: string): Promise<Call> {
+  const { data, error } = await sb.rpc('answer_call', { p_call_id: callId, p_device: THIS_DEVICE });
+  if (error) throw error;
+  return data;
+}
+
 /** A call still ringing for me — used when the app opens from a call push. */
 export async function findRingingCallFor(sb: UsClient, userId: string): Promise<Call | null> {
   await sb.rpc('expire_stale_calls');

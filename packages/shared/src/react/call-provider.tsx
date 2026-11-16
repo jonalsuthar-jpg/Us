@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { createCall, fetchIceServers, findRingingCallFor, getCall, setCallStatus } from '../api/calls';
+import { answerCall, createCall, fetchIceServers, findRingingCallFor, getCall, setCallStatus } from '../api/calls';
 import { notifyPartner } from '../api/push';
 import type { Call } from '../database.types';
 import { CallManager, type CallBackend, type CallSignaling, type CallState, type RtcAdapter } from '../webrtc/call-manager';
 import { useCouple } from './couple-provider';
+import { onForegroundChange } from './use-foreground-tick';
 
 const Ctx = createContext<CallManager | null>(null);
 
@@ -71,6 +72,7 @@ export function CallProvider({ rtc, forceRelay, keepCallWhenClosed, onClosedCall
     () => ({
       createCall: (media) => createCall(sb, { coupleId: couple.id, callerId: me.id, calleeId: partner.id, media }),
       setStatus: (id, status) => setCallStatus(sb, id, status),
+      answer: (id) => answerCall(sb, id),
       getCall: (id) => getCall(sb, id),
       iceServers: () => fetchIceServers(sb),
       notify: (req) => void notifyPartner(sb, req),
@@ -108,9 +110,18 @@ export function CallProvider({ rtc, forceRelay, keepCallWhenClosed, onClosedCall
     });
     // Caller gave up / call answered: the DB is the backstop if a broadcast was missed.
     const offCalls = channel.calls.on(({ row }) => manager.syncFromRow(row));
+    // Back in front: anything may have happened to the call while we were away
+    // (answered on my laptop, given up on) without a broadcast reaching us.
+    const offFront = onForegroundChange((active) => {
+      if (!active) return;
+      check();
+      const id = manager.getState().call?.id;
+      if (id) void getCall(sb, id).then((row) => row && manager.syncFromRow(row)).catch(() => {});
+    });
     return () => {
       offStatus();
       offCalls();
+      offFront();
       if (mounted === manager) mounted = null;
       if (keepCallWhenClosed && manager.isOnCall()) {
         park(manager, me.id, partner.id, (id) => getCall(sb, id), () => onClosedRef.current?.());

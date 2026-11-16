@@ -9,6 +9,7 @@ interface UsCallNative {
   openFullScreenSettings(): void;
   clearMessageNotifications(): void;
   addListener(event: 'onHangupRequested', fn: () => void): EventSubscription;
+  addListener(event: 'onCallHandledElsewhere', fn: (e: { callId: string }) => void): EventSubscription;
 }
 
 /** Android-only call plumbing (see android/). Absent elsewhere, where every call is a no-op. */
@@ -38,3 +39,8 @@ export const openFullScreenSettings = () => safely((n) => n.openFullScreenSettin
 export const clearMessageNotifications = () => safely((n) => n.clearMessageNotifications(), undefined);
 /** "Hang up" pressed on the ongoing-call notification (the app may be closed). */
 export const onHangupRequested = (fn: () => void) => safely((n) => n.addListener('onHangupRequested', fn), undefined);
+/** A ringing call was answered or declined on my other device (Android push). */
+export function onCallHandledElsewhere(fn: (callId: string) => void): () => void {
+  const sub = safely((n) => n.addListener('onCallHandledElsewhere', (e) => fn(e.callId)), undefined);
+  return () => sub?.remove();
+}

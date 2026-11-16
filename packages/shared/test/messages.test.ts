@@ -121,6 +121,7 @@ describe('describeCall', () => {
     created_at: '2026-01-01T10:00:00Z',
     answered_at: null,
     ended_at: '2026-01-01T10:00:45Z',
+    answered_device: null,
   };
 
   it('is a missed call for the callee and "no answer" for the caller', () => {

@@ -97,6 +97,8 @@ export type Database = {
           created_at: string;
           answered_at: string | null;
           ended_at: string | null;
+          /** Which of the callee's devices answered (see answer_call). */
+          answered_device: string | null;
         };
         Insert: {
           id?: string;
@@ -625,6 +627,7 @@ export type Database = {
         Args: { p_call_id: string; p_status: CallStatus };
         Returns: Database['public']['Tables']['calls']['Row'];
       };
+      answer_call: { Args: { p_call_id: string; p_device: string }; Returns: Database['public']['Tables']['calls']['Row'] };
       expire_stale_calls: { Args: Record<PropertyKey, never>; Returns: number };
       current_couple_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       current_partner_id: { Args: Record<PropertyKey, never>; Returns: string | null };

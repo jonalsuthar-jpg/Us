@@ -175,6 +175,7 @@ function makeWorld() {
           created_at: new Date().toISOString(),
           answered_at: null,
           ended_at: null,
+          answered_device: null,
         };
         calls.set(call.id, call);
         return call;
@@ -183,6 +184,12 @@ function makeWorld() {
         statusLog.push([id, status]);
         const c = calls.get(id)!;
         calls.set(id, { ...c, status });
+      },
+      answer: async (id: string) => {
+        const c = calls.get(id)!;
+        if (c.status === 'active') throw new Error('call_already_answered');
+        statusLog.push([id, 'active']);
+        calls.set(id, { ...c, status: 'active' });
       },
       getCall: async (id: string) => calls.get(id) ?? null,
       iceServers: async () => [{ urls: 'turn:example' }],

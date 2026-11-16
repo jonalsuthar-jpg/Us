@@ -73,6 +73,8 @@ export function opusForMedia(sdp: string): string {
 export interface CallBackend {
   createCall(media: CallMedia): Promise<Call>;
   setStatus(callId: string, status: CallStatus): Promise<unknown>;
+  /** Take a call ringing for me; rejects if my other device already did. */
+  answer(callId: string): Promise<unknown>;
   getCall(callId: string): Promise<Call | null>;
   iceServers(): Promise<RTCIceServer[]>;
   notify(req: PushRequest): void;
@@ -369,11 +371,14 @@ export class CallManager {
     }
 
     try {
-      await this.opts.backend.setStatus(call.id, 'active');
-    } catch {
-      this.end('failed', 'That call is no longer available.');
+      await this.opts.backend.answer(call.id);
+    } catch (e) {
+      if (/call_already_answered/.test(String((e as { message?: string })?.message ?? e))) this.end('answered-elsewhere');
+      else this.end('failed', 'That call is no longer available.');
       return;
     }
+    // My other devices may still be ringing with the app closed: stop them.
+    this.opts.backend.notify({ category: 'call_handled', callId: call.id });
     // Build the peer before telling the caller, so their offer has somewhere to land.
     await this.createPeer();
     await this.send({ type: 'accept', callId: call.id });
@@ -385,6 +390,7 @@ export class CallManager {
     this.end('declined');
     await this.send({ type: 'decline', callId: call.id });
     await this.opts.backend.setStatus(call.id, 'declined').catch(() => {});
+    this.opts.backend.notify({ category: 'call_handled', callId: call.id });
   }
 
   async hangup() {

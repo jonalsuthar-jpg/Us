@@ -1,14 +1,16 @@
 /**
  * push — notify my partner via OneSignal.
  *
- * Body: { category: 'new_message', messageId } | { category: 'incoming_call' | 'call_ended', callId }
+ * Body: { category: 'new_message', messageId } | { category: 'incoming_call' | 'call_ended' | 'call_handled', callId }
  *     | { category: 'daily_question', questionId }
  *     | { category: 'thinking_of_you', tapId } | { category: 'location_shared' } | { category: 'arrival', checkId }
  *     | { category: 'new_snap' | 'snap_reaction', snapId }
  *     | { category: 'draw_invite', game? } | { category: 'doodle' | 'guess_turn', drawingId }
  *
  * The record is re-read with the service role and the caller must be its
- * sender/caller, so a client can't push arbitrary content. Each category maps
+ * sender/caller, so a client can't push arbitrary content. 'call_handled' is
+ * the one push to my own devices: I answered or declined a call on one, so
+ * the others (ringing with the app closed) stop. Each category maps
  * to its own channel, sound and priority (see CATEGORIES). Typing never pushes.
  *
  * Env: ONESIGNAL_APP_ID, ONESIGNAL_REST_API_KEY,
@@ -21,6 +23,7 @@ import { presign } from '../_shared/r2.ts';
 type Category =
   | 'incoming_call'
   | 'call_ended'
+  | 'call_handled'
   | 'new_message'
   | 'memory_resurfaced'
   | 'letter_unlocked'
@@ -39,6 +42,7 @@ type Category =
 const FEATURE: Record<Category, string> = {
   incoming_call: 'calls',
   call_ended: 'calls',
+  call_handled: 'calls',
   new_message: 'chat',
   memory_resurfaced: 'memories',
   letter_unlocked: 'letters',
@@ -74,6 +78,8 @@ const CATEGORIES: Record<Category, Style> = {
     threadId: 'calls',
   },
   call_ended: { priority: 5, iosInterruption: 'active', threadId: 'calls' },
+  // Silent and fast: it only stops a ring.
+  call_handled: { priority: 10, iosInterruption: 'passive', ttl: 60, threadId: 'calls' },
   new_message: {
     iosSound: 'us_chime.wav',
     androidChannelEnv: 'ONESIGNAL_ANDROID_CHANNEL_MESSAGES',
@@ -129,7 +135,39 @@ Deno.serve(async (req) => {
   let collapseId: string | undefined;
   let buttons: { id: string; text: string }[] | undefined;
 
-  if (body.category === 'new_message') {
+  if (body.category === 'call_handled') {
+    const { data: call } = await admin.from('calls').select('*').eq('id', body.callId).maybeSingle();
+    if (!call || call.callee_id !== userId || call.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
+    if (call.status === 'ringing') return json({ skipped: 'still_ringing' });
+    // To my phones only (browsers have nothing ringing to stop). The app's
+    // notification extension cancels the ring and never shows this; the text
+    // is there only so it is delivered like any other call push.
+    const res = await fetch('https://api.onesignal.com/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Key ${apiKey}` },
+      body: JSON.stringify({
+        app_id: appId,
+        target_channel: 'push',
+        include_aliases: { external_id: [userId] },
+        isAndroid: true,
+        isIos: false,
+        isAnyWeb: false,
+        headings: { en: 'Us' },
+        contents: { en: call.status === 'active' ? 'Answered on your other device' : 'Call ended' },
+        collapse_id: `call-${call.id}`,
+        android_channel_id: Deno.env.get('ONESIGNAL_ANDROID_CHANNEL_CALLS'),
+        data: { category: 'call_handled', callId: call.id, status: call.status, sentAt: Date.now() },
+        priority: 10,
+        ttl: CATEGORIES.call_handled.ttl,
+      }),
+    });
+    if (!res.ok) {
+      const result = await res.json().catch(() => ({}));
+      console.error('onesignal error', res.status, result);
+      return json({ error: 'push_failed' }, 502);
+    }
+    return json({ ok: true });
+  } else if (body.category === 'new_message') {
     const { data: msg } = await admin.from('messages').select('*').eq('id', body.messageId).maybeSingle();
     if (!msg || msg.sender_id !== userId || msg.couple_id !== coupleId) return json({ error: 'forbidden' }, 403);
     // Give an open chat a moment to read it: if it's read already, there's

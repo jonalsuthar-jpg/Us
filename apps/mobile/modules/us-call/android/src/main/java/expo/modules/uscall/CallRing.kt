@@ -30,6 +30,9 @@ object CallRing {
 
   private var ringingCallId: String? = null
 
+  /** The app, if it's running: a call was answered or declined on my other device. */
+  @Volatile var onHandledElsewhere: ((String) -> Unit)? = null
+
   /**
    * Calls that already rang or ended here. OneSignal replays a push it never
    * displayed itself each time the app process starts, so without this an

@@ -7,7 +7,8 @@ import com.onesignal.notifications.INotificationServiceExtension
 /**
  * OneSignal passes every push here first, even when Us is closed. A call push
  * becomes a ringing call (full screen when locked) instead of a plain
- * notification; the "missed" push that follows stops the ringing. Messages
+ * notification; the "missed" push that follows stops the ringing, and so does
+ * "handled" when I answer or decline on my other device. Messages
  * gather into one conversation notification instead of one each.
  */
 class CallNotificationExtension : INotificationServiceExtension {
@@ -54,6 +55,12 @@ class CallNotificationExtension : INotificationServiceExtension {
         event.preventDefault()
       }
       "call_ended" -> CallRing.cancel(event.context, callId)
+      // Answered or declined on my other device: stop ringing, show nothing.
+      "call_handled" -> {
+        CallRing.cancel(event.context, callId)
+        CallRing.onHandledElsewhere?.invoke(callId)
+        event.preventDefault()
+      }
     }
   }
 }

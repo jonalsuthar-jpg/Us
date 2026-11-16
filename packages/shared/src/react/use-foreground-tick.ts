@@ -23,6 +23,16 @@ export function setForegroundSource(next: ForegroundSource) {
   source = next;
 }
 
+/** The app is in front right now. */
+export function isForeground(): boolean {
+  return source.isActive();
+}
+
+/** Follow the app coming to the front (true) and going to the back (false). */
+export function onForegroundChange(cb: (active: boolean) => void): () => void {
+  return source.subscribe(cb);
+}
+
 /**
  * Run `fn` every `ms`, but only while the app is in front. A tick that falls
  * due in the background waits, and runs once as soon as we're back.

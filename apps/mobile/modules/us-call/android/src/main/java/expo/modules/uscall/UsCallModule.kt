@@ -19,11 +19,20 @@ class UsCallModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("UsCall")
 
-    /** "Hang up" pressed on the ongoing-call notification, maybe with the app closed. */
-    Events("onHangupRequested")
+    /**
+     * "Hang up" pressed on the ongoing-call notification, maybe with the app
+     * closed; a call answered or declined on my other device.
+     */
+    Events("onHangupRequested", "onCallHandledElsewhere")
 
-    OnCreate { CallService.onHangup = { sendEvent("onHangupRequested") } }
-    OnDestroy { CallService.onHangup = null }
+    OnCreate {
+      CallService.onHangup = { sendEvent("onHangupRequested") }
+      CallRing.onHandledElsewhere = { callId -> sendEvent("onCallHandledElsewhere", mapOf("callId" to callId)) }
+    }
+    OnDestroy {
+      CallService.onHangup = null
+      CallRing.onHandledElsewhere = null
+    }
 
     /** Keep the mic (and camera on video calls) while Us is in the background. */
     Function("startCallService") { title: String, video: Boolean ->

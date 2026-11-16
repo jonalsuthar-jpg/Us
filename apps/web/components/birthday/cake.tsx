@@ -11,7 +11,6 @@ const CANDLES = ['#F3B33D', '#3FA6A0', '#E46B8A', '#8E6BB8', '#7FB069'];
 export function Cake({ size, lit }: { size: number; lit: boolean }) {
   const u = size / 100;
   const tierTop = 34 * u;
-  const cakeHeight = 52 * u;
   return (
     <div role="img" aria-label={lit ? 'A birthday cake with lit candles' : 'A birthday cake'} className="relative select-none" style={{ width: size, height: size }}>
       <div className="absolute rounded-full bg-[#F2E9EF]" style={{ left: 4 * u, right: 4 * u, bottom: 6 * u, height: 9 * u }} />

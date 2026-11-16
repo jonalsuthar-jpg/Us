@@ -90,6 +90,7 @@ function useLab() {
               created_at: new Date().toISOString(),
               answered_at: null,
               ended_at: null,
+              answered_device: null,
             };
             calls.set(call.id, call);
             return call;
@@ -97,6 +98,10 @@ function useLab() {
           setStatus: async (id, status) => {
             const c = calls.get(id);
             if (c) calls.set(id, { ...c, status });
+          },
+          answer: async (id) => {
+            const c = calls.get(id);
+            if (c) calls.set(id, { ...c, status: 'active' });
           },
           getCall: async (id) => calls.get(id) ?? null,
           iceServers: async () => [],

@@ -238,6 +238,19 @@ await test('calls: cancelled/unanswered → missed, logged once', async () => {
   assert.equal(log[0].n, 1);
 });
 
+await test('calls: answering is first come, one device only', async () => {
+  const id = (await as(alice, () => one(`insert into public.calls (couple_id, caller_id, callee_id, media) values ($1, $2, $3, 'audio') returning id`, [couple.id, alice, bob]))).id;
+  await rejects(as(alice, () => q(`select public.answer_call($1, 'x')`, [id])), /call_not_found/, 'caller answers');
+  await rejects(as(carol, () => q(`select public.answer_call($1, 'x')`, [id])), /call_not_found/, 'outsider');
+  const first = await as(bob, () => one(`select (public.answer_call($1, 'phone')).*`, [id]));
+  assert.equal(first.status, 'active');
+  assert.equal(first.answered_device, 'phone');
+  assert.equal((await as(bob, () => one(`select (public.answer_call($1, 'phone')).status`, [id]))).status, 'active', 'same device again');
+  await rejects(as(bob, () => q(`select public.answer_call($1, 'laptop')`, [id])), /call_already_answered/, 'second device');
+  await as(bob, () => q(`select public.set_call_status($1, 'ended')`, [id]));
+  await rejects(as(bob, () => q(`select public.answer_call($1, 'phone')`, [id])), /call_already_answered/, 'after it ended');
+});
+
 await test('calls: listen and watch together ring and log like any call', async () => {
   for (const media of ['listen', 'watch']) {
     const id = (await as(alice, () => one(`insert into public.calls (couple_id, caller_id, callee_id, media) values ($1, $2, $3, $4) returning id`, [couple.id, alice, bob, media]))).id;

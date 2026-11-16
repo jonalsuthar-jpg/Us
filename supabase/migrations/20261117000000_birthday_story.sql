@@ -38,9 +38,10 @@ drop index if exists public.birthday_rooms_unnotified_idx;
 
 do $$
 begin
-  if exists (select 1 from pg_extension where extname = 'pg_cron')
-     and exists (select 1 from cron.job where jobname = 'birthday-unlock') then
-    perform cron.unschedule('birthday-unlock');
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    if exists (select 1 from cron.job where jobname = 'birthday-unlock') then
+      perform cron.unschedule('birthday-unlock');
+    end if;
   end if;
 end;
 $$;

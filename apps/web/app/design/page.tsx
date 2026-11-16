@@ -45,6 +45,7 @@ export default function DesignPage() {
     created_at: now,
     answered_at: null,
     ended_at: now,
+    answered_device: null,
   };
 
   return (

@@ -8,6 +8,7 @@ import type { UsClient } from '../supabase';
 export type PushCategory =
   | 'incoming_call'
   | 'call_ended' // replaces a ringing call notification with "missed call"
+  | 'call_handled' // to my own devices: I answered or declined on one, the others stop ringing
   | 'new_message'
   | 'memory_resurfaced' // TODO(phase-3/5)
   | 'letter_unlocked' // TODO(phase-3)
@@ -25,7 +26,7 @@ export type PushCategory =
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }
-  | { category: 'incoming_call' | 'call_ended'; callId: string }
+  | { category: 'incoming_call' | 'call_ended' | 'call_handled'; callId: string }
   | { category: 'daily_question'; questionId: string }
   | { category: 'thinking_of_you'; tapId: string }
   | { category: 'location_shared' }
@@ -52,9 +53,9 @@ export interface PushData {
 }
 
 /**
- * Ask the server to notify my partner. The Edge Function re-reads the record
- * with the service role and verifies I'm its sender, so this can't be abused
- * to push arbitrary content. Failures are non-fatal (the partner still gets
+ * Ask the server to notify my partner (or, for 'call_handled', my own other
+ * devices). The Edge Function re-reads the record with the service role and
+ * verifies I'm its sender, so this can't be abused to push arbitrary content. Failures are non-fatal (the partner still gets
  * the message in-app via Realtime).
  */
 export async function notifyPartner(sb: UsClient, req: PushRequest): Promise<void> {
