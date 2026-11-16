@@ -155,7 +155,20 @@ interface RowProps {
 
 function Row({ onPress, theme, art, tile = true, eyebrow, title, titleSerif, line, lineClass, action, tall }: RowProps) {
   const id = useId().replace(/:/g, '');
-  const glow: ViewStyle = { shadowColor: theme.glow, shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 10 }, elevation: 6 };
+  // Android sizes a "100%" Svg before the card has its width, so the gradient
+  // is drawn at the card's measured size, over a solid fill that's always there.
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const height = tall ? 104 : 92;
+  // Elevation needs a solid, rounded background on Android to cast a clean shadow.
+  const glow: ViewStyle = {
+    borderRadius: 26,
+    backgroundColor: theme.to,
+    shadowColor: theme.glow,
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+  };
   return (
     <Pressable
       accessibilityRole="button"
@@ -165,24 +178,32 @@ function Row({ onPress, theme, art, tile = true, eyebrow, title, titleSerif, lin
         void Haptics.selectionAsync().catch(() => {});
         onPress?.();
       }}
-      className="active:scale-[0.98]"
-      style={glow}
+      style={({ pressed }) => [glow, pressed && { transform: [{ scale: 0.98 }] }]}
     >
-      <View className={cn('flex-row items-center gap-3.5 overflow-hidden rounded-[26px] px-3.5', tall ? 'h-[104px]' : 'h-[92px]', theme.edge && 'border-2 border-white')}>
-        <Svg style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} width="100%" height="100%">
-          <Defs>
-            <LinearGradient id={`bg${id}`} x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={theme.from} />
-              <Stop offset="1" stopColor={theme.to} />
-            </LinearGradient>
-            <LinearGradient id={`gl${id}`} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#fff" stopOpacity={0.2} />
-              <Stop offset="0.5" stopColor="#fff" stopOpacity={0} />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100%" height="100%" fill={`url(#bg${id})`} />
-          <Rect width="100%" height="100%" fill={`url(#gl${id})`} />
-        </Svg>
+      <View
+        onLayout={(e) => {
+          const { width: w, height: h } = e.nativeEvent.layout;
+          if (!size || size.w !== w || size.h !== h) setSize({ w, h });
+        }}
+        style={{ height, borderRadius: 26, backgroundColor: theme.to, overflow: 'hidden' }}
+        className={cn('flex-row items-center gap-3.5 px-3.5', theme.edge && 'border-2 border-white')}
+      >
+        {size ? (
+          <Svg style={{ position: 'absolute', top: 0, left: 0 }} width={size.w} height={size.h} pointerEvents="none">
+            <Defs>
+              <LinearGradient id={`bg${id}`} x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor={theme.from} />
+                <Stop offset="1" stopColor={theme.to} />
+              </LinearGradient>
+              <LinearGradient id={`gl${id}`} x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor="#fff" stopOpacity={0.2} />
+                <Stop offset="0.5" stopColor="#fff" stopOpacity={0} />
+              </LinearGradient>
+            </Defs>
+            <Rect x={0} y={0} width={size.w} height={size.h} fill={`url(#bg${id})`} />
+            <Rect x={0} y={0} width={size.w} height={size.h} fill={`url(#gl${id})`} />
+          </Svg>
+        ) : null}
         <View>
           {tile ? <View className="h-16 w-16 items-center justify-center overflow-hidden rounded-[20px] bg-white">{art}</View> : <View className="h-16 w-16 items-center justify-center">{art}</View>}
           {tile ? <Sparks /> : null}
