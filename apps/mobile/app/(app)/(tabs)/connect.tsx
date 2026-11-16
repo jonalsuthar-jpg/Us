@@ -21,6 +21,8 @@ export default function Connect() {
 
   return (
     <ScrollView
+      // A soft lilac wash behind the page, as in the design.
+      className="bg-[#F7F3FB] dark:bg-paper"
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: CLEAR_CHAT_FAB }}
       contentContainerClassName="px-4"

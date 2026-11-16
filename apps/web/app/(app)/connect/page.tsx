@@ -13,8 +13,11 @@ export default function ConnectPage() {
   const quizzes = useFeature('quizzes');
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-7 sm:px-10 sm:py-12">
-      {daily || draw || quizzes ? <ConnectRows settings={<MobileSettingsLink className="h-10 w-10" />} /> : <FeatureOff />}
+    // A soft lilac wash behind the page, as in the design.
+    <div className="min-h-full bg-gradient-to-b from-[#F6F1FB] via-[#FBF7FC] to-[#FFF5F8] dark:from-paper dark:via-paper dark:to-paper">
+      <div className="mx-auto max-w-4xl px-4 py-7 sm:px-10 sm:py-12">
+        {daily || draw || quizzes ? <ConnectRows settings={<MobileSettingsLink className="h-10 w-10" />} /> : <FeatureOff />}
+      </div>
     </div>
   );
 }
