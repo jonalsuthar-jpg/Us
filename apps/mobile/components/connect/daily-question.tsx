@@ -1,9 +1,8 @@
 import { answerDaily, dailyState, DAILY_ANSWER_MAX, fromDateKey, getDaily, type DailyEntry } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { router } from 'expo-router';
-import { Flame, Hourglass, Lock } from 'lucide-react-native';
+import { Hourglass, Lock } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { ErrorNote } from '../module-screen';
 import { Avatar } from '../ui/avatar';
 import { Button } from '../ui/button';
@@ -15,34 +14,16 @@ import { Display, Text } from '../ui/text';
 export const dayLabel = (key: string, long = false) =>
   fromDateKey(key).toLocaleDateString(undefined, long ? { weekday: 'long', day: 'numeric', month: 'long' } : { weekday: 'short', day: 'numeric', month: 'short' });
 
-/** Today's prompt, a sealed answer and the reveal. Earlier days live in Our answers. */
-export function DailyQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
+/** Today's prompt, a sealed answer and the reveal (Connect opens it in a sheet). Earlier days live in Our answers. */
+export function TodayQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
   const { sb, me, partner, partnerSlot } = useCouple();
   const c = usePalette();
   const [answer, setAnswer] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
-  const header = (
-    <View className="flex-row items-baseline justify-between gap-3">
-      <Display className="text-heading">Today’s question</Display>
-      {daily.data ? <AnswersLink together={daily.data.together} streak={daily.data.streak} /> : null}
-    </View>
-  );
-  if (daily.error && !daily.data)
-    return (
-      <View className="gap-3">
-        {header}
-        <ErrorNote>{daily.error}</ErrorNote>
-      </View>
-    );
-  if (!daily.data)
-    return (
-      <View className="gap-3">
-        {header}
-        <Sheet tone="inset" className="h-48" />
-      </View>
-    );
+  if (daily.error && !daily.data) return <ErrorNote>{daily.error}</ErrorNote>;
+  if (!daily.data) return <Sheet tone="inset" className="h-48" />;
 
   const { today } = daily.data;
   const state = dailyState(today);
@@ -70,7 +51,6 @@ export function DailyQuestion({ daily }: { daily: ReturnType<typeof useDaily> })
 
   return (
     <View className="gap-3">
-      {header}
       <Sheet className="gap-4 rounded-[26px] p-5">
         <View className="flex-row items-center justify-between gap-2">
           <View className="flex-row items-center gap-2">
@@ -139,28 +119,6 @@ function AnswerBubbles({ entry, partnerName }: { entry: DailyEntry; partnerName:
         </View>
       )}
     </View>
-  );
-}
-
-/** "Our answers · 47" with the streak, beside the heading. Opens the archive. */
-function AnswersLink({ together, streak }: { together: number; streak: number }) {
-  const c = usePalette();
-  return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={`Our answers. ${together} answered together${streak > 1 ? `, ${streak} days in a row` : ''}`}
-      onPress={() => router.push('/questions')}
-      hitSlop={8}
-      className="flex-row items-center gap-1.5 active:opacity-70"
-    >
-      <Text className="font-sans-semibold text-small text-teal-700">{`Our answers · ${together}`}</Text>
-      {streak > 1 ? (
-        <View className="flex-row items-center gap-0.5 rounded-full bg-gold-50 px-2 py-0.5">
-          <Flame size={11} color={c.gold} />
-          <Text className="font-sans-bold text-micro text-gold-700">{String(streak)}</Text>
-        </View>
-      ) : null}
-    </Pressable>
   );
 }
 

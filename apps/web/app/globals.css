@@ -74,6 +74,12 @@
   100% { opacity: 0; transform: translateY(-60px) scale(1); }
 }
 
+/* The two of us on Connect: a gentle bob. */
+@keyframes us-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
 /* Our little plant: a slow sway, drifting petals, cans that pour, a pop when it grows. */
 @keyframes us-sway {
   0%, 100% { transform: rotate(-1.6deg); }

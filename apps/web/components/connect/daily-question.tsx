@@ -2,8 +2,7 @@
 
 import { answerDaily, dailyState, DAILY_ANSWER_MAX, fromDateKey, getDaily, type DailyEntry } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { Flame, Hourglass, Lock } from 'lucide-react';
-import Link from 'next/link';
+import { Hourglass, Lock } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { ErrorNote } from '@/components/app/module-header';
 import { Avatar } from '@/components/ui/avatar';
@@ -21,43 +20,8 @@ export function useDaily() {
   return useCoupleData('connect:daily', () => getDaily(sb), [sb]);
 }
 
-/** Today's question, with a link to Our answers (and the streak) beside the heading. */
-export function DailyQuestion() {
-  const daily = useDaily();
-  return (
-    <section aria-labelledby="todays-question" className="space-y-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id="todays-question" className="font-display text-heading text-ink">
-          Today’s question
-        </h2>
-        {daily.data ? <AnswersLink together={daily.data.together} streak={daily.data.streak} /> : null}
-      </div>
-      {daily.error && !daily.data ? (
-        <ErrorNote>{daily.error}</ErrorNote>
-      ) : daily.data ? (
-        <TodayQuestion daily={daily} />
-      ) : (
-        <Sheet tone="inset" pad="lg" className="h-64 animate-pulse" aria-busy />
-      )}
-    </section>
-  );
-}
-
-function AnswersLink({ together, streak }: { together: number; streak: number }) {
-  return (
-    <Link href="/connect/questions" className="inline-flex shrink-0 items-center gap-1.5 text-small font-semibold text-teal-700 hover:text-teal-800">
-      Our answers · {together}
-      {streak > 1 ? (
-        <span className="inline-flex items-center gap-0.5 rounded-full bg-gold-50 px-2 py-0.5 text-micro font-bold text-gold-700" aria-label={`${streak} days in a row`}>
-          <Flame className="h-3 w-3 text-gold-500" aria-hidden />
-          {streak}
-        </span>
-      ) : null}
-    </Link>
-  );
-}
-
-function TodayQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
+/** Today's question: the prompt, a sealed answer, and both answers once we have each written ours. */
+export function TodayQuestion({ daily }: { daily: ReturnType<typeof useDaily> }) {
   const { sb, me, partner, partnerSlot } = useCouple();
   const [answer, setAnswer] = useState('');
   const [error, setError] = useState<string | null>(null);
