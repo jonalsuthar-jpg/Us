@@ -1,0 +1,20 @@
+diff --git a/node_modules/react-native-incall-manager/android/src/main/java/com/zxcpoiu/incallmanager/InCallManagerModule.java b/node_modules/react-native-incall-manager/android/src/main/java/com/zxcpoiu/incallmanager/InCallManagerModule.java
+index b82ccb9..9714dfc 100644
+--- a/node_modules/react-native-incall-manager/android/src/main/java/com/zxcpoiu/incallmanager/InCallManagerModule.java
++++ b/node_modules/react-native-incall-manager/android/src/main/java/com/zxcpoiu/incallmanager/InCallManagerModule.java
+@@ -1996,7 +1996,14 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
+         stopRingtone();
+         stopRingback();
+         stopBusytone();
+-        stop();
++        // Us: a call keeps going when the app is swiped out of recents (a
++        // foreground service holds it). Leaving call mode here would drop
++        // the phone's voice processing and routing mid-call: louder, with the
++        // room's noise. The app calls stop() itself when the call ends, and
++        // Android resets the mode if the process dies.
++        if (!audioManagerActivated) {
++            stop();
++        }
+     }
+ 
+     private void updateAudioRoute() {

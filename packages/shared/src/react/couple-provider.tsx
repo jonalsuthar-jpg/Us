@@ -5,6 +5,7 @@ import { CoupleChannel, type ChannelStatus } from '../realtime/couple-channel';
 import type { UsClient } from '../supabase';
 import type { PartnerSlot } from '../tokens';
 import { ChatKeyProvider } from './chat-key-provider';
+import { isForeground, onForegroundChange } from './use-foreground-tick';
 
 export interface CoupleValue extends CoupleContext {
   sb: UsClient;
@@ -42,6 +43,11 @@ interface Props {
   platform: string;
   /** My partner unpaired or deleted their account while I had the app open. */
   onEnded?: () => void;
+  /**
+   * Phones: let the realtime link sleep while the app is in the background
+   * (calls still ring by push). See CoupleChannel.sleepInBackground.
+   */
+  sleepInBackground?: boolean;
   children: ReactNode;
 }
 
@@ -55,7 +61,7 @@ export const COUPLE_ENDED_TOPIC = 'couple:ended';
  *   - delivery receipts (any open client marks incoming messages delivered)
  *   - unread count for navigation badges
  */
-export function CoupleProvider({ sb, context, platform, onEnded, children }: Props) {
+export function CoupleProvider({ sb, context, platform, onEnded, sleepInBackground, children }: Props) {
   const { couple, me, partner } = context;
   const channel = useMemo(
     () => new CoupleChannel(sb, couple.id, me.id, platform),
@@ -114,12 +120,14 @@ export function CoupleProvider({ sb, context, platform, onEnded, children }: Pro
   useEffect(() => {
     const endChecks: ReturnType<typeof setTimeout>[] = [];
     let ended = false;
-    const offs = [
+    const offs: (() => void)[] = [
       channel.presence.on((online) => setPartnerOnline(online.has(partner.id))),
       channel.status.on((s) => {
         setConnection(s);
         // Back online: anything that arrived while we were away is now delivered.
-        if (s === 'live') void ackMessages(sb, 'delivered').catch(() => {});
+        if (s !== 'live') return;
+        void ackMessages(sb, 'delivered').catch(() => {});
+        refreshUnread();
       }),
       channel.changes.on((e) => {
         if (e.topic !== COUPLE_ENDED_TOPIC || e.from === me.id) return;
@@ -145,14 +153,20 @@ export function CoupleProvider({ sb, context, platform, onEnded, children }: Pro
       }),
     ];
     void channel.join();
+    if (sleepInBackground) {
+      channel.sleepInBackground();
+      channel.setForeground(isForeground());
+      offs.push(onForegroundChange((active) => channel.setForeground(active)));
+    }
     void ackMessages(sb, 'delivered').catch(() => {});
     refreshUnread();
     return () => {
       offs.forEach((off) => off());
       endChecks.forEach(clearTimeout);
+      clearTimeout(unreadTimer.current);
       void channel.leave();
     };
-  }, [channel, sb, couple.id, me.id, partner.id, refreshUnread]);
+  }, [channel, sb, couple.id, me.id, partner.id, refreshUnread, sleepInBackground]);
 
   const value = useMemo<CoupleValue>(
     () => ({

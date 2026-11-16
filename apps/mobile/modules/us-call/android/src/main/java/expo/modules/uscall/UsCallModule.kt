@@ -56,6 +56,20 @@ class UsCallModule : Module() {
       appContext.currentActivity?.let { activity -> activity.runOnUiThread { showWhenLocked(activity, on) } }
     }
 
+    /** Android's audio mode now (3 = in a call), to notice call mode lost mid-call. */
+    Function("audioMode") { CallAudio.mode(context) }
+
+    /** Mics and Bluetooth outputs there are to pick from right now. */
+    Function("audioChoices") { CallAudio.available(context) }
+
+    /** "phone" keeps the built-in mic with earphones in; "auto" lets Android pick. */
+    Function("preferMic") { which: String -> CallAudio.preferMic(context, which) }
+
+    /** Bluetooth earbuds as headphones, with the phone's mic. Returns where the sound went. */
+    Function("bluetoothMedia") { on: Boolean -> CallAudio.bluetoothMedia(context, on) }
+
+    Function("resetCallAudio") { CallAudio.reset(context) }
+
     /** The chat is open: clear the gathered message notification. */
     Function("clearMessageNotifications") {
       ChatNotifications.clear(context)

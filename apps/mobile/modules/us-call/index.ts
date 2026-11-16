@@ -8,8 +8,22 @@ interface UsCallNative {
   canRingFullScreen(): boolean;
   openFullScreenSettings(): void;
   clearMessageNotifications(): void;
+  audioMode(): number;
+  audioChoices(): AudioChoices;
+  preferMic(which: 'phone' | 'auto'): boolean;
+  bluetoothMedia(on: boolean): string | null;
+  resetCallAudio(): void;
   addListener(event: 'onHangupRequested', fn: () => void): EventSubscription;
   addListener(event: 'onCallHandledElsewhere', fn: (e: { callId: string }) => void): EventSubscription;
+}
+
+export interface AudioChoices {
+  /** Wired or USB earphones with a mic of their own. */
+  headsetMic: boolean;
+  /** Bluetooth earbuds that can be a call headset (their mic). */
+  bluetoothMic: boolean;
+  /** Bluetooth earbuds that can play as headphones. */
+  bluetoothMedia: boolean;
 }
 
 /** Android-only call plumbing (see android/). Absent elsewhere, where every call is a no-op. */
@@ -44,3 +58,13 @@ export function onCallHandledElsewhere(fn: (callId: string) => void): () => void
   const sub = safely((n) => n.addListener('onCallHandledElsewhere', (e) => fn(e.callId)), undefined);
   return () => sub?.remove();
 }
+
+/** Android's audio mode (3 = MODE_IN_COMMUNICATION); null where unknown. */
+export const audioMode = () => safely<number | null>((n) => n.audioMode(), null);
+export const audioChoices = () => safely<AudioChoices>((n) => n.audioChoices(), { headsetMic: false, bluetoothMic: false, bluetoothMedia: false });
+/** Speak through the phone's own mic even with earphones in, or let Android pick. */
+export const preferMic = (which: 'phone' | 'auto') => safely((n) => n.preferMic(which), false);
+/** Bluetooth earbuds as headphones (their media mode). Returns where the sound now goes. */
+export const bluetoothMedia = (on: boolean) => safely<string | null>((n) => n.bluetoothMedia(on), null);
+/** The call is over: back to Android's own choices. */
+export const resetCallAudio = () => safely((n) => n.resetCallAudio(), undefined);

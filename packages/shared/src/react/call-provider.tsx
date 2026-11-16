@@ -5,6 +5,8 @@ import type { Call } from '../database.types';
 import { CallManager, type CallBackend, type CallSignaling, type CallState, type RtcAdapter } from '../webrtc/call-manager';
 import { useCouple } from './couple-provider';
 import { onForegroundChange } from './use-foreground-tick';
+import { CoupleChannel } from '../realtime/couple-channel';
+import type { UsClient } from '../supabase';
 
 const Ctx = createContext<CallManager | null>(null);
 
@@ -27,31 +29,51 @@ let mounted: CallManager | null = null;
 /** A call still going with the app closed, waiting for the app to come back. */
 let parked: { manager: CallManager; me: string; partnerId: string; release: () => void } | null = null;
 
+/** What a parked call needs to keep talking to my partner without the app's screen. */
+interface ParkWith {
+  sb: UsClient;
+  coupleId: string;
+  me: string;
+  partnerId: string;
+  platform: string;
+  backend: CallBackend;
+  onEnded?: () => void;
+}
+
 /** The call on screen or carrying on with the app closed (for the notification's Hang up). */
 export function currentCallManager(): CallManager | null {
   return mounted ?? parked?.manager ?? null;
 }
 
-function park(manager: CallManager, me: string, partnerId: string, getRow: (id: string) => Promise<Call | null>, onEnded?: () => void) {
-  // The channel leaves with the screen; the media keeps flowing peer to peer.
+function park(manager: CallManager, w: ParkWith) {
+  // The app's channel leaves with the screen; the media keeps flowing peer to
+  // peer. A small channel of its own (no presence, no database changes) keeps
+  // hang-ups and reconnects reaching both of us meanwhile.
   manager.detach();
-  // Without the channel, the call row is how a hang-up from my partner reaches me.
+  const channel = new CoupleChannel(w.sb, w.coupleId, w.me, w.platform);
+  void channel.join({ presence: false, db: false }).then(() => {
+    if (parked?.manager !== manager) return;
+    manager.rebind({ send: (e) => channel.sendSignal(e), subscribe: (fn) => channel.signals.on(fn) }, w.backend);
+  });
+  // The call row backs that up, should a broadcast go missing.
   const callId = manager.getState().call?.id;
   const poll = setInterval(() => {
-    if (callId) void getRow(callId).then((row) => row && manager.syncFromRow(row)).catch(() => {});
-  }, 5_000);
+    if (callId) void w.backend.getCall(callId).then((row) => row && manager.syncFromRow(row)).catch(() => {});
+  }, 15_000);
   const off = manager.subscribe(() => {
     if (manager.isOnCall()) return;
     release();
     parked = null;
     manager.dispose();
-    onEnded?.();
+    w.onEnded?.();
   });
   const release = () => {
     clearInterval(poll);
     off();
+    manager.detach();
+    void channel.leave();
   };
-  parked = { manager, me, partnerId, release };
+  parked = { manager, me: w.me, partnerId: w.partnerId, release };
 }
 
 /**
@@ -124,12 +146,32 @@ export function CallProvider({ rtc, forceRelay, keepCallWhenClosed, onClosedCall
       offFront();
       if (mounted === manager) mounted = null;
       if (keepCallWhenClosed && manager.isOnCall()) {
-        park(manager, me.id, partner.id, (id) => getCall(sb, id), () => onClosedRef.current?.());
+        park(manager, { sb, coupleId: couple.id, me: me.id, partnerId: partner.id, platform: channel.platform, backend, onEnded: () => onClosedRef.current?.() });
       } else {
         manager.dispose();
       }
     };
-  }, [manager, signaling, backend, sb, me.id, partner.id, channel, keepCallWhenClosed]);
+  }, [manager, signaling, backend, sb, couple.id, me.id, partner.id, channel, keepCallWhenClosed]);
+
+  // While a call rings or is on, the realtime link stays awake in the background.
+  useEffect(() => {
+    let release: (() => void) | null = null;
+    const follow = () => {
+      const { phase } = manager.getState();
+      const busy = phase !== 'idle' && phase !== 'ended';
+      if (busy && !release) release = channel.hold();
+      else if (!busy && release) {
+        release();
+        release = null;
+      }
+    };
+    follow();
+    const off = manager.subscribe(follow);
+    return () => {
+      off();
+      release?.();
+    };
+  }, [manager, channel]);
 
   return <Ctx.Provider value={manager}>{children}</Ctx.Provider>;
 }

@@ -20,6 +20,28 @@ class Emitter<T> {
 
 export type ChannelStatus = 'connecting' | 'live' | 'offline';
 
+export interface JoinOptions {
+  /** Show me online to my partner (default true). */
+  presence?: boolean;
+  /** Messages and calls from Postgres Changes (default true). */
+  db?: boolean;
+}
+
+/** How long the app sits in the background before the link sleeps (see sleepInBackground). */
+const SLEEP_AFTER_MS = 30_000;
+
+/**
+ * Joins and leaves one after another, app-wide. Supabase hands back a
+ * channel that is still leaving if the same topic is joined again too soon
+ * (the app reopened, a parked call), so each waits for the last.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+function inTurn<T>(fn: () => Promise<T>): Promise<T> {
+  const run = queue.then(fn, fn);
+  queue = run.catch(() => {});
+  return run;
+}
+
 export interface TypingEvent {
   from: string;
   typing: boolean;
@@ -63,12 +85,18 @@ export class CoupleChannel {
   private db?: RealtimeChannel;
   private online = new Set<string>();
   private _status: ChannelStatus = 'connecting';
+  private joined: JoinOptions | null = null;
+  private holds = 0;
+  private sleepy = false;
+  private background = false;
+  private sleeping = false;
+  private sleepTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private readonly sb: UsClient,
     readonly coupleId: string,
     readonly userId: string,
-    private readonly platform: string,
+    readonly platform: string,
   ) {}
 
   get currentStatus() {
@@ -79,13 +107,78 @@ export class CoupleChannel {
     return this.online;
   }
 
-  async join() {
+  join(opts: JoinOptions = {}) {
+    this.joined = opts;
+    return inTurn(() => this.open(opts));
+  }
+
+  leave() {
+    this.joined = null;
+    clearTimeout(this.sleepTimer);
+    this.sleepTimer = undefined;
+    this.sleeping = false;
+    return inTurn(() => this.close());
+  }
+
+  /**
+   * Phones only: sleep the link once the app has been in the background a
+   * while, so it holds no socket or presence there (calls still ring by
+   * push), and wake it when the app is back. Not for the web, where a
+   * hidden tab must still ring.
+   */
+  sleepInBackground() {
+    this.sleepy = true;
+  }
+
+  /** The app came to the front (true) or went to the back (false). */
+  setForeground(active: boolean) {
+    this.background = !active;
+    if (active) {
+      clearTimeout(this.sleepTimer);
+      this.sleepTimer = undefined;
+      this.wake();
+    } else {
+      this.maybeSleep();
+    }
+  }
+
+  /** Keep the link awake (say, a call is on) until the returned release is called. */
+  hold(): () => void {
+    this.holds++;
+    this.wake();
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      this.holds--;
+      this.maybeSleep();
+    };
+  }
+
+  private maybeSleep() {
+    if (!this.sleepy || !this.background || this.holds > 0 || this.sleeping || this.sleepTimer || !this.joined) return;
+    this.sleepTimer = setTimeout(() => {
+      this.sleepTimer = undefined;
+      if (!this.background || this.holds > 0 || !this.joined) return;
+      this.sleeping = true;
+      void inTurn(() => this.close());
+    }, SLEEP_AFTER_MS);
+  }
+
+  private wake() {
+    if (!this.sleeping || !this.joined) return;
+    this.sleeping = false;
+    const opts = this.joined;
+    void inTurn(() => this.open(opts));
+  }
+
+  private async open({ presence = true, db = true }: JoinOptions) {
     // Private channels authorise with the user's JWT.
     await this.sb.realtime.setAuth();
 
     this.live = this.sb
       .channel(`couple:${this.coupleId}`, {
-        config: { private: true, broadcast: { self: false, ack: false }, presence: { key: this.userId } },
+        config: { private: true, broadcast: { self: false, ack: false }, ...(presence ? { presence: { key: this.userId } } : {}) },
       })
       .on('broadcast', { event: 'typing' }, ({ payload }) => this.typing.emit(payload as TypingEvent))
       .on('broadcast', { event: 'signal' }, ({ payload }) => this.signals.emit(payload as SignalEnvelope))
@@ -99,13 +192,14 @@ export class CoupleChannel {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await this.live?.track({ platform: this.platform, at: new Date().toISOString() });
+          if (presence) await this.live?.track({ platform: this.platform, at: new Date().toISOString() });
           this.setStatus('live');
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           this.setStatus('offline');
         }
       });
 
+    if (!db) return;
     const filter = `couple_id=eq.${this.coupleId}`;
     this.db = this.sb
       .channel(`db:${this.coupleId}`)
@@ -115,10 +209,13 @@ export class CoupleChannel {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calls', filter }, (p) =>
         this.calls.emit({ type: p.eventType, row: (p.eventType === 'DELETE' ? p.old : p.new) as Call }),
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        // Supabase rejoins on its own; this is only so a failure isn't silent.
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn('[us] database changes', status, err);
+      });
   }
 
-  async leave() {
+  private async close() {
     const channels = [this.live, this.db].filter(Boolean) as RealtimeChannel[];
     this.live = this.db = undefined;
     await Promise.all(channels.map((c) => this.sb.removeChannel(c)));

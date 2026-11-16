@@ -125,7 +125,7 @@ export default function AppLayout() {
         router.replace('/waiting');
       }}
     >
-    <CoupleProvider sb={supabase} context={ctx} platform={Platform.OS} onEnded={() => router.replace('/pair')}>
+    <CoupleProvider sb={supabase} context={ctx} platform={Platform.OS} onEnded={() => router.replace('/pair')} sleepInBackground>
       <CallProvider rtc={nativeRtc} forceRelay={env.forceRelay} keepCallWhenClosed onClosedCallEnded={releaseClosedCall}>
         <Bridge />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.paper } }}>

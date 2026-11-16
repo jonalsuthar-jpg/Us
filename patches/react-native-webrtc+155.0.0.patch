@@ -1,3 +1,26 @@
+diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java
+index d3bfe07..9e64ae5 100644
+--- a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java
++++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java
+@@ -59,6 +59,9 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+ 
+     private final GetUserMediaImpl getUserMediaImpl;
+ 
++    /** Us: the audio device module calls run through, for choosing the mic mid-call. */
++    public static volatile AudioDeviceModule current;
++
+     public WebRTCModule(ReactApplicationContext reactContext) {
+         super(reactContext);
+ 
+@@ -117,6 +120,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+         mVideoEncoderFactory = encoderFactory;
+         mVideoDecoderFactory = decoderFactory;
+         mAudioDeviceModule = adm;
++        // Us: the app picks the call's microphone and Bluetooth output (see us-call's CallAudio).
++        current = adm;
+ 
+         getUserMediaImpl = new GetUserMediaImpl(this, reactContext);
+     }
 diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
 index bdc9ffc..fc1d77e 100644
 --- a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java

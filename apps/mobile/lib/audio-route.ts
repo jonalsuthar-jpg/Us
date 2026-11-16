@@ -1,5 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter, PermissionsAndroid, Platform } from 'react-native';
 import type InCallManagerType from 'react-native-incall-manager';
+import { audioChoices, audioMode, bluetoothMedia, preferMic, resetCallAudio, type AudioChoices } from '@/modules/us-call';
 
 /**
  * Call audio routing via react-native-incall-manager. `auto` picks the
@@ -53,10 +55,30 @@ async function allowBluetooth() {
 
 /** Started and not stopped yet; the call screen may mount again mid-call. */
 let audioOn = false;
+let audioMedia: 'audio' | 'video' = 'audio';
+/** The route picked by hand this call, put back if call mode has to restart. */
+let pickedRoute: AudioRoute | null = null;
+/** Bluetooth earbuds playing as headphones, with the phone's mic (out of call mode on purpose). */
+let earbudsAsHeadphones = false;
+
+/** Android's MODE_IN_COMMUNICATION. */
+const IN_CALL_MODE = 3;
 
 export async function startCallAudio(media: 'audio' | 'video') {
-  if (audioOn) return;
+  if (audioOn) {
+    // The app's screen came back mid-call. If call mode was lost while it was
+    // away, the phone's voice processing went with it: start it again.
+    const mode = audioMode();
+    if (!earbudsAsHeadphones && mode !== null && mode !== IN_CALL_MODE) {
+      safely((m) => m.stop());
+      safely((m) => m.start({ media: audioMedia, auto: true }));
+      if (pickedRoute) chooseRoute(pickedRoute);
+    }
+    return;
+  }
   audioOn = true;
+  audioMedia = media;
+  pickedRoute = null;
   // Asked before starting: the audio manager only looks for Bluetooth as it starts.
   await allowBluetooth();
   safely((m) => m.start({ media, auto: true }));
@@ -64,8 +86,69 @@ export async function startCallAudio(media: 'audio' | 'video') {
 
 /** Send call sound to a device (Android), or toggle the loudspeaker (iOS). */
 export function chooseRoute(route: AudioRoute) {
+  pickedRoute = route;
+  if (earbudsAsHeadphones) setEarbudsAsHeadphones(false);
   if (Platform.OS === 'android') safely((m) => void m.chooseAudioRoute(route).catch(() => {}));
   else safely((m) => m.setForceSpeakerphoneOn(route === 'SPEAKER_PHONE'));
+}
+
+/** Which mic the call uses: the phone's own, or the earphones' (Android picks). */
+export type MicChoice = 'phone' | 'earphones';
+
+/** What there is to choose from now (Android). */
+export function micOptions(): AudioChoices {
+  return Platform.OS === 'android' ? audioChoices() : { headsetMic: false, bluetoothMic: false, bluetoothMedia: false };
+}
+
+/**
+ * Speak through the phone's mic or the earphones'. With Bluetooth earbuds,
+ * the phone's mic means the earbuds play as headphones (better sound, as
+ * their mic then isn't in use). Returns false if this phone couldn't.
+ */
+export function chooseMic(mic: MicChoice, remember = true): boolean {
+  if (Platform.OS !== 'android') return false;
+  if (remember) void AsyncStorage.setItem(MIC_KEY, mic).catch(() => {});
+  const { headsetMic, bluetoothMedia: btMedia } = audioChoices();
+  if (mic === 'earphones') {
+    if (earbudsAsHeadphones) setEarbudsAsHeadphones(false);
+    return preferMic('auto');
+  }
+  if (headsetMic) return preferMic('phone');
+  if (btMedia) return setEarbudsAsHeadphones(true);
+  return preferMic('phone');
+}
+
+const MIC_KEY = 'us.call-mic';
+
+/** The call just connected: use the mic picked last time, if it was the phone's. */
+export async function applyRememberedMic(): Promise<MicChoice> {
+  const mic = (await AsyncStorage.getItem(MIC_KEY).catch(() => null)) as MicChoice | null;
+  if (mic !== 'phone') return 'earphones';
+  const { headsetMic, bluetoothMedia: btMedia } = micOptions();
+  if (!headsetMic && !btMedia) return 'earphones';
+  return chooseMic('phone', false) ? 'phone' : 'earphones';
+}
+
+function setEarbudsAsHeadphones(on: boolean): boolean {
+  if (on) {
+    // Call mode would hold the earbuds in headset mode: step out of it.
+    safely((m) => m.stop());
+    const went = bluetoothMedia(true);
+    preferMic('phone');
+    earbudsAsHeadphones = went === 'bluetoothMedia';
+    if (!earbudsAsHeadphones) {
+      // This phone keeps call sound off A2DP: back to a normal call.
+      bluetoothMedia(false);
+      preferMic('auto');
+      safely((m) => m.start({ media: audioMedia, auto: true }));
+    }
+    return earbudsAsHeadphones;
+  }
+  earbudsAsHeadphones = false;
+  bluetoothMedia(false);
+  preferMic('auto');
+  safely((m) => m.start({ media: audioMedia, auto: true }));
+  return true;
 }
 
 /** Follow the available devices and the one in use. Android only; returns an unsubscribe. */
@@ -84,5 +167,8 @@ export function onAudioRoutes(fn: (available: AudioRoute[], selected: AudioRoute
 
 export function stopCallAudio() {
   audioOn = false;
+  pickedRoute = null;
+  earbudsAsHeadphones = false;
+  resetCallAudio();
   safely((m) => m.stop());
 }

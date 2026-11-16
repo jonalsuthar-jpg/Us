@@ -1,7 +1,7 @@
 import { formatDuration, isWideVideo, selfViewAspect, videoFit, type CallState, type VideoSize } from '@us/shared';
 import { useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { Bluetooth, Check, ChevronDown, Ear, Headphones, Layers, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
+import { Bluetooth, Check, ChevronDown, Ear, Headphones, Layers, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, Smartphone, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StatusBar, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -17,7 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediaStream, RTCView } from 'react-native-webrtc';
-import { chooseRoute, onAudioRoutes, startCallAudio, stopCallAudio, type AudioRoute } from '@/lib/audio-route';
+import { applyRememberedMic, chooseMic, chooseRoute, micOptions, onAudioRoutes, startCallAudio, stopCallAudio, type AudioRoute, type MicChoice } from '@/lib/audio-route';
 import { cancelIncomingRing, setShowWhenLocked, startCallService, stopCallService } from '@/modules/us-call';
 import { Avatar } from '../ui/avatar';
 import { cn } from '../ui/cn';
@@ -270,8 +270,24 @@ function Surface({
   const [routePicker, setRoutePicker] = useState(false);
   const route: AudioRoute = routes.selected ?? (speaker ? 'SPEAKER_PHONE' : 'EARPIECE');
   const routeOptions: AudioRoute[] = routes.available.length ? routes.available : ['EARPIECE', 'SPEAKER_PHONE'];
+  // Which mic: with earphones in, the phone's own can be picked instead. With
+  // Bluetooth earbuds that also plays them as headphones, which sounds better.
+  const [mic, setMic] = useState<MicChoice>('earphones');
+  const [micNote, setMicNote] = useState<string | null>(null);
+  const choices = routePicker ? micOptions() : null;
+  const canPickMic = !!choices && (choices.headsetMic || choices.bluetoothMedia);
+  const connected = state.phase === 'connected';
+  useEffect(() => {
+    if (connected) void applyRememberedMic().then(setMic);
+  }, [connected]);
+  const pickMic = (next: MicChoice) => {
+    const ok = chooseMic(next);
+    setMic(ok ? next : 'earphones');
+    setMicNote(ok || next === 'earphones' ? null : 'This phone keeps the earbuds’ mic on calls.');
+  };
   const pickRoute = (r: AudioRoute) => {
     chooseRoute(r);
+    setMic('earphones');
     setSpeakerOn(r === 'SPEAKER_PHONE');
     setRoutes((prev) => ({ ...prev, selected: r }));
     setRoutePicker(false);
@@ -535,6 +551,25 @@ function Surface({
               </Pressable>
             );
           })}
+          {canPickMic ? (
+            <>
+              <Text className="px-3 pb-1 pt-3 font-sans-semibold text-small text-ink-soft">Speak through</Text>
+              {(['phone', 'earphones'] as const).map((m) => (
+                <Pressable
+                  key={m}
+                  accessibilityRole="menuitem"
+                  accessibilityState={{ selected: m === mic }}
+                  onPress={() => pickMic(m)}
+                  className="flex-row items-center gap-3 rounded-control px-3 py-3 active:bg-paper-sunken"
+                >
+                  {m === 'phone' ? <Smartphone size={20} color="#241933" /> : <Headphones size={20} color="#241933" />}
+                  <Text className="flex-1">{m === 'phone' ? 'Phone’s mic' : 'Earphones’ mic'}</Text>
+                  {m === mic ? <Check size={18} color="#C41D55" /> : null}
+                </Pressable>
+              ))}
+              {micNote ? <Text className="px-3 pb-2 text-micro text-ink-muted">{micNote}</Text> : null}
+            </>
+          ) : null}
         </View>
       )}
 
