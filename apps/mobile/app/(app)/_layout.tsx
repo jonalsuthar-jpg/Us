@@ -4,7 +4,6 @@ import * as Linking from 'expo-linking';
 import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
-import { BirthdayDecor } from '@/components/birthday/birthday-decor';
 import { CallScreen } from '@/components/call/call-screen';
 import { ChatKeyApproval } from '@/components/chat/chat-key';
 import { DrawBridge, drawRoute } from '@/components/draw/draw-bridge';
@@ -135,12 +134,11 @@ export default function AppLayout() {
           <Stack.Screen name="draw/daily" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="draw/[id]" options={{ animation: 'fade_from_bottom' }} />
           <Stack.Screen name="play/quiz/[id]" options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="birthday" options={{ animation: 'fade_from_bottom' }} />
+          <Stack.Screen name="memory-story/[id]" options={{ animation: 'fade_from_bottom' }} />
         </Stack>
         <TapHeart />
         <ChatKeyApproval />
         <DrawBridge />
-        <BirthdayDecor />
         <CallScreen />
       </CallProvider>
     </CoupleProvider>

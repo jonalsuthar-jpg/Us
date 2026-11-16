@@ -12,8 +12,8 @@
  *
  * The rules are the old Storage policies: a path must be in our couple's
  * folder. Snaps can only be read while the snap is live. Birthday files are
- * readable with the room (the maker always, the birthday person from
- * midnight) and only the maker can add or remove them.
+ * read-only: readable with their story, never added to or removed (except
+ * by "clear").
  */
 import { cors, json, requireCaller, type Caller } from '../_shared/auth.ts';
 import { copyFile, presign, removeFile, removeFolder, stableDownload } from '../_shared/r2.ts';
@@ -39,9 +39,10 @@ async function allowed(caller: Caller, bucket: Bucket, paths: string[], write: b
   }
   if (bucket === 'birthday') {
     const rooms = [...new Set(ours.map((p) => p.split('/')[1]!))];
-    // RLS shows the room to the maker always, and to the birthday person from midnight.
-    const { data } = await caller.asUser.from('birthday_rooms').select('id, from_id').in('id', rooms);
-    const ok = new Set((data ?? []).filter((r) => !write || r.from_id === caller.userId).map((r) => r.id));
+    // The story is kept as it was: readable with its room (RLS), never changed.
+    if (write) return [];
+    const { data } = await caller.asUser.from('birthday_rooms').select('id').in('id', rooms);
+    const ok = new Set((data ?? []).map((r) => r.id));
     return ours.filter((p) => ok.has(p.split('/')[1]!));
   }
   return ours;

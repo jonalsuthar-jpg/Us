@@ -19,8 +19,9 @@ import {
   type MemoryKind,
   type MemoryRating,
 } from '@us/shared';
-import { useCouple, useCoupleData } from '@us/shared/react';
+import { useBirthdayStoryMemories, useCouple, useCoupleData } from '@us/shared/react';
 import { Heart, ImagePlus, Plus, Sparkles, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { EmptyNote, ErrorNote } from '@/components/app/module-header';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,9 @@ export function MemoryTimeline() {
   const [filter, setFilter] = useState<Filter>('all');
   const [editing, setEditing] = useState<Editing>(null);
   const [viewing, setViewing] = useState<Memory | null>(null);
+  const stories = useBirthdayStoryMemories();
+  const router = useRouter();
+  const openStory = (m: Memory) => router.push(`/memory/story/${m.id}`);
 
   const all = memories.data ?? [];
   const photoKey = all.map((m) => m.photo_path ?? '').join('|');
@@ -125,7 +129,13 @@ export function MemoryTimeline() {
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {g.items.map((m) => (
                   <li key={m.id}>
-                    <MemoryCard memory={m} url={m.photo_path ? urls[m.photo_path] : undefined} rated={!!ratings.data?.[m.id]} onOpen={() => setViewing(m)} />
+                    <MemoryCard
+                      memory={m}
+                      url={m.photo_path ? urls[m.photo_path] : undefined}
+                      rated={!!ratings.data?.[m.id]}
+                      story={stories.has(m.id)}
+                      onOpen={() => (stories.has(m.id) ? openStory(m) : setViewing(m))}
+                    />
                   </li>
                 ))}
               </ul>
@@ -141,6 +151,7 @@ export function MemoryTimeline() {
             url={viewing.photo_path ? urls[viewing.photo_path] : undefined}
             rating={ratings.data?.[viewing.id]}
             authorName={personFor(ctx, viewing.created_by).mine ? 'you' : partner.display_name}
+            onStory={stories.has(viewing.id) ? () => openStory(viewing) : undefined}
             onEdit={() => {
               setEditing({ memory: viewing });
               setViewing(null);
@@ -188,7 +199,7 @@ export function MemoryTimeline() {
   );
 }
 
-function MemoryCard({ memory, url, rated, onOpen }: { memory: Memory; url?: string; rated: boolean; onOpen: () => void }) {
+function MemoryCard({ memory, url, rated, story, onOpen }: { memory: Memory; url?: string; rated: boolean; story: boolean; onOpen: () => void }) {
   return (
     <button
       type="button"
@@ -211,6 +222,7 @@ function MemoryCard({ memory, url, rated, onOpen }: { memory: Memory; url?: stri
           </div>
           <h3 className="font-display text-heading text-ink">{memory.title}</h3>
           {memory.body ? <p className="line-clamp-3 text-small text-ink-soft">{memory.body}</p> : null}
+          {story ? <p className="pt-1 text-small font-medium text-rose-600">Open the story 🎂</p> : null}
         </div>
       </Sheet>
     </button>
@@ -223,6 +235,7 @@ function MemoryDetail({
   rating,
   authorName,
   onEdit,
+  onStory,
   onSaveRating,
 }: {
   memory: Memory;
@@ -230,6 +243,8 @@ function MemoryDetail({
   rating?: MemoryRating;
   authorName: string;
   onEdit: () => void;
+  /** It keeps a birthday story: open it. */
+  onStory?: () => void;
   onSaveRating: (r: { rating: number | null; note: string | null }) => Promise<unknown>;
 }) {
   const [stars, setStars] = useState<number | null>(rating?.rating ?? null);
@@ -244,6 +259,11 @@ function MemoryDetail({
         {formatDay(memory.happened_on)} · {KIND_LABEL[memory.kind]} · kept by {authorName}
       </p>
       {memory.body ? <p className="whitespace-pre-wrap font-serif text-lead font-light text-ink">{memory.body}</p> : null}
+      {onStory ? (
+        <Button block onClick={onStory}>
+          Open the story 🎂
+        </Button>
+      ) : null}
 
       <Sheet tone="inset" pad="sm" className="space-y-3">
         <div className="flex items-center justify-between gap-2">

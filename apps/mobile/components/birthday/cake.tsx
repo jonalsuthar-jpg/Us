@@ -6,10 +6,9 @@ import { Text } from '../ui/text';
 const CANDLES = ['#F3B33D', '#3FA6A0', '#E46B8A', '#8E6BB8', '#7FB069'];
 
 /**
- * The birthday cake: candles that blow out, and a knife line that follows
- * `knife` (0 → 1) down through it. Drawn with plain views so it scales.
+ * The birthday cake, with candles that blow out. Drawn with plain views so it scales.
  */
-export function Cake({ size, lit, knife = 0, cut = false }: { size: number; lit: boolean; knife?: number; cut?: boolean }) {
+export function Cake({ size, lit }: { size: number; lit: boolean }) {
   const u = size / 100;
   const tierTop = 34 * u;
   const cakeHeight = 52 * u;
@@ -41,29 +40,6 @@ export function Cake({ size, lit, knife = 0, cut = false }: { size: number; lit:
           </View>
         );
       })}
-      {/* the knife's line */}
-      {knife > 0 ? (
-        <View
-          style={{
-            position: 'absolute',
-            left: size / 2 - 0.6 * u,
-            top: tierTop,
-            width: 1.2 * u,
-            height: Math.min(1, knife) * cakeHeight,
-            backgroundColor: '#5B3F6E',
-            opacity: 0.55,
-            borderRadius: 99,
-          }}
-        />
-      ) : null}
-      {knife > 0 && !cut ? (
-        <Text style={{ position: 'absolute', left: size / 2 - 2 * u, top: tierTop + knife * cakeHeight - 13 * u, fontSize: 14 * u, lineHeight: 16 * u, transform: [{ rotate: '135deg' }] }}>🔪</Text>
-      ) : null}
-      {cut ? (
-        <Animated.View entering={ZoomIn.springify()} style={{ position: 'absolute', right: -2 * u, bottom: 4 * u }}>
-          <Text style={{ fontSize: 26 * u, lineHeight: 30 * u }}>🍰</Text>
-        </Animated.View>
-      ) : null}
     </View>
   );
 }

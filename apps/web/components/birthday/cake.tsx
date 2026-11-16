@@ -5,11 +5,10 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 const CANDLES = ['#F3B33D', '#3FA6A0', '#E46B8A', '#8E6BB8', '#7FB069'];
 
 /**
- * The birthday cake: candles that blow out, and a knife line that follows
- * `knife` (0 → 1) down through it. Sized by `size` in px; everything inside is
+ * The birthday cake, with candles that blow out. Sized by `size` in px; everything inside is
  * in hundredths of it.
  */
-export function Cake({ size, lit, knife = 0, cut = false }: { size: number; lit: boolean; knife?: number; cut?: boolean }) {
+export function Cake({ size, lit }: { size: number; lit: boolean }) {
   const u = size / 100;
   const tierTop = 34 * u;
   const cakeHeight = 52 * u;
@@ -38,19 +37,6 @@ export function Cake({ size, lit, knife = 0, cut = false }: { size: number; lit:
           <div style={{ width: 3 * u, height: 13 * u, borderRadius: u, background: colour }} />
         </div>
       ))}
-      {knife > 0 ? (
-        <div className="absolute rounded-full bg-[#5B3F6E] opacity-55" style={{ left: size / 2 - 0.6 * u, top: tierTop, width: 1.2 * u, height: Math.min(1, knife) * cakeHeight }} />
-      ) : null}
-      {knife > 0 && !cut ? (
-        <span className="pointer-events-none absolute" style={{ left: size / 2 - 2 * u, top: tierTop + knife * cakeHeight - 13 * u, fontSize: 14 * u, lineHeight: 1, transform: 'rotate(135deg)' }}>
-          🔪
-        </span>
-      ) : null}
-      {cut ? (
-        <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', bounce: 0.5 }} className="absolute" style={{ right: -2 * u, bottom: 4 * u, fontSize: 26 * u, lineHeight: 1 }}>
-          🍰
-        </motion.span>
-      ) : null}
     </div>
   );
 }

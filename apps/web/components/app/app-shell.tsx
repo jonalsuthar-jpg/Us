@@ -1,7 +1,7 @@
 "use client";
 
 import { MODULES, TAB_FEATURES, type ModuleId } from "@us/shared";
-import { useBirthday, useCouple, useFeatures } from "@us/shared/react";
+import { useCouple, useFeatures } from "@us/shared/react";
 import {
   HeartHandshake,
   House,
@@ -46,7 +46,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     connection,
   } = useCouple();
   const has = useFeatures();
-  const { festive } = useBirthday();
   // Only the areas this couple has something in.
   const modules = MODULES.filter((m) => TAB_FEATURES[m.id].some(has));
 
@@ -69,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <Seal size={30} />
           <span className="font-serif text-heading italic text-ink">
-            Us{festive ? " 🎂" : ""}
+            Us
           </span>
         </Link>
 

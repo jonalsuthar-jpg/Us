@@ -22,7 +22,6 @@ import {
   type Sticker,
 } from "@us/shared";
 import {
-  useBirthday,
   useCallManager,
   useChatKey,
   useChatMedia,
@@ -32,7 +31,6 @@ import {
   useMessages,
   useSnaps,
   useTyping,
-  useWishBurst,
 } from "@us/shared/react";
 import { ChatKeyBanner } from "@/components/chat/chat-key";
 import { ChevronsDown, Phone, Pin, Search, Video } from "lucide-react";
@@ -43,7 +41,6 @@ import { Bubble, type ReplyQuote } from "@/components/chat/bubble";
 import { CallEntry } from "@/components/chat/call-entry";
 import { Composer } from "@/components/chat/composer";
 import { DoodleDialog } from "@/components/draw/doodle-dialog";
-import { Confetti } from "@/components/games/confetti";
 import { StickerMaker } from "@/components/stickers/maker";
 import {
   ExpressionPanel,
@@ -75,17 +72,6 @@ export default function TalkPage() {
   return <Thread />;
 }
 
-/** Soft paper confetti behind the chat on the birthday. */
-const FESTIVE_BACKDROP = {
-  backgroundImage: [
-    "radial-gradient(circle at 12px 14px, rgba(228,107,138,0.16) 2.5px, transparent 3.5px)",
-    "radial-gradient(circle at 46px 40px, rgba(243,179,61,0.18) 2.5px, transparent 3.5px)",
-    "radial-gradient(circle at 30px 70px, rgba(63,166,160,0.15) 2.5px, transparent 3.5px)",
-    "radial-gradient(circle at 70px 22px, rgba(142,107,184,0.15) 2px, transparent 3px)",
-  ].join(", "),
-  backgroundSize: "84px 84px",
-};
-
 function Thread() {
   const {
     sb,
@@ -113,8 +99,6 @@ function Thread() {
   } = useMessages({ viewing: active });
   const media = useChatMedia(messages);
   const { cipher } = useChatKey();
-  const birthday = useBirthday();
-  const wishBurst = useWishBurst(messages, birthday.festive);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -443,12 +427,6 @@ function Thread() {
 
       <ChatKeyBanner />
 
-      {birthday.festive && birthday.room ? (
-        <p className="border-b border-paper-edge/80 bg-gradient-to-r from-rose-50 via-gold-50 to-teal-50 px-4 py-1.5 text-center text-small font-medium text-plum-800 sm:px-8">
-          🎂 It’s {birthday.room.name}’s birthday today 🎈
-        </p>
-      ) : null}
-
       {latestPin ? (
         <button
           type="button"
@@ -481,7 +459,6 @@ function Thread() {
             }
           }}
           className="scrollbar-quiet flex-1 overflow-y-auto px-4 sm:px-8"
-          style={birthday.festive ? FESTIVE_BACKDROP : undefined}
         >
           <div className="mx-auto max-w-3xl pb-2 pt-6">
             {loading ? (
@@ -618,7 +595,6 @@ function Thread() {
         ) : null}
       </div>
 
-      {wishBurst ? <Confetti key={wishBurst} pieces={80} /> : null}
 
       <Dialog
         open={panel === "search"}

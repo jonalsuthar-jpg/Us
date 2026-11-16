@@ -1,48 +1,33 @@
 'use client';
 
-import { BIRTHDAY_STEPS, birthdayUrls, daysTogether, type BirthdayRoom, type BirthdaySection, type BirthdayStep } from '@us/shared';
-import { bringCakeOnAnswer, useBirthday, useCallManager, useCouple, useFeatures, useUsSoFar, type BirthdayView } from '@us/shared/react';
+import { BIRTHDAY_STEPS, birthdayUrls, daysTogether, type BirthdayRoom } from '@us/shared';
+import { useBirthdayStory, useCouple, useUsSoFar } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Pencil, Phone, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Confetti } from '@/components/games/confetti';
 import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
 import { cn } from '@/lib/cn';
-import { SongPlayer, useBlow } from './audio';
-import { BirthdayEditor } from './birthday-editor';
+import { SongPlayer } from './audio';
 import { Cake } from './cake';
 
-/** Which part of the story each step edits. */
-const SECTION: Record<BirthdayStep, BirthdaySection> = {
-  wish: 'wish',
-  song: 'song',
-  notes: 'notes',
-  us: 'moments',
-  quiz: 'quiz',
-  gift: 'gift',
-  cake: 'cake',
-  card: 'card',
-  ending: 'ending',
-};
-
 /**
- * The birthday room: a story she taps through at her own pace. The maker sees
- * the same thing as a preview, with a pencil on every page.
+ * The birthday story, kept in Memories: tapped through again at your own
+ * pace, exactly as it was written.
  */
-export function BirthdayRoomPage() {
-  const b = useBirthday();
+export function BirthdayStoryPage({ memoryId }: { memoryId: string }) {
+  const story = useBirthdayStory(memoryId);
   const router = useRouter();
-  if (!b.room) {
+  if (!story.room) {
     return (
       <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-plum-900 px-8 text-center">
-        {b.loading ? (
+        {story.loading ? (
           <span className="h-6 w-6 animate-spin rounded-full border-2 border-white/30 border-t-white" />
         ) : (
           <>
-            <p className="text-body text-plum-100">Nothing here yet 🙂</p>
-            <Button variant="night" onClick={() => router.push('/home')}>
+            <p className="text-body text-plum-100">This story isn’t here 🙂</p>
+            <Button variant="night" onClick={() => router.push('/memory')}>
               Back
             </Button>
           </>
@@ -50,53 +35,42 @@ export function BirthdayRoomPage() {
       </div>
     );
   }
-  return <Story b={b} room={b.room} />;
+  return <Story room={story.room} />;
 }
 
-function Story({ b, room }: { b: BirthdayView; room: BirthdayRoom }) {
+function Story({ room }: { room: BirthdayRoom }) {
   const router = useRouter();
   const { sb, me, partner } = useCouple();
-  const has = useFeatures();
-  const { maker } = b;
-  const from = maker ? me.display_name : partner.display_name;
+  const from = room.from_id === me.id ? me.display_name : partner.display_name;
   const c = room.content;
-  const close = () => router.push('/home');
+  const close = () => router.push('/memory');
 
-  // Parts with nothing in them are skipped for her; the maker sees every page to fill it in.
+  // Pages with nothing in them are skipped.
   const steps = useMemo(
     () =>
       BIRTHDAY_STEPS.filter((s) => {
-        if (maker) return true;
         if (s === 'song') return !!c.song.audio_path;
         if (s === 'notes') return c.notes.length > 0;
         if (s === 'quiz') return c.quiz.length > 0;
         if (s === 'gift') return !!c.gift.title;
-        if (s === 'cake') return has('calls');
-        if (s === 'card') return has('draw');
         return true;
       }),
-    [maker, c, has],
+    [c],
   );
   const [index, setIndex] = useState(0);
   const step = steps[Math.min(index, steps.length - 1)]!;
   const [note, setNote] = useState(0);
   const [blown, setBlown] = useState(false);
   const [burst, setBurst] = useState(0);
-  const [editing, setEditing] = useState<BirthdaySection | null>(null);
   const celebrate = () => setBurst((n) => n + 1);
-
-  const { open } = b;
-  useEffect(() => {
-    if (!maker && !room.opened_at) void open().catch(() => {});
-  }, [maker, room.opened_at, open]);
 
   useEffect(() => {
     const before = document.title;
-    document.title = maker ? `Preview · ${room.name}’s birthday` : `Happy birthday, ${room.name} ✨`;
+    document.title = `${room.name}’s birthday ✨`;
     return () => {
       document.title = before;
     };
-  }, [maker, room.name]);
+  }, [room.name]);
 
   const paths = useMemo(() => [c.song.audio_path, ...c.moments.map((m) => m.photo_path)].filter((p): p is string => !!p), [c]);
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -122,11 +96,11 @@ function Story({ b, room }: { b: BirthdayView; room: BirthdayRoom }) {
   };
 
   // Arrow keys and Escape, for the browser.
-  const keys = useRef({ next, back, close, editing });
-  keys.current = { next, back, close, editing };
+  const keys = useRef({ next, back, close });
+  keys.current = { next, back, close };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (keys.current.editing || (e.target as HTMLElement)?.closest('input, textarea, [role="dialog"]')) return;
+      if ((e.target as HTMLElement)?.closest('input, textarea, [role="dialog"]')) return;
       if (e.key === 'ArrowRight') keys.current.next();
       if (e.key === 'ArrowLeft') keys.current.back();
       if (e.key === 'Escape') keys.current.close();
@@ -136,8 +110,6 @@ function Story({ b, room }: { b: BirthdayView; room: BirthdayRoom }) {
   }, []);
 
   const tapToAdvance = step === 'song' || step === 'notes' || step === 'us' || (step === 'wish' && blown);
-  const section = SECTION[step];
-  const draft = c.drafts.includes(section);
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-plum-900 text-paper">
@@ -156,29 +128,15 @@ function Story({ b, room }: { b: BirthdayView; room: BirthdayRoom }) {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          {maker ? (
-            <span className="rounded-full bg-gold-300 px-2.5 py-1 text-micro font-semibold text-plum-900">{`Preview · ${room.name} sees this on her birthday`}</span>
-          ) : (
-            <span className="text-small font-medium text-plum-100">{`From ${from} 💌`}</span>
-          )}
+          <span className="text-small font-medium text-plum-100">{`From ${from} 💌`}</span>
           <span className="flex-1" />
-          {maker ? (
-            <button
-              type="button"
-              onClick={() => setEditing(section)}
-              className={cn('flex h-9 items-center gap-1.5 rounded-full px-3 text-micro font-semibold text-white', draft ? 'bg-rose-500 hover:bg-rose-600' : 'bg-white/15 hover:bg-white/25')}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              {draft ? 'Draft · Edit' : 'Edit'}
-            </button>
-          ) : null}
           <button type="button" aria-label="Close" onClick={close} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 hover:bg-white/25">
             <X className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div className={cn('relative flex-1 overflow-y-auto', tapToAdvance && 'cursor-pointer')} onClick={tapToAdvance && !editing ? next : undefined}>
+      <div className={cn('relative flex-1 overflow-y-auto', tapToAdvance && 'cursor-pointer')} onClick={tapToAdvance ? next : undefined}>
         <div className="mx-auto flex min-h-full w-full max-w-xl flex-col justify-center px-6 py-6">
           <AnimatePresence mode="wait">
             <motion.div key={`${step}-${step === 'notes' ? note : ''}`} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.35 }}>
@@ -194,21 +152,17 @@ function Story({ b, room }: { b: BirthdayView; room: BirthdayRoom }) {
                   }}
                 />
               ) : step === 'song' ? (
-                <Song caption={c.song.caption} url={c.song.audio_path ? urls[c.song.audio_path] : undefined} from={from} maker={maker} />
+                <Song caption={c.song.caption} url={c.song.audio_path ? urls[c.song.audio_path] : undefined} from={from} />
               ) : step === 'notes' ? (
                 <Notes notes={c.notes} index={note} />
               ) : step === 'us' ? (
                 <UsSoFar room={room} urls={urls} from={from} />
               ) : step === 'quiz' ? (
-                <Quiz room={room} maker={maker} from={from} onMark={b.mark} onDone={celebrate} />
+                <Quiz room={room} from={from} />
               ) : step === 'gift' ? (
                 <Gift title={c.gift.title} body={c.gift.body} onOpen={celebrate} />
-              ) : step === 'cake' ? (
-                <CakeStep line={c.cake.line} from={from} maker={maker} canCall={has('calls')} onCut={celebrate} />
-              ) : step === 'card' ? (
-                <CardStep line={c.card.line} from={from} />
               ) : (
-                <Ending room={room} maker={maker} from={from} b={b} />
+                <Ending line={c.ending.line} from={from} />
               )}
             </motion.div>
           </AnimatePresence>
@@ -237,7 +191,6 @@ function Story({ b, room }: { b: BirthdayView; room: BirthdayRoom }) {
       </div>
 
       {burst ? <Confetti key={burst} pieces={90} /> : null}
-      {maker ? <BirthdayEditor room={room} section={editing} urls={urls} onSave={b.save} onClose={() => setEditing(null)} /> : null}
     </div>
   );
 }
@@ -247,7 +200,6 @@ function Kicker({ children }: { children: string }) {
 }
 
 function Wish({ line, name, blown, onBlow }: { line: string; name: string; blown: boolean; onBlow: () => void }) {
-  const mic = useBlow(!blown, () => !blown && onBlow());
   return (
     <div className="flex flex-col items-center gap-5">
       <Kicker>Make a wish</Kicker>
@@ -256,18 +208,18 @@ function Wish({ line, name, blown, onBlow }: { line: string; name: string; blown
         <Cake size={280} lit={!blown} />
       </button>
       <p className="text-center text-small text-plum-200">
-        {blown ? 'I hope it comes true ✨' : mic === 'on' ? 'Blow into your mic… or click the candles' : 'Click the candles to blow them out'}
+        {blown ? 'I hope it comes true ✨' : 'Click the candles to blow them out'}
       </p>
     </div>
   );
 }
 
-function Song({ caption, url, from, maker }: { caption: string; url?: string; from: string; maker: boolean }) {
+function Song({ caption, url, from }: { caption: string; url?: string; from: string }) {
   return (
     <div className="flex flex-col items-center gap-6" onClick={(e) => e.stopPropagation()}>
       <Kicker>{`A song from ${from}`}</Kicker>
       <p className="text-[56px] leading-none">🎶</p>
-      {url ? <SongPlayer url={url} autoPlay /> : <p className="text-center text-body text-plum-200">{maker ? 'No voice note yet. Click Edit to record yourself singing.' : 'Loading…'}</p>}
+      {url ? <SongPlayer url={url} autoPlay /> : <p className="text-center text-body text-plum-200">Loading…</p>}
       {caption ? <p className="text-center font-serif text-lead italic">{caption}</p> : null}
     </div>
   );
@@ -279,7 +231,7 @@ function Notes({ notes, index }: { notes: string[]; index: number }) {
       <Kicker>Things I’ve noticed about you</Kicker>
       <div className={cn('relative flex min-h-[220px] items-center justify-center rounded-[30px] bg-paper px-8 py-10', index % 2 ? 'rotate-[1.5deg]' : '-rotate-[1.5deg]')}>
         <span className="absolute left-5 top-2 font-serif text-[48px] text-rose-300">“</span>
-        <p className="text-center font-display text-[24px] leading-[1.35] text-plum-900">{notes[index] ?? 'Add a few notes from Edit.'}</p>
+        <p className="text-center font-display text-[24px] leading-[1.35] text-plum-900">{notes[index]}</p>
       </div>
       <p className="text-center text-small text-plum-200">{index < notes.length - 1 ? 'Click for the next one' : '💛'}</p>
     </div>
@@ -330,67 +282,29 @@ function UsSoFar({ room, urls, from }: { room: BirthdayRoom; urls: Record<string
   );
 }
 
-function Quiz({ room, maker, from, onMark, onDone }: { room: BirthdayRoom; maker: boolean; from: string; onMark: (i: number, right: boolean) => Promise<void>; onDone: () => void }) {
+/** The questions, the answers, and how she marked each one on the day. */
+function Quiz({ room, from }: { room: BirthdayRoom; from: string }) {
   const qs = room.content.quiz;
-  const [marks, setMarks] = useState<Record<string, boolean>>(() => (maker ? {} : room.marks));
-  const firstOpen = qs.findIndex((_, i) => marks[i] === undefined);
-  const [i, setI] = useState(firstOpen === -1 ? qs.length : firstOpen);
-  const [shown, setShown] = useState(false);
-  const score = Object.values(marks).filter(Boolean).length;
-
-  const mark = (right: boolean) => {
-    setMarks((m) => ({ ...m, [i]: right }));
-    if (!maker) void onMark(i, right).catch(() => {});
-    setShown(false);
-    if (i + 1 >= qs.length) onDone();
-    setI(i + 1);
-  };
-
-  if (!qs.length) return <p className="text-center text-plum-200">Add questions from Edit.</p>;
-  if (i >= qs.length) {
-    return (
-      <div className="flex flex-col items-center gap-4">
-        <Kicker>How well do I know you?</Kicker>
-        <p className="font-display text-[60px] leading-none">{`${score}/${qs.length}`}</p>
-        <p className="text-center text-lead text-plum-100">{score >= qs.length - 1 ? `Not bad for ${from}, right? 😎` : 'Okay, I’m still learning 😅'}</p>
-        <button
-          type="button"
-          onClick={() => {
-            setMarks({});
-            setI(0);
-          }}
-          className="text-small text-plum-300 underline"
-        >
-          See them again
-        </button>
-      </div>
-    );
-  }
-  const q = qs[i]!;
+  const marked = qs.some((_, i) => room.marks[i] !== undefined);
+  const score = qs.filter((_, i) => room.marks[i]).length;
   return (
-    <div className="space-y-5">
-      <Kicker>{`How well do I know you? · ${i + 1}/${qs.length}`}</Kicker>
-      <div className="space-y-4 rounded-[28px] bg-paper px-6 py-7">
-        <p className="text-center font-display text-[22px] leading-[1.3] text-plum-900">{q.q}</p>
-        {shown ? (
-          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="space-y-1 rounded-[18px] bg-rose-50 px-4 py-3 text-center">
-            <p className="text-micro text-rose-600">{`${from} says`}</p>
-            <p className="text-lead font-semibold text-plum-900">{q.a}</p>
-          </motion.div>
-        ) : (
-          <Button block onClick={() => setShown(true)}>{`Reveal ${from}’s answer`}</Button>
-        )}
+    <div className="space-y-5" onClick={(e) => e.stopPropagation()}>
+      <Kicker>How well do I know you?</Kicker>
+      {marked ? <p className="text-center font-display text-[44px] leading-none">{`${score}/${qs.length}`}</p> : null}
+      <div className="space-y-3">
+        {qs.map((q, i) => (
+          <div key={i} className="space-y-2 rounded-[24px] bg-paper px-5 py-4">
+            <p className="font-display text-[19px] leading-[1.3] text-plum-900">{q.q}</p>
+            <div className="flex items-center gap-2">
+              <p className="flex-1 text-body text-plum-700">
+                <span className="text-micro text-rose-600">{`${from} said `}</span>
+                {q.a}
+              </p>
+              {room.marks[i] !== undefined ? <span className="text-lead text-plum-900">{room.marks[i] ? '✓' : '✗'}</span> : null}
+            </div>
+          </div>
+        ))}
       </div>
-      {shown ? (
-        <div className="flex gap-3">
-          <Button variant="night" className="flex-1" onClick={() => mark(false)}>
-            ✗ Wrong
-          </Button>
-          <Button variant="accept" className="flex-1" onClick={() => mark(true)}>
-            ✓ Right
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -424,169 +338,12 @@ function Gift({ title, body, onOpen }: { title: string; body: string; onOpen: ()
   );
 }
 
-/** A cake with a knife to drag down through it. */
-export function CakeCutter({ knife, cut, size, onMove }: { knife: number; cut: boolean; size: number; onMove: (knife: number) => void }) {
-  const box = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
-  const at = (e: ReactPointerEvent) => {
-    const r = box.current?.getBoundingClientRect();
-    if (!r) return;
-    // The knife enters at the top of the cake (a third down) and leaves at the plate.
-    onMove((e.clientY - r.top - size * 0.3) / (size * 0.55));
-  };
-  return (
-    <div
-      ref={box}
-      role="slider"
-      aria-label="Drag down to cut the cake"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(knife * 100)}
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'ArrowDown' && onMove(knife + 0.15)}
-      onPointerDown={(e) => {
-        dragging.current = true;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        at(e);
-      }}
-      onPointerMove={(e) => dragging.current && at(e)}
-      onPointerUp={() => (dragging.current = false)}
-      className="cursor-grab touch-none select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
-    >
-      <Cake size={size} lit={false} knife={Math.max(knife, cut ? 1 : 0.02)} cut={cut} />
-    </div>
-  );
-}
-
-function CakeStep({ line, from, maker, canCall, onCut }: { line: string; from: string; maker: boolean; canCall: boolean; onCut: () => void }) {
-  const calls = useCallManager();
-  const [tryCake, setTryCake] = useState({ knife: 0, cut: false });
-  return (
-    <div className="flex flex-col items-center gap-5">
-      <Kicker>Cut the cake together</Kicker>
-      {line ? <p className="text-center font-display text-[22px] leading-[1.3]">{line}</p> : null}
-      {maker ? (
-        <>
-          <p className="text-center text-small text-plum-200">On the day, her button calls you. You both see this cake, and when either of you drags the knife, it cuts on both screens. Try it:</p>
-          <CakeCutter
-            size={240}
-            knife={tryCake.knife}
-            cut={tryCake.cut}
-            onMove={(k) =>
-              setTryCake((t) => {
-                if (t.cut) return t;
-                const knife = Math.max(t.knife, Math.min(1, k));
-                if (knife >= 0.92) {
-                  onCut();
-                  return { knife: 1, cut: true };
-                }
-                return { knife, cut: false };
-              })
-            }
-          />
-        </>
-      ) : (
-        <>
-          <Cake size={220} lit={false} />
-          {canCall ? (
-            <Button
-              size="lg"
-              onClick={() => {
-                bringCakeOnAnswer();
-                void calls.startCall('video');
-              }}
-            >
-              <Phone className="h-5 w-5" />
-              {`Call ${from}`}
-            </Button>
-          ) : null}
-          <p className="text-center text-small text-plum-200">The cake comes out on the call. Drag the knife down to cut it.</p>
-        </>
-      )}
-    </div>
-  );
-}
-
-function CardStep({ line, from }: { line: string; from: string }) {
-  const router = useRouter();
-  return (
-    <div className="flex flex-col items-center gap-5">
-      <Kicker>Sign the card</Kicker>
-      <p className="text-[64px] leading-none">💌</p>
-      {line ? <p className="text-center font-display text-[22px] leading-[1.3]">{line}</p> : null}
-      <Button size="lg" onClick={() => router.push('/connect/draw')}>
-        Open Draw together ✍️
-      </Button>
-      <p className="text-center text-small text-plum-200">{`Doodle and sign it with ${from}, live. Save it when you’re both done.`}</p>
-    </div>
-  );
-}
-
-function Ending({ room, maker, from, b }: { room: BirthdayRoom; maker: boolean; from: string; b: BirthdayView }) {
-  const [keeping, setKeeping] = useState(false);
-  const [thanking, setThanking] = useState(false);
-  const [thanks, setThanks] = useState('Thank you for my birthday surprise 🥹💛');
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const kept = !!room.memory_id;
+function Ending({ line, from }: { line: string; from: string }) {
   return (
     <div className="flex flex-col items-center gap-6">
       <p className="text-[56px] leading-none">🎂</p>
-      <p className="text-center font-display text-[30px] leading-[1.25]">{room.content.ending.line}</p>
+      <p className="text-center font-display text-[30px] leading-[1.25]">{line}</p>
       <p className="text-small text-plum-200">{`— ${from}`}</p>
-      <div className="w-full space-y-3">
-        <Button
-          variant="night"
-          block
-          disabled={maker || kept}
-          loading={keeping}
-          onClick={async () => {
-            setKeeping(true);
-            await b.keep().catch(() => {});
-            setKeeping(false);
-          }}
-        >
-          {kept ? 'Kept in Memories ✓' : 'Keep this in Memories'}
-        </Button>
-        <Button block disabled={maker || sent} onClick={() => setThanking(true)}>
-          {sent ? 'Thank-you sent 💛' : 'Send a thank-you'}
-        </Button>
-        {maker ? <p className="text-center text-micro text-plum-300">These two buttons work for her on the day.</p> : null}
-      </div>
-      <Dialog open={thanking} onOpenChange={setThanking} title={`A note to ${from}`}>
-        <div className="space-y-3">
-          <textarea
-            aria-label="Your message"
-            value={thanks}
-            onChange={(e) => setThanks(e.target.value)}
-            rows={4}
-            maxLength={1000}
-            className="w-full rounded-control border border-paper-edge bg-paper-raised px-4 py-3 text-body text-ink focus:border-rose-400 focus:outline-none"
-          />
-          {error ? <p className="text-small text-rose-600">{error}</p> : null}
-          <Button
-            block
-            loading={busy}
-            disabled={!thanks.trim()}
-            onClick={async () => {
-              setBusy(true);
-              setError(null);
-              try {
-                await b.thank(thanks);
-                setSent(true);
-                setThanking(false);
-              } catch {
-                setError('Couldn’t send. Try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Send
-          </Button>
-        </div>
-      </Dialog>
     </div>
   );
 }

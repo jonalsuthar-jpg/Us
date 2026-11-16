@@ -1,49 +1,34 @@
-import { BIRTHDAY_STEPS, birthdayUrls, daysTogether, type BirthdayRoom, type BirthdaySection, type BirthdayStep } from '@us/shared';
-import { bringCakeOnAnswer, useBirthday, useCallManager, useCouple, useFeatures, useUsSoFar } from '@us/shared/react';
+import { BIRTHDAY_STEPS, birthdayUrls, daysTogether, type BirthdayRoom } from '@us/shared';
+import { useBirthdayStory, useCouple, useUsSoFar } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { ChevronLeft, ChevronRight, Pencil, Phone, X } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, PanResponder, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Confetti } from '../games/confetti';
 import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
-import { FormSheet } from '../ui/form-sheet';
 import { Display, Text } from '../ui/text';
-import { SongPlayer, useBlow } from './audio';
-import { BirthdayEditor } from './birthday-editor';
+import { SongPlayer } from './audio';
 import { Cake } from './cake';
 
-/** Which part of the story each step edits. */
-const SECTION: Record<BirthdayStep, BirthdaySection> = {
-  wish: 'wish',
-  song: 'song',
-  notes: 'notes',
-  us: 'moments',
-  quiz: 'quiz',
-  gift: 'gift',
-  cake: 'cake',
-  card: 'card',
-  ending: 'ending',
-};
-
 /**
- * The birthday room: a story she taps through at her own pace. The maker sees
- * the same thing as a preview, with a pencil on every page.
+ * The birthday story, kept in Memories: tapped through again at your own
+ * pace, exactly as it was written.
  */
-export function BirthdayRoomScreen() {
-  const b = useBirthday();
+export function BirthdayStoryScreen({ memoryId }: { memoryId: string }) {
+  const story = useBirthdayStory(memoryId);
   const insets = useSafeAreaInsets();
-  if (!b.room) {
+  if (!story.room) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-plum-900 px-8" style={{ paddingTop: insets.top }}>
-        {b.loading ? (
+        {story.loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <>
-            <Text className="text-center text-body text-plum-100">Nothing here yet 🙂</Text>
+            <Text className="text-center text-body text-plum-100">This story isn’t here 🙂</Text>
             <Button variant="night" onPress={() => router.back()}>
               Back
             </Button>
@@ -52,48 +37,36 @@ export function BirthdayRoomScreen() {
       </View>
     );
   }
-  return <Story b={b} room={b.room} />;
+  return <Story room={story.room} />;
 }
 
-function Story({ b, room }: { b: ReturnType<typeof useBirthday>; room: BirthdayRoom }) {
+function Story({ room }: { room: BirthdayRoom }) {
   const insets = useSafeAreaInsets();
   const { sb, me, partner } = useCouple();
-  const has = useFeatures();
-  const { maker } = b;
-  const from = maker ? me.display_name : partner.display_name;
+  const from = room.from_id === me.id ? me.display_name : partner.display_name;
   const c = room.content;
 
-  // Parts with nothing in them are skipped for her; the maker sees every page to fill it in.
+  // Pages with nothing in them are skipped.
   const steps = useMemo(
     () =>
       BIRTHDAY_STEPS.filter((s) => {
-        if (maker) return true;
         if (s === 'song') return !!c.song.audio_path;
         if (s === 'notes') return c.notes.length > 0;
         if (s === 'quiz') return c.quiz.length > 0;
         if (s === 'gift') return !!c.gift.title;
-        if (s === 'cake') return has('calls');
-        if (s === 'card') return has('draw');
         return true;
       }),
-    [maker, c, has],
+    [c],
   );
   const [index, setIndex] = useState(0);
   const step = steps[Math.min(index, steps.length - 1)]!;
   const [note, setNote] = useState(0);
   const [blown, setBlown] = useState(false);
   const [burst, setBurst] = useState(0);
-  const [editing, setEditing] = useState<BirthdaySection | null>(null);
   const celebrate = () => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     setBurst((n) => n + 1);
   };
-
-  // Her first look is noted (once); the maker's preview isn't.
-  const { open } = b;
-  useEffect(() => {
-    if (!maker && !room.opened_at) void open().catch(() => {});
-  }, [maker, room.opened_at, open]);
 
   // Private files (the song, photos): signed links.
   const paths = useMemo(() => [c.song.audio_path, ...c.moments.map((m) => m.photo_path)].filter((p): p is string => !!p), [c]);
@@ -121,9 +94,6 @@ function Story({ b, room }: { b: ReturnType<typeof useBirthday>; room: BirthdayR
   // Tapping the page moves on, except where the page itself is the thing to tap.
   const tapToAdvance = step === 'song' || step === 'notes' || step === 'us' || (step === 'wish' && blown);
 
-  const section = SECTION[step];
-  const draft = c.drafts.includes(section);
-
   return (
     <View className="flex-1 bg-plum-900">
       <Backdrop />
@@ -136,25 +106,8 @@ function Story({ b, room }: { b: ReturnType<typeof useBirthday>; room: BirthdayR
           ))}
         </View>
         <View className="flex-row items-center gap-2">
-          {maker ? (
-            <View className="rounded-full bg-gold-300 px-2.5 py-1">
-              <Text className="font-sans-semibold text-micro text-plum-900">{`Preview · ${room.name} sees this on her birthday`}</Text>
-            </View>
-          ) : (
-            <Text className="font-sans-medium text-small text-plum-100">{`From ${from} 💌`}</Text>
-          )}
+          <Text className="font-sans-medium text-small text-plum-100">{`From ${from} 💌`}</Text>
           <View className="flex-1" />
-          {maker ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Edit this page"
-              onPress={() => setEditing(section)}
-              className={cn('h-9 flex-row items-center gap-1.5 rounded-full px-3', draft ? 'bg-rose-500' : 'bg-white/15')}
-            >
-              <Pencil size={14} color="#fff" />
-              <Text className="font-sans-semibold text-micro text-white">{draft ? 'Draft · Edit' : 'Edit'}</Text>
-            </Pressable>
-          ) : null}
           <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={() => router.back()} className="h-9 w-9 items-center justify-center rounded-full bg-white/15">
             <X size={18} color="#fff" />
           </Pressable>
@@ -177,21 +130,17 @@ function Story({ b, room }: { b: ReturnType<typeof useBirthday>; room: BirthdayR
                 }}
               />
             ) : step === 'song' ? (
-              <Song caption={c.song.caption} url={c.song.audio_path ? urls[c.song.audio_path] : undefined} from={from} maker={maker} />
+              <Song caption={c.song.caption} url={c.song.audio_path ? urls[c.song.audio_path] : undefined} from={from} />
             ) : step === 'notes' ? (
               <Notes notes={c.notes} index={note} />
             ) : step === 'us' ? (
               <UsSoFar room={room} urls={urls} from={from} />
             ) : step === 'quiz' ? (
-              <Quiz room={room} maker={maker} from={from} onMark={b.mark} onDone={celebrate} />
+              <Quiz room={room} from={from} />
             ) : step === 'gift' ? (
               <Gift title={c.gift.title} body={c.gift.body} onOpen={celebrate} />
-            ) : step === 'cake' ? (
-              <CakeStep line={c.cake.line} from={from} maker={maker} canCall={has('calls')} onCut={celebrate} />
-            ) : step === 'card' ? (
-              <CardStep line={c.card.line} from={from} />
             ) : (
-              <Ending room={room} maker={maker} from={from} b={b} />
+              <Ending line={c.ending.line} from={from} />
             )}
           </Animated.View>
         </ScrollView>
@@ -219,7 +168,6 @@ function Story({ b, room }: { b: ReturnType<typeof useBirthday>; room: BirthdayR
       </View>
 
       {burst ? <Confetti key={burst} pieces={70} /> : null}
-      {maker ? <BirthdayEditor room={room} section={editing} urls={urls} onSave={b.save} onClose={() => setEditing(null)} /> : null}
     </View>
   );
 }
@@ -240,7 +188,6 @@ function Kicker({ children }: { children: string }) {
 }
 
 function Wish({ line, name, blown, onBlow }: { line: string; name: string; blown: boolean; onBlow: () => void }) {
-  const mic = useBlow(!blown, () => !blown && onBlow());
   return (
     <View className="items-center gap-5">
       <Kicker>Make a wish</Kicker>
@@ -249,13 +196,13 @@ function Wish({ line, name, blown, onBlow }: { line: string; name: string; blown
         <Cake size={270} lit={!blown} />
       </Pressable>
       <Text className="text-center text-small text-plum-200">
-        {blown ? 'I hope it comes true ✨' : mic === 'on' ? 'Blow into your phone… or tap the candles' : 'Tap the candles to blow them out'}
+        {blown ? 'I hope it comes true ✨' : 'Tap the candles to blow them out'}
       </Text>
     </View>
   );
 }
 
-function Song({ caption, url, from, maker }: { caption: string; url?: string; from: string; maker: boolean }) {
+function Song({ caption, url, from }: { caption: string; url?: string; from: string }) {
   return (
     <View className="items-center gap-6">
       <Kicker>{`A song from ${from}`}</Kicker>
@@ -263,7 +210,7 @@ function Song({ caption, url, from, maker }: { caption: string; url?: string; fr
       {url ? (
         <SongPlayer url={url} autoPlay />
       ) : (
-        <Text className="text-center text-body text-plum-200">{maker ? 'No voice note yet. Tap Edit to record yourself singing.' : 'Loading…'}</Text>
+        <Text className="text-center text-body text-plum-200">Loading…</Text>
       )}
       {caption ? <Display italic className="text-center text-lead text-paper">{caption}</Display> : null}
     </View>
@@ -276,7 +223,7 @@ function Notes({ notes, index }: { notes: string[]; index: number }) {
       <Kicker>Things I’ve noticed about you</Kicker>
       <View className="min-h-[220px] justify-center rounded-[30px] bg-paper px-7 py-9" style={{ transform: [{ rotate: index % 2 ? '1.5deg' : '-1.5deg' }] }}>
         <Text className="absolute left-5 top-3 text-[40px] leading-[48px] text-rose-300">“</Text>
-        <Display className="text-center text-[24px] leading-[32px] text-plum-900">{notes[index] ?? 'Add a few notes from Edit.'}</Display>
+        <Display className="text-center text-[24px] leading-[32px] text-plum-900">{notes[index]}</Display>
       </View>
       <Text className="text-center text-small text-plum-200">{index < notes.length - 1 ? 'Tap for the next one' : '💛'}</Text>
     </View>
@@ -326,61 +273,29 @@ function UsSoFar({ room, urls, from }: { room: BirthdayRoom; urls: Record<string
   );
 }
 
-function Quiz({ room, maker, from, onMark, onDone }: { room: BirthdayRoom; maker: boolean; from: string; onMark: (i: number, right: boolean) => Promise<void>; onDone: () => void }) {
+/** The questions, the answers, and how she marked each one on the day. */
+function Quiz({ room, from }: { room: BirthdayRoom; from: string }) {
   const qs = room.content.quiz;
-  const [marks, setMarks] = useState<Record<string, boolean>>(() => (maker ? {} : room.marks));
-  const firstOpen = qs.findIndex((_, i) => marks[i] === undefined);
-  const [i, setI] = useState(firstOpen === -1 ? qs.length : firstOpen);
-  const [shown, setShown] = useState(false);
-  const score = Object.values(marks).filter(Boolean).length;
-
-  const mark = (right: boolean) => {
-    void Haptics.selectionAsync().catch(() => {});
-    setMarks((m) => ({ ...m, [i]: right }));
-    if (!maker) void onMark(i, right).catch(() => {});
-    setShown(false);
-    if (i + 1 >= qs.length) onDone();
-    setI(i + 1);
-  };
-
-  if (!qs.length) return <Text className="text-center text-plum-200">Add questions from Edit.</Text>;
-  if (i >= qs.length) {
-    return (
-      <View className="items-center gap-4">
-        <Kicker>How well do I know you?</Kicker>
-        <Display className="text-center text-[56px] leading-[62px] text-paper">{`${score}/${qs.length}`}</Display>
-        <Text className="text-center text-lead text-plum-100">{score >= qs.length - 1 ? `Not bad for ${from}, right? 😎` : 'Okay, I’m still learning 😅'}</Text>
-        <Pressable accessibilityRole="button" onPress={() => { setMarks({}); setI(0); }}>
-          <Text className="text-small text-plum-300 underline">See them again</Text>
-        </Pressable>
-      </View>
-    );
-  }
-  const q = qs[i]!;
+  const marked = qs.some((_, i) => room.marks[i] !== undefined);
+  const score = qs.filter((_, i) => room.marks[i]).length;
   return (
     <View className="gap-5">
-      <Kicker>{`How well do I know you? · ${i + 1}/${qs.length}`}</Kicker>
-      <View className="gap-4 rounded-[28px] bg-paper px-6 py-7">
-        <Display className="text-center text-[22px] leading-[29px] text-plum-900">{q.q}</Display>
-        {shown ? (
-          <Animated.View entering={FadeIn.duration(300)} className="items-center gap-1 rounded-[18px] bg-rose-50 px-4 py-3">
-            <Text className="text-micro text-rose-600">{`${from} says`}</Text>
-            <Text className="text-center font-sans-semibold text-lead text-plum-900">{q.a}</Text>
-          </Animated.View>
-        ) : (
-          <Button onPress={() => setShown(true)}>{`Reveal ${from}’s answer`}</Button>
-        )}
+      <Kicker>How well do I know you?</Kicker>
+      {marked ? <Display className="text-center text-[44px] leading-[50px] text-paper">{`${score}/${qs.length}`}</Display> : null}
+      <View className="gap-3">
+        {qs.map((q, i) => (
+          <View key={i} className="gap-2 rounded-[24px] bg-paper px-5 py-4">
+            <Display className="text-[19px] leading-[25px] text-plum-900">{q.q}</Display>
+            <View className="flex-row items-center gap-2">
+              <Text className="flex-1 text-body text-plum-700">
+                <Text className="text-micro text-rose-600">{`${from} said `}</Text>
+                {q.a}
+              </Text>
+              {room.marks[i] !== undefined ? <Text className="text-lead text-plum-900">{room.marks[i] ? '✓' : '✗'}</Text> : null}
+            </View>
+          </View>
+        ))}
       </View>
-      {shown ? (
-        <View className="flex-row gap-3">
-          <Button variant="night" className="flex-1" onPress={() => mark(false)}>
-            ✗ Wrong
-          </Button>
-          <Button variant="accept" className="flex-1" onPress={() => mark(true)}>
-            ✓ Right
-          </Button>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -418,158 +333,12 @@ function Gift({ title, body, onOpen }: { title: string; body: string; onOpen: ()
   );
 }
 
-/** A cake with a knife to drag down through it. */
-export function CakeCutter({ knife, cut, size, onMove }: { knife: number; cut: boolean; size: number; onMove: (knife: number) => void }) {
-  const move = useRef(onMove);
-  move.current = onMove;
-  const top = useRef(0);
-  const pan = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        // Dragging the knife never turns into scrolling the page.
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: (e) => {
-          top.current = e.nativeEvent.pageY - e.nativeEvent.locationY;
-        },
-        // The knife enters at the top of the cake (a third down) and leaves at the plate.
-        onPanResponderMove: (e) => move.current((e.nativeEvent.pageY - top.current - size * 0.3) / (size * 0.55)),
-      }),
-    [size],
-  );
-  return (
-    <View {...pan.panHandlers} accessibilityLabel="Drag down to cut the cake" accessibilityRole="adjustable">
-      <Cake size={size} lit={false} knife={Math.max(knife, cut ? 1 : 0.02)} cut={cut} />
-    </View>
-  );
-}
-
-function CakeStep({ line, from, maker, canCall, onCut }: { line: string; from: string; maker: boolean; canCall: boolean; onCut: () => void }) {
-  const calls = useCallManager();
-  const [tryCake, setTryCake] = useState({ knife: 0, cut: false });
-  return (
-    <View className="items-center gap-5">
-      <Kicker>Cut the cake together</Kicker>
-      {line ? <Display className="text-center text-[22px] leading-[29px] text-paper">{line}</Display> : null}
-      {maker ? (
-        <>
-          <Text className="text-center text-small text-plum-200">On the day, her button calls you. You both see this cake, and when either of you drags the knife, it cuts on both screens. Try it:</Text>
-          <CakeCutter
-            size={230}
-            knife={tryCake.knife}
-            cut={tryCake.cut}
-            onMove={(k) =>
-              setTryCake((t) => {
-                if (t.cut) return t;
-                const knife = Math.max(t.knife, Math.min(1, k));
-                if (knife >= 0.92) {
-                  onCut();
-                  return { knife: 1, cut: true };
-                }
-                return { knife, cut: false };
-              })
-            }
-          />
-        </>
-      ) : (
-        <>
-          <Cake size={210} lit={false} />
-          {canCall ? (
-            <Button
-              size="lg"
-              icon={<Phone size={18} color="#fff" />}
-              onPress={() => {
-                bringCakeOnAnswer();
-                void calls.startCall('video');
-              }}
-            >
-              {`Call ${from}`}
-            </Button>
-          ) : null}
-          <Text className="text-center text-small text-plum-200">The cake comes out on the call. Drag the knife down to cut it.</Text>
-        </>
-      )}
-    </View>
-  );
-}
-
-function CardStep({ line, from }: { line: string; from: string }) {
-  return (
-    <View className="items-center gap-5">
-      <Kicker>Sign the card</Kicker>
-      <Text className="text-center text-[64px] leading-[72px]">💌</Text>
-      {line ? <Display className="text-center text-[22px] leading-[29px] text-paper">{line}</Display> : null}
-      <Button size="lg" onPress={() => router.push('/draw')}>
-        Open Draw together ✍️
-      </Button>
-      <Text className="text-center text-small text-plum-200">{`Doodle and sign it with ${from}, live. Save it when you’re both done.`}</Text>
-    </View>
-  );
-}
-
-function Ending({ room, maker, from, b }: { room: BirthdayRoom; maker: boolean; from: string; b: ReturnType<typeof useBirthday> }) {
-  const [keeping, setKeeping] = useState(false);
-  const [thanking, setThanking] = useState(false);
-  const [thanks, setThanks] = useState('Thank you for my birthday surprise 🥹💛');
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const kept = !!room.memory_id;
+function Ending({ line, from }: { line: string; from: string }) {
   return (
     <View className="items-center gap-6">
       <Text className="text-[56px] leading-[64px]">🎂</Text>
-      <Display className="text-center text-[28px] leading-[36px] text-paper">{room.content.ending.line}</Display>
+      <Display className="text-center text-[28px] leading-[36px] text-paper">{line}</Display>
       <Text className="text-small text-plum-200">{`— ${from}`}</Text>
-      <View className="w-full gap-3">
-        <Button
-          variant="night"
-          disabled={maker || kept}
-          loading={keeping}
-          onPress={async () => {
-            setKeeping(true);
-            await b.keep().catch(() => {});
-            setKeeping(false);
-          }}
-        >
-          {kept ? 'Kept in Memories ✓' : 'Keep this in Memories'}
-        </Button>
-        <Button disabled={maker || sent} onPress={() => setThanking(true)}>
-          {sent ? 'Thank-you sent 💛' : 'Send a thank-you'}
-        </Button>
-        {maker ? <Text className="text-center text-micro text-plum-300">These two buttons work for her on the day.</Text> : null}
-      </View>
-      <FormSheet centered open={thanking} title={`A note to ${from}`} onClose={() => setThanking(false)}>
-        <TextInput
-          accessibilityLabel="Your message"
-          value={thanks}
-          onChangeText={setThanks}
-          multiline
-          maxLength={1000}
-          className="min-h-[110px] rounded-control border border-paper-edge bg-paper-raised px-4 py-3 font-sans text-body text-ink"
-          textAlignVertical="top"
-        />
-        {error ? <Text className="text-small text-rose-600">{error}</Text> : null}
-        <Button
-          loading={busy}
-          disabled={!thanks.trim()}
-          onPress={async () => {
-            setBusy(true);
-            setError(null);
-            try {
-              await b.thank(thanks);
-              setSent(true);
-              setThanking(false);
-            } catch {
-              setError('Couldn’t send. Try again.');
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          Send
-        </Button>
-      </FormSheet>
     </View>
   );
 }

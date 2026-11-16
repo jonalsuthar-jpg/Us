@@ -17,8 +17,9 @@ import {
   type MemoryKind,
   type MemoryRating,
 } from '@us/shared';
-import { useCouple, useCoupleData } from '@us/shared/react';
+import { useBirthdayStoryMemories, useCouple, useCoupleData } from '@us/shared/react';
 import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
 import { Heart, ImagePlus, Plus, Sparkles, X } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, View } from 'react-native';
@@ -58,6 +59,8 @@ export function MemoryTimeline() {
   const [filter, setFilter] = useState<Filter>('all');
   const [editing, setEditing] = useState<{ memory?: Memory } | null>(null);
   const [viewing, setViewing] = useState<Memory | null>(null);
+  const stories = useBirthdayStoryMemories();
+  const openStory = (m: Memory) => router.push(`/memory-story/${m.id}`);
 
   const all = memories.data ?? [];
   const photoKey = all.map((m) => m.photo_path ?? '').join('|');
@@ -120,7 +123,7 @@ export function MemoryTimeline() {
               {g.label}
             </Display>
             {g.items.map((m) => (
-              <Pressable key={m.id} onPress={() => setViewing(m)} accessibilityRole="button" accessibilityLabel={m.title}>
+              <Pressable key={m.id} onPress={() => (stories.has(m.id) ? openStory(m) : setViewing(m))} accessibilityRole="button" accessibilityLabel={m.title}>
                 <Sheet pad="none" className="overflow-hidden">
                   {m.photo_path ? (
                     <View className="aspect-[4/3] bg-paper-sunken">
@@ -143,6 +146,7 @@ export function MemoryTimeline() {
                         {m.body}
                       </Text>
                     ) : null}
+                    {stories.has(m.id) ? <Text className="pt-1 font-sans-medium text-small text-rose-600">Open the story 🎂</Text> : null}
                   </View>
                 </Sheet>
               </Pressable>
@@ -159,6 +163,14 @@ export function MemoryTimeline() {
             url={viewing.photo_path ? urls[viewing.photo_path] : undefined}
             rating={ratings.data?.[viewing.id]}
             authorName={personFor(ctx, viewing.created_by).mine ? 'you' : partner.display_name}
+            onStory={
+              stories.has(viewing.id)
+                ? () => {
+                    setViewing(null);
+                    openStory(viewing);
+                  }
+                : undefined
+            }
             onEdit={() => {
               setEditing({ memory: viewing });
               setViewing(null);
@@ -212,6 +224,7 @@ function MemoryDetail({
   rating,
   authorName,
   onEdit,
+  onStory,
   onSaveRating,
 }: {
   memory: Memory;
@@ -219,6 +232,8 @@ function MemoryDetail({
   rating?: MemoryRating;
   authorName: string;
   onEdit: () => void;
+  /** It keeps a birthday story: open it. */
+  onStory?: () => void;
   onSaveRating: (r: { rating: number | null; note: string | null }) => Promise<unknown>;
 }) {
   const c = usePalette();
@@ -237,6 +252,7 @@ function MemoryDetail({
           {memory.body}
         </Display>
       ) : null}
+      {onStory ? <Button onPress={onStory}>Open the story 🎂</Button> : null}
       <Sheet tone="inset" pad="sm" className="gap-3">
         <View className="flex-row items-center justify-between">
           <Text className="font-sans-medium text-small">How it felt to you</Text>

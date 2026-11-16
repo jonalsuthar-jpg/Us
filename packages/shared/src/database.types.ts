@@ -715,9 +715,6 @@ export type Database = {
           partner_answers: number[] | null;
         }[];
       };
-      birthday_open: { Args: { p_id: string }; Returns: Database['public']['Tables']['birthday_rooms']['Row'] };
-      birthday_mark: { Args: { p_id: string; p_index: number; p_right: boolean }; Returns: Database['public']['Tables']['birthday_rooms']['Row'] };
-      birthday_keep: { Args: { p_id: string }; Returns: Database['public']['Tables']['birthday_rooms']['Row'] };
       birthday_totals: { Args: Record<PropertyKey, never>; Returns: Json };
       answer_guess: {
         Args: { p_drawing: string; p_solved: boolean; p_ms: number; p_points: number };

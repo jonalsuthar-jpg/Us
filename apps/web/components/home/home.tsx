@@ -15,7 +15,7 @@ import {
   type PartnerSlot,
   type Status,
 } from '@us/shared';
-import { useAccess, useBirthday, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
+import { useAccess, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
 import { CalendarHeart, Camera, ChevronRight, HeartHandshake, HeartPulse, MessageCircleHeart, Pencil, Phone, Sparkles, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -23,7 +23,6 @@ import { MobileSettingsLink } from '@/components/app/app-shell';
 import { ErrorNote } from '@/components/app/module-header';
 import { DoodleNote, DrawingBanner } from '@/components/draw/home-draw';
 import { PlantCard } from '@/components/plant/plant-card';
-import { BirthdayBanner } from '@/components/birthday/birthday-banner';
 import { SnapRow } from '@/components/snaps/snap-row';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, Spinner } from '@/components/ui/button';
@@ -50,7 +49,6 @@ export function Home() {
   const calls = useCallManager();
   const has = useFeatures();
   const announcement = useAccess()?.announcement;
-  const birthday = useBirthday();
   const home = useCoupleData('home', () => getHome(sb, { coupleId: couple.id, meId: me.id }), [sb, couple.id, me.id]);
   const [editingStatus, setEditingStatus] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
@@ -125,8 +123,6 @@ export function Home() {
           <p className="text-small text-ink">{announcement.body}</p>
         </Sheet>
       ) : null}
-
-      <BirthdayBanner b={birthday} />
 
       {has('draw') && <DrawingBanner />}
 
@@ -304,7 +300,7 @@ export function Home() {
         </div>
       ) : null}
 
-      {d && has('plant') ? <PlantCard party={birthday.room && birthday.phase === 'day' ? `🥳 ${birthday.room.name}’s birthday` : undefined} /> : null}
+      {d && has('plant') ? <PlantCard /> : null}
 
       <Dialog open={editingStatus} onOpenChange={setEditingStatus} title="Your status" description={`${theirName} sees this on their Home. It fades after a day.`}>
         {editingStatus ? (
