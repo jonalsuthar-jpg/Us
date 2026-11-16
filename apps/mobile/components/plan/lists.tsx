@@ -1,41 +1,57 @@
 import {
+  addDecisionOption,
   addListItem,
   clearDoneItems,
   deleteListItem,
   LIST_NAMES,
   LISTS,
+  listDecisionOptions,
   listItems,
   setListItemDone,
   sortListItems,
   type ListName,
 } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { Check, Plus, X } from 'lucide-react-native';
+import { BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, Clapperboard, Dices, Globe, Plus, ShoppingBag, X, type LucideIcon } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
-import { EmptyNote, ErrorNote } from '../module-screen';
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
+import { ErrorNote } from '../module-screen';
 import { Button, IconButton } from '../ui/button';
 import { cn } from '../ui/cn';
 import { usePalette } from '../ui/palette';
-import { Chip } from '../ui/segmented';
-import { Sheet } from '../ui/sheet';
-import { Text } from '../ui/text';
+import { Display, Text } from '../ui/text';
+import { Ring } from './bits';
+import { SLOT_BG, TONE, toneIcon, type Tone } from './tones';
+
+const STYLE: Record<ListName, { tone: Tone; Icon: LucideIcon; ring: string; decide?: string }> = {
+  groceries: { tone: 'teal', Icon: ShoppingBag, ring: '#0C8F82' },
+  bucket: { tone: 'gold', Icon: Globe, ring: '#F3A823' },
+  watch: { tone: 'rose', Icon: Clapperboard, ring: '#F5547C', decide: 'Film night' },
+  read: { tone: 'plum', Icon: BookOpen, ring: '#7A5E9A', decide: 'Next book' },
+};
 
 /** Shared lists: groceries, a bucket list, things to watch and read. */
-export function PlanLists() {
-  const { sb, couple, me, partner } = useCouple();
+export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
+  const { sb, couple, me, partner, mySlot, partnerSlot } = useCouple();
   const c = usePalette();
   const items = useCoupleData('plan:lists', () => listItems(sb, couple.id), [sb, couple.id]);
+  const options = useCoupleData('plan:decisions', () => (onPick ? listDecisionOptions(sb, couple.id) : Promise.resolve([])), [sb, couple.id]);
   const [list, setList] = useState<ListName>('groceries');
   const [text, setText] = useState('');
+  const [showDone, setShowDone] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fail = (e: Error) => setError(e.message);
 
   const all = items.data ?? [];
   const shown = sortListItems(all.filter((i) => i.list === list));
+  const open = shown.filter((i) => !i.done_at);
+  const done = shown.filter((i) => i.done_at);
   const meta = LISTS[list];
-  const doneCount = shown.filter((i) => i.done_at).length;
+  const style = STYLE[list];
   const nameOf = (id: string | null) => (id === me.id ? 'you' : id === partner.id ? partner.display_name : 'someone');
+  const again = list === 'groceries' ? [...new Map(done.map((i) => [i.text.toLowerCase(), i])).values()].filter((i) => !open.some((o) => o.text.toLowerCase() === i.text.toLowerCase())).slice(0, 4) : [];
 
   const add = () => {
     if (!text.trim()) return;
@@ -46,83 +62,175 @@ export function PlanLists() {
       .catch(fail);
   };
 
+  // Puts this list's open items on a Decide wheel (adding any that aren't there yet), then opens it.
+  async function pickOne() {
+    const category = style.decide!;
+    setBusy(true);
+    setError(null);
+    try {
+      const have = new Set((options.data ?? []).filter((o) => o.category === category).map((o) => o.label.toLowerCase()));
+      const missing = open.map((i) => i.text.trim().slice(0, 120)).filter((t) => t && !have.has(t.toLowerCase()));
+      if (missing.length) await options.mutate(() => Promise.all(missing.map((label) => addDecisionOption(sb, { couple_id: couple.id, category, label }))));
+      onPick!(category);
+    } catch (e) {
+      fail(e as Error);
+      setBusy(false);
+    }
+  }
+
   return (
     <View className="gap-4">
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5" contentContainerClassName="gap-2.5 px-5">
         {LIST_NAMES.map((n) => {
-          const open = all.filter((i) => i.list === n && !i.done_at).length;
+          const s = STYLE[n];
+          const of = all.filter((i) => i.list === n);
+          const left = of.filter((i) => !i.done_at).length;
+          const on = n === list;
           return (
-            <Chip key={n} selected={n === list} onPress={() => setList(n)}>
-              {`${LISTS[n].emoji} ${LISTS[n].title}${open ? ` · ${open}` : ''}`}
-            </Chip>
+            <Pressable
+              key={n}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={`${LISTS[n].title}, ${left} left`}
+              onPress={() => (setList(n), setShowDone(false))}
+              className={cn('w-[132px] gap-2.5 rounded-sheet border-[1.5px] p-3.5', on ? cn(TONE[s.tone].wash, 'border-transparent') : 'border-paper-edge bg-paper-raised')}
+            >
+              <View className="flex-row items-center justify-between">
+                <s.Icon size={22} color={on ? toneIcon(c, s.tone) : c.inkSoft} />
+                <Ring value={of.length ? (of.length - left) / of.length : 0} color={s.ring} track={on ? c.paperRaised : c.paperSunken} />
+              </View>
+              <View>
+                <Text className={cn('font-sans-semibold', on && TONE[s.tone].ink)}>{LISTS[n].title}</Text>
+                <Text className="mt-0.5 text-micro text-ink-soft">{left ? `${left} left` : of.length ? 'All done' : 'Empty'}</Text>
+              </View>
+            </Pressable>
           );
         })}
       </ScrollView>
 
-      <Sheet className="gap-3">
-        <View className="flex-row items-center gap-2">
-          <TextInput
-            accessibilityLabel={`Add to ${meta.title}`}
-            value={text}
-            onChangeText={setText}
-            onSubmitEditing={add}
-            returnKeyType="done"
-            blurOnSubmit={false}
-            maxLength={200}
-            placeholder={meta.placeholder}
-            placeholderTextColor={c.placeholder}
-            className="h-11 flex-1 rounded-control border border-paper-edge bg-paper px-4 font-sans text-body text-ink"
-          />
-          <IconButton label="Add" tone="rose" size="sm" onPress={add}>
-            <Plus size={20} color={c.onRose} />
-          </IconButton>
-        </View>
-        {error ? <ErrorNote>{error}</ErrorNote> : null}
+      <View className="flex-row items-center gap-2">
+        <TextInput
+          accessibilityLabel={`Add to ${meta.title}`}
+          value={text}
+          onChangeText={setText}
+          onSubmitEditing={add}
+          returnKeyType="done"
+          blurOnSubmit={false}
+          maxLength={200}
+          placeholder={meta.placeholder}
+          placeholderTextColor={c.placeholder}
+          className="h-[52px] flex-1 rounded-2xl border-[1.5px] border-paper-edge bg-paper-raised px-4 font-sans text-body text-ink"
+        />
+        <Pressable accessibilityRole="button" accessibilityLabel="Add" onPress={add} className="h-[52px] w-[52px] items-center justify-center rounded-2xl bg-rose-600 active:bg-rose-700">
+          <Plus size={22} color="#fff" strokeWidth={2.4} />
+        </Pressable>
+      </View>
 
-        {shown.length === 0 && !items.loading ? (
-          <EmptyNote title={`Nothing on ${meta.title.toLowerCase()} yet`}>{`Add the first thing. ${partner.display_name} sees it right away.`}</EmptyNote>
+      {again.length ? (
+        <View className="flex-row flex-wrap items-center gap-2">
+          <Text className="text-micro text-ink-muted">Buy again</Text>
+          {again.map((i) => (
+            <Pressable
+              key={i.id}
+              accessibilityRole="button"
+              onPress={() => void items.mutate(() => setListItemDone(sb, i.id, null)).catch(fail)}
+              className="h-9 justify-center rounded-full border border-dashed border-plum-300 px-3 active:bg-paper-sunken"
+            >
+              <Text className="text-small text-plum-600">+ {i.text}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {style.decide && onPick && open.length > 1 ? (
+        <Pressable accessibilityRole="button" disabled={busy} onPress={() => void pickOne()} className={cn('flex-row items-center gap-3 rounded-sheet bg-plum-800 px-4 py-3.5', busy && 'opacity-60')}>
+          <Dices size={22} color="#FFD98A" />
+          <View className="flex-1">
+            <Text className="font-sans-semibold text-paper">Pick one for tonight</Text>
+            <Text className="text-micro text-paper/70">Spin the wheel with these {open.length}</Text>
+          </View>
+          <ChevronRight size={18} color="#FFD98A" />
+        </Pressable>
+      ) : null}
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
+
+      <View className="rounded-sheet border border-paper-edge bg-paper-raised px-3.5">
+        {open.length === 0 && !items.loading ? (
+          <View className="items-center py-6">
+            <Display italic className="text-lead">
+              {done.length ? 'All done.' : `Nothing on ${meta.title.toLowerCase()} yet`}
+            </Display>
+            <Text className="mt-1 text-center text-small text-ink-soft">{`Add the next thing above. ${partner.display_name} sees it right away.`}</Text>
+          </View>
         ) : (
-          shown.map((i) => (
-            <View key={i.id} className="flex-row items-center gap-3 border-b border-paper-edge py-2.5">
+          open.map((i) => (
+            <Animated.View key={i.id} entering={FadeIn} layout={LinearTransition} className="flex-row items-center gap-2 border-b border-paper-sunken py-1">
               <Pressable
                 accessibilityRole="checkbox"
-                accessibilityState={{ checked: !!i.done_at }}
+                accessibilityState={{ checked: false }}
                 accessibilityLabel={i.text}
-                hitSlop={8}
-                onPress={() => void items.mutate(() => setListItemDone(sb, i.id, i.done_at ? null : me.id)).catch(fail)}
-                className={cn('h-6 w-6 items-center justify-center rounded-full border', i.done_at ? 'border-sage-500 bg-sage-500' : 'border-plum-300')}
+                onPress={() => void items.mutate(() => setListItemDone(sb, i.id, me.id)).catch(fail)}
+                className="h-11 w-11 items-center justify-center"
               >
-                {i.done_at ? <Check size={14} color="#fff" strokeWidth={3} /> : null}
+                <View className="h-6 w-6 rounded-full border-2 border-plum-300" />
               </Pressable>
               <View className="flex-1">
-                <Text className={i.done_at ? 'text-ink-muted line-through' : ''}>{i.text}</Text>
-                <Text className="text-micro text-ink-muted">
-                  {i.done_at ? `${meta.doneLabel} by ${nameOf(i.done_by)}` : `Added by ${nameOf(i.added_by)}`}
-                </Text>
+                <Text>{i.text}</Text>
+                <Text className="text-micro text-ink-muted">Added by {nameOf(i.added_by)}</Text>
               </View>
+              <View className={cn('h-2 w-2 rounded-full', SLOT_BG[i.added_by === me.id ? mySlot : partnerSlot])} />
               <IconButton label={`Remove ${i.text}`} size="sm" onPress={() => void items.mutate(() => deleteListItem(sb, i.id)).catch(fail)}>
                 <X size={16} color={c.inkMuted} />
               </IconButton>
-            </View>
+            </Animated.View>
           ))
         )}
 
-        {doneCount > 0 ? (
-          <Button
-            variant="quiet"
-            size="sm"
-            className="self-end"
-            onPress={() =>
-              Alert.alert(`Clear ${doneCount} ticked ${doneCount === 1 ? 'item' : 'items'}?`, undefined, [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Clear', onPress: () => void items.mutate(() => clearDoneItems(sb, couple.id, list)).catch(fail) },
-              ])
-            }
-          >
-            Clear ticked
-          </Button>
+        {done.length ? (
+          <>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDone }} onPress={() => setShowDone((x) => !x)} className="h-12 flex-row items-center justify-between">
+              <Text className="font-sans-medium text-small text-ink-soft">Done ({done.length})</Text>
+              {showDone ? <ChevronUp size={18} color={c.inkSoft} /> : <ChevronDown size={18} color={c.inkSoft} />}
+            </Pressable>
+            {showDone ? (
+              <>
+                {done.map((i) => (
+                  <View key={i.id} className="flex-row items-center gap-2 border-t border-paper-sunken py-1">
+                    <Pressable
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: true }}
+                      accessibilityLabel={i.text}
+                      onPress={() => void items.mutate(() => setListItemDone(sb, i.id, null)).catch(fail)}
+                      className="h-11 w-11 items-center justify-center"
+                    >
+                      <View className="h-6 w-6 items-center justify-center rounded-full bg-sage-500">
+                        <Check size={14} color="#fff" strokeWidth={3} />
+                      </View>
+                    </Pressable>
+                    <View className="flex-1">
+                      <Text className="text-ink-muted line-through">{i.text}</Text>
+                      <Text className="text-micro text-ink-muted">{`${meta.doneLabel} · ${nameOf(i.done_by)}`}</Text>
+                    </View>
+                  </View>
+                ))}
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  className="self-end"
+                  onPress={() =>
+                    Alert.alert(`Clear ${done.length} ticked ${done.length === 1 ? 'item' : 'items'}?`, undefined, [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Clear', onPress: () => void items.mutate(() => clearDoneItems(sb, couple.id, list)).catch(fail) },
+                    ])
+                  }
+                >
+                  Clear ticked
+                </Button>
+              </>
+            ) : null}
+          </>
         ) : null}
-      </Sheet>
+      </View>
     </View>
   );
 }

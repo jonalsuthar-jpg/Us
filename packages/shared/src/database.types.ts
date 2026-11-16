@@ -12,6 +12,10 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type CallMedia = 'audio' | 'video' | 'listen' | 'watch';
 /** image / audio live in our chat folder, video in R2 (see chat-video); gif / sticker are GIPHY links (media_meta.url). */
 export type MediaKind = 'image' | 'audio' | 'video' | 'gif' | 'sticker';
+/** Plan: what a shared cost was for (expenses.category). */
+export type ExpenseCategory = 'food' | 'groceries' | 'rent' | 'travel' | 'fun' | 'bills' | 'other';
+/** Plan: what sort of plan a calendar event is (calendar_events.kind). */
+export type EventKind = 'date' | 'trip' | 'birthday' | 'errand' | 'other';
 /** Small, optional hints for rendering before the file loads. */
 export interface MediaMeta {
   width?: number;
@@ -174,6 +178,7 @@ export type Database = {
           ends_at: string | null;
           all_day: boolean;
           notes: string | null;
+          kind: EventKind | null;
           created_at: string;
         };
         Insert: {
@@ -185,6 +190,7 @@ export type Database = {
           ends_at?: string | null;
           all_day?: boolean;
           notes?: string | null;
+          kind?: EventKind | null;
         };
         Update: {
           title?: string;
@@ -192,6 +198,7 @@ export type Database = {
           ends_at?: string | null;
           all_day?: boolean;
           notes?: string | null;
+          kind?: EventKind | null;
         };
         Relationships: [];
       };
@@ -218,10 +225,11 @@ export type Database = {
           task: string;
           effort: number;
           done_on: string;
+          thanked_at: string | null;
           created_at: string;
         };
         Insert: { id?: string; couple_id: string; done_by: string; task: string; effort?: number; done_on?: string };
-        Update: { done_by?: string; task?: string; effort?: number; done_on?: string };
+        Update: { done_by?: string; task?: string; effort?: number; done_on?: string; thanked_at?: string | null };
         Relationships: [];
       };
       expenses: {
@@ -235,6 +243,9 @@ export type Database = {
           split_a_pct: number;
           spent_on: string;
           is_settlement: boolean;
+          category: ExpenseCategory | null;
+          /** Exact share for partner A; wins over split_a_pct when set. */
+          a_share_cents: number | null;
           created_at: string;
         };
         Insert: {
@@ -247,6 +258,8 @@ export type Database = {
           split_a_pct?: number;
           spent_on?: string;
           is_settlement?: boolean;
+          category?: ExpenseCategory | null;
+          a_share_cents?: number | null;
         };
         Update: {
           paid_by?: string;
@@ -255,6 +268,8 @@ export type Database = {
           currency?: string;
           split_a_pct?: number;
           spent_on?: string;
+          category?: ExpenseCategory | null;
+          a_share_cents?: number | null;
         };
         Relationships: [];
       };

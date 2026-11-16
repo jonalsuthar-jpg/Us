@@ -21,6 +21,7 @@ export * from './api/gifs';
 export * from './api/calls';
 export * from './api/push';
 export * from './api/plan';
+export * from './api/plan-activity';
 export * from './api/memory';
 export * from './api/home';
 export * from './api/connect';

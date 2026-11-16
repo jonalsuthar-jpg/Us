@@ -1,39 +1,58 @@
 'use client';
 
 import {
+  addDecisionOption,
   addListItem,
   clearDoneItems,
   deleteListItem,
   LIST_NAMES,
   LISTS,
+  listDecisionOptions,
   listItems,
   setListItemDone,
   sortListItems,
   type ListName,
 } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { Check, Plus, X } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, ChevronRight, Clapperboard, Dices, Globe, Plus, ShoppingBag, X, type LucideIcon } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { EmptyNote, ErrorNote } from '@/components/app/module-header';
+import { ErrorNote } from '@/components/app/module-header';
 import { Button } from '@/components/ui/button';
-import { Segmented } from '@/components/ui/segmented';
-import { Sheet } from '@/components/ui/sheet';
+import { IconButton } from '@/components/ui/icon-button';
 import { cn } from '@/lib/cn';
+import { Ring } from './bits';
+import { SLOT_BG, TONE, type Tone } from './tones';
+
+const STYLE: Record<ListName, { tone: Tone; Icon: LucideIcon; ring: string; decide?: string }> = {
+  groceries: { tone: 'teal', Icon: ShoppingBag, ring: '#0C8F82' },
+  bucket: { tone: 'gold', Icon: Globe, ring: '#F3A823' },
+  watch: { tone: 'rose', Icon: Clapperboard, ring: '#F5547C', decide: 'Film night' },
+  read: { tone: 'plum', Icon: BookOpen, ring: '#7A5E9A', decide: 'Next book' },
+};
 
 /** Shared lists: groceries, a bucket list, things to watch and read. Either of you ticks things off. */
-export function PlanLists() {
-  const { sb, couple, me, partner } = useCouple();
+export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
+  const { sb, couple, me, partner, mySlot, partnerSlot } = useCouple();
   const items = useCoupleData('plan:lists', () => listItems(sb, couple.id), [sb, couple.id]);
+  const options = useCoupleData('plan:decisions', () => (onPick ? listDecisionOptions(sb, couple.id) : Promise.resolve([])), [sb, couple.id]);
   const [list, setList] = useState<ListName>('groceries');
   const [text, setText] = useState('');
+  const [showDone, setShowDone] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fail = (e: Error) => setError(e.message);
 
   const all = items.data ?? [];
   const shown = sortListItems(all.filter((i) => i.list === list));
+  const open = shown.filter((i) => !i.done_at);
+  const done = shown.filter((i) => i.done_at);
   const meta = LISTS[list];
-  const doneCount = shown.filter((i) => i.done_at).length;
+  const style = STYLE[list];
   const nameOf = (id: string | null) => (id === me.id ? 'you' : id === partner.id ? partner.display_name : 'someone');
+  const again =
+    list === 'groceries'
+      ? [...new Map(done.map((i) => [i.text.toLowerCase(), i])).values()].filter((i) => !open.some((o) => o.text.toLowerCase() === i.text.toLowerCase())).slice(0, 5)
+      : [];
 
   async function add(e: FormEvent) {
     e.preventDefault();
@@ -47,94 +66,183 @@ export function PlanLists() {
     }
   }
 
+  // Puts this list's open items on a Decide wheel (adding any that aren't there yet), then opens it.
+  async function pickOne() {
+    const category = style.decide!;
+    setBusy(true);
+    setError(null);
+    try {
+      const have = new Set((options.data ?? []).filter((o) => o.category === category).map((o) => o.label.toLowerCase()));
+      const missing = open.map((i) => i.text.trim().slice(0, 120)).filter((t) => t && !have.has(t.toLowerCase()));
+      if (missing.length) await options.mutate(() => Promise.all(missing.map((label) => addDecisionOption(sb, { couple_id: couple.id, category, label }))));
+      onPick!(category);
+    } catch (e) {
+      fail(e as Error);
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="space-y-6">
-      <Segmented
-        label="Which list"
-        size="sm"
-        options={LIST_NAMES.map((n) => {
-          const open = all.filter((i) => i.list === n && !i.done_at).length;
-          return { value: n, label: `${LISTS[n].emoji} ${LISTS[n].title}${open ? ` · ${open}` : ''}` };
+    <div className="space-y-5">
+      <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:px-0">
+        {LIST_NAMES.map((n) => {
+          const s = STYLE[n];
+          const of = all.filter((i) => i.list === n);
+          const left = of.filter((i) => !i.done_at).length;
+          const on = n === list;
+          return (
+            <button
+              key={n}
+              type="button"
+              aria-pressed={on}
+              onClick={() => (setList(n), setShowDone(false))}
+              className={cn(
+                'flex w-[140px] shrink-0 flex-col gap-3 rounded-sheet border-[1.5px] p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 sm:w-auto',
+                on ? cn(TONE[s.tone].wash, 'border-transparent') : 'border-paper-edge bg-paper-raised hover:bg-paper-sunken',
+              )}
+            >
+              <span className="flex items-center justify-between">
+                <s.Icon className={cn('h-[22px] w-[22px]', on ? TONE[s.tone].ink : 'text-ink-soft')} />
+                <Ring value={of.length ? (of.length - left) / of.length : 0} color={s.ring} />
+              </span>
+              <span>
+                <span className={cn('block font-semibold', on ? TONE[s.tone].ink : 'text-ink')}>{LISTS[n].title}</span>
+                <span className="mt-0.5 block text-micro text-ink-soft">{left ? `${left} left` : of.length ? 'All done' : 'Empty'}</span>
+              </span>
+            </button>
+          );
         })}
-        value={list}
-        onChange={setList}
-        className="w-full overflow-x-auto sm:w-auto"
-      />
+      </div>
 
-      <Sheet pad="md" className="space-y-5">
-        <form onSubmit={add} className="flex gap-2">
-          <label htmlFor="list-add" className="sr-only">
-            Add to {meta.title}
-          </label>
-          <input
-            id="list-add"
-            value={text}
-            maxLength={200}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={meta.placeholder}
-            className="h-11 flex-1 rounded-control border border-paper-edge bg-paper px-4 text-body text-ink placeholder:text-ink-muted/70 focus:border-rose-300 focus:outline-none"
-          />
-          <Button type="submit" disabled={!text.trim()}>
-            <Plus className="h-4 w-4" /> Add
-          </Button>
-        </form>
-        {error && <ErrorNote>{error}</ErrorNote>}
+      <form onSubmit={add} className="flex gap-2">
+        <input
+          aria-label={`Add to ${meta.title}`}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          maxLength={200}
+          placeholder={meta.placeholder}
+          className="h-[52px] min-w-0 flex-1 rounded-2xl border-[1.5px] border-paper-edge bg-paper-raised px-4 text-body text-ink placeholder:text-ink-muted/70 focus:border-rose-400 focus:outline-none focus:ring-4 focus:ring-rose-400/15"
+        />
+        <button type="submit" aria-label="Add" className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-rose-600 text-white hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400">
+          <Plus className="h-[22px] w-[22px]" strokeWidth={2.4} />
+        </button>
+      </form>
 
-        {items.loading && !items.data ? (
-          <div className="h-24 animate-pulse rounded-sheet bg-paper-sunken" aria-busy />
-        ) : shown.length === 0 ? (
-          <EmptyNote title={`Nothing on ${meta.title.toLowerCase()} yet`}>Add the first thing. {partner.display_name} sees it right away.</EmptyNote>
+      {again.length ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-micro text-ink-muted">Buy again</span>
+          {again.map((i) => (
+            <button
+              key={i.id}
+              type="button"
+              onClick={() => void items.mutate(() => setListItemDone(sb, i.id, null)).catch(fail)}
+              className="h-9 rounded-full border border-dashed border-plum-300 px-3 text-small text-plum-600 hover:bg-paper-sunken"
+            >
+              + {i.text}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {style.decide && onPick && open.length > 1 ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void pickOne()}
+          className="flex w-full items-center gap-3 rounded-sheet bg-plum-800 px-4 py-3.5 text-left text-paper disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+        >
+          <Dices className="h-[22px] w-[22px] text-gold-200" />
+          <span className="flex-1">
+            <span className="block font-semibold">Pick one for tonight</span>
+            <span className="block text-micro text-paper/70">Spin the wheel with these {open.length}</span>
+          </span>
+          <ChevronRight className="h-[18px] w-[18px] text-gold-200" />
+        </button>
+      ) : null}
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
+
+      <div className="rounded-sheet border border-paper-edge bg-paper-raised px-4">
+        {open.length === 0 && !items.loading ? (
+          <div className="py-8 text-center">
+            <p className="font-serif text-lead italic text-ink">{done.length ? 'All done.' : `Nothing on ${meta.title.toLowerCase()} yet`}</p>
+            <p className="mt-1 text-small text-ink-soft">Add the next thing above. {partner.display_name} sees it right away.</p>
+          </div>
         ) : (
-          <ul className="divide-y divide-paper-edge">
-            {shown.map((i) => (
-              <li key={i.id} className="group flex items-center gap-3 py-2.5">
+          <ul>
+            {open.map((i) => (
+              <li key={i.id} className="group flex items-center gap-2 border-b border-paper-sunken py-1">
                 <button
                   type="button"
                   role="checkbox"
-                  aria-checked={!!i.done_at}
-                  aria-label={`${i.text}: ${i.done_at ? meta.doneLabel.toLowerCase() : 'not done'}`}
-                  onClick={() => void items.mutate(() => setListItemDone(sb, i.id, i.done_at ? null : me.id)).catch(fail)}
-                  className={cn(
-                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
-                    i.done_at ? 'border-sage-500 bg-sage-500 text-white' : 'border-ink/25 hover:border-ink/50',
-                  )}
+                  aria-checked={false}
+                  aria-label={i.text}
+                  onClick={() => void items.mutate(() => setListItemDone(sb, i.id, me.id)).catch(fail)}
+                  className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
                 >
-                  {i.done_at ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+                  <span className="h-6 w-6 rounded-full border-2 border-plum-300 transition-colors group-hover:border-sage-500" />
                 </button>
-                <div className="min-w-0 flex-1">
-                  <p className={cn('break-words text-body', i.done_at ? 'text-ink-muted line-through' : 'text-ink')}>{i.text}</p>
-                  <p className="text-micro text-ink-muted">
-                    {i.done_at ? `${meta.doneLabel} by ${nameOf(i.done_by)}` : `Added by ${nameOf(i.added_by)}`}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label={`Remove ${i.text}`}
-                  onClick={() => void items.mutate(() => deleteListItem(sb, i.id)).catch(fail)}
-                  className="rounded-full p-1.5 text-ink-muted opacity-60 hover:bg-paper-sunken hover:text-ink hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 sm:opacity-0 sm:group-hover:opacity-100"
-                >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-ink">{i.text}</span>
+                  <span className="block text-micro text-ink-muted">Added by {nameOf(i.added_by)}</span>
+                </span>
+                <span className={cn('h-2 w-2 rounded-full', SLOT_BG[i.added_by === me.id ? mySlot : partnerSlot])} />
+                <IconButton label={`Remove ${i.text}`} size="sm" onClick={() => void items.mutate(() => deleteListItem(sb, i.id)).catch(fail)}>
                   <X className="h-4 w-4" />
-                </button>
+                </IconButton>
               </li>
             ))}
           </ul>
         )}
 
-        {doneCount > 0 && (
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              variant="quiet"
-              onClick={() =>
-                window.confirm(`Clear ${doneCount} ticked ${doneCount === 1 ? 'item' : 'items'} from ${meta.title}?`) &&
-                void items.mutate(() => clearDoneItems(sb, couple.id, list)).catch(fail)
-              }
-            >
-              Clear ticked
-            </Button>
-          </div>
-        )}
-      </Sheet>
+        {done.length ? (
+          <>
+            <button type="button" aria-expanded={showDone} onClick={() => setShowDone((x) => !x)} className="flex h-12 w-full items-center justify-between text-small font-medium text-ink-soft hover:text-ink">
+              Done ({done.length})
+              <ChevronDown className={cn('h-[18px] w-[18px] transition-transform', showDone && 'rotate-180')} />
+            </button>
+            {showDone ? (
+              <>
+                <ul>
+                  {done.map((i) => (
+                    <li key={i.id} className="flex items-center gap-2 border-t border-paper-sunken py-1">
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked
+                        aria-label={i.text}
+                        onClick={() => void items.mutate(() => setListItemDone(sb, i.id, null)).catch(fail)}
+                        className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                      >
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sage-500 text-white">
+                          <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                        </span>
+                      </button>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-ink-muted line-through">{i.text}</span>
+                        <span className="block text-micro text-ink-muted">
+                          {meta.doneLabel} · {nameOf(i.done_by)}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex justify-end pb-2">
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    onClick={() =>
+                      window.confirm(`Clear ${done.length} ticked ${done.length === 1 ? 'item' : 'items'} from ${meta.title}?`) &&
+                      void items.mutate(() => clearDoneItems(sb, couple.id, list)).catch(fail)
+                    }
+                  >
+                    Clear ticked
+                  </Button>
+                </div>
+              </>
+            ) : null}
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

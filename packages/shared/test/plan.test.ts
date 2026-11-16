@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  daysUntil,
   describeBalance,
+  expensePosition,
+  guessExpenseCategory,
+  laborByTask,
+  monthSpend,
+  wheelSpinTarget,
+  whenLabel,
   eventsByDay,
   fromDateKey,
   laborBalance,
@@ -24,6 +31,8 @@ const expense = (o: Partial<Expense>): Expense => ({
   split_a_pct: 50,
   spent_on: '2026-10-01',
   is_settlement: false,
+  category: null,
+  a_share_cents: null,
   created_at: '2026-10-01T00:00:00Z',
   ...o,
 });
@@ -88,6 +97,7 @@ describe('laborBalance', () => {
     task: 't',
     effort,
     done_on: '2026-10-01',
+    thanked_at: null,
     created_at: '',
   });
 
@@ -133,10 +143,99 @@ describe('calendar helpers', () => {
       ends_at: null,
       all_day: false,
       notes: null,
+      kind: null,
       created_at: '',
     });
     const map = eventsByDay([ev('late', new Date(2026, 9, 2, 20)), ev('early', new Date(2026, 9, 2, 8)), ev('next', new Date(2026, 9, 3, 9))]);
     expect(map.get('2026-10-02')!.map((e) => e.id)).toEqual(['early', 'late']);
     expect(map.get('2026-10-03')!.map((e) => e.id)).toEqual(['next']);
+  });
+});
+
+describe('plan refresh helpers', () => {
+  it('an exact share wins over the percent split', () => {
+    const [b] = settleUp([expense({ paid_by: 'A', amount_cents: 1240, split_a_pct: 32, a_share_cents: 400 })], couple);
+    expect(b).toEqual({ currency: 'EUR', debtor: 'b', amount_cents: 840 });
+  });
+
+  it('a part settlement leaves the rest open', () => {
+    const history = [expense({ paid_by: 'A', amount_cents: 1000 })];
+    const row = settlementFor(settleUp(history, couple)[0]!, couple, 200)!;
+    expect(row.amount_cents).toBe(200);
+    const [after] = settleUp([...history, expense({ ...row, a_share_cents: null, category: null } as Partial<Expense>)], couple);
+    expect(after).toEqual({ currency: 'EUR', debtor: 'b', amount_cents: 300 });
+  });
+
+  it('says who lent and who borrowed', () => {
+    expect(expensePosition(expense({ paid_by: 'A', amount_cents: 1000 }), 'A', 'a')).toEqual({ kind: 'lent', cents: 500 });
+    expect(expensePosition(expense({ paid_by: 'A', amount_cents: 1000, split_a_pct: 30 }), 'B', 'b')).toEqual({ kind: 'borrowed', cents: 700 });
+    expect(expensePosition(expense({ paid_by: 'A', amount_cents: 1000, split_a_pct: 100 }), 'A', 'a')).toEqual({ kind: 'none', cents: 0 });
+    expect(expensePosition(expense({ paid_by: 'B', is_settlement: true }), 'A', 'a').kind).toBe('gotBack');
+  });
+
+  it('sums a month by category, leaving out settlements', () => {
+    const out = monthSpend(
+      [
+        expense({ amount_cents: 900, category: 'rent', spent_on: '2026-11-01' }),
+        expense({ amount_cents: 300, paid_by: 'B', category: 'food', spent_on: '2026-11-04' }),
+        expense({ amount_cents: 200, spent_on: '2026-11-05' }),
+        expense({ amount_cents: 999, is_settlement: true, spent_on: '2026-11-06' }),
+        expense({ amount_cents: 999, spent_on: '2026-10-30' }),
+      ],
+      '2026-11',
+      'EUR',
+      couple,
+    );
+    expect(out).toEqual({
+      total: 1400,
+      categories: [
+        { category: 'rent', cents: 900 },
+        { category: 'food', cents: 300 },
+        { category: 'other', cents: 200 },
+      ],
+      aPaid: 1100,
+      bPaid: 300,
+    });
+  });
+
+  it('guesses a category from the description', () => {
+    expect(guessExpenseCategory('Uber to airport')).toBe('travel');
+    expect(guessExpenseCategory('BigBasket order')).toBe('groceries');
+    expect(guessExpenseCategory('Pizza night')).toBe('food');
+    expect(guessExpenseCategory('Something')).toBeNull();
+  });
+
+  it('counts days and labels them', () => {
+    const today = new Date(2026, 10, 16, 22);
+    expect(daysUntil('2026-11-16', today)).toBe(0);
+    expect(daysUntil('2026-11-22', today)).toBe(6);
+    expect(whenLabel(1)).toBe('Tomorrow');
+    expect(whenLabel(6)).toBe('In 6 days');
+  });
+
+  it('stops the wheel with the chosen slice under the pointer', () => {
+    for (const [cur, i, n] of [[0, 0, 6], [725, 3, 6], [100, 4, 5]] as const) {
+      const t = wheelSpinTarget(cur, i, n);
+      expect(t).toBeGreaterThan(cur + 360 * 4);
+      const mid = (360 / n) * (i + 0.5);
+      expect((((t + mid) % 360) + 360) % 360).toBeCloseTo(0);
+    }
+  });
+
+  it('groups effort by task', () => {
+    const e = (done_by: string, task: string, effort: number): LaborEntry => ({
+      id: task + done_by,
+      couple_id: 'c',
+      done_by,
+      task,
+      effort,
+      done_on: '2026-10-01',
+      thanked_at: null,
+      created_at: '',
+    });
+    expect(laborByTask([e('A', 'Cooking', 2), e('B', 'cooking ', 3), e('A', 'Dishes', 1)], couple)).toEqual([
+      { task: 'Cooking', a: 2, b: 3 },
+      { task: 'Dishes', a: 1, b: 0 },
+    ]);
   });
 });

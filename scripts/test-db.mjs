@@ -336,6 +336,28 @@ await test('costs: paid by a member, valid currency, settlements recorded', asyn
   assert.equal((await as(carol, () => q(`select * from public.expenses`))).length, 0);
 });
 
+await test('plan refresh: categories, exact shares, event kinds, thanks', async () => {
+  await as(alice, () => q(`insert into public.expenses (couple_id, paid_by, description, amount_cents, category, a_share_cents) values ($1, $2, 'Taxi', 1240, 'travel', 400)`, [couple.id, alice]));
+  await rejects(
+    as(alice, () => q(`insert into public.expenses (couple_id, paid_by, description, amount_cents, category) values ($1, $2, 'x', 100, 'yachts')`, [couple.id, alice])),
+    /category_known/,
+    'unknown category',
+  );
+  await rejects(
+    as(alice, () => q(`insert into public.expenses (couple_id, paid_by, description, amount_cents, a_share_cents) values ($1, $2, 'x', 100, 101)`, [couple.id, alice])),
+    /a_share_within/,
+    'share above amount',
+  );
+  await as(alice, () => q(`insert into public.calendar_events (couple_id, created_by, title, starts_at, kind) values ($1, $2, 'Goa', now(), 'trip')`, [couple.id, alice]));
+  await rejects(
+    as(alice, () => q(`insert into public.calendar_events (couple_id, created_by, title, starts_at, kind) values ($1, $2, 'x', now(), 'party')`, [couple.id, alice])),
+    /kind_known/,
+    'unknown kind',
+  );
+  const thanked = await as(alice, () => q(`update public.labor_entries set thanked_at = now() returning id`));
+  assert.ok(thanked.length > 0, 'partner can say thanks');
+});
+
 console.log('\nPhase 5 · Memory');
 
 // A second couple, so cross-couple isolation is tested against real rows.
