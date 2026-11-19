@@ -440,7 +440,8 @@ function openPayload(m: Message, cipher: ChatCipher): Opened {
   return out;
 }
 
-function openReactions(m: Message, cipher: ChatCipher | null): Record<string, string> {
+/** A message's reactions, opened (encrypted ones need the key). */
+export function openReactions(m: Pick<Message, 'id' | 'reactions'>, cipher: ChatCipher | null): Record<string, string> {
   const raw = m.reactions ?? {};
   if (!Object.values(raw).some(isEncryptedReaction)) return raw;
   const out: Record<string, string> = {};

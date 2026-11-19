@@ -1,5 +1,5 @@
 import { formatClock, formatVoiceLength, groupReactions, videoPoster, speedLabel, waveformBars, isGiphyUrl, isLinkedMedia, isOurStickerPath, linkParts, linkPreviewOf, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
-import { Ban, Copy, Download, MoreHorizontal, Pause, Pencil, Pin, PinOff, Play, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
+import { Ban, Copy, Download, MoreHorizontal, Pause, Pencil, Pin, PinOff, Play, Plus, Reply, Star, StarOff, Sticker, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useVoiceSpeed } from '@/lib/voice';
 import { Ticks } from '@/components/ui/ticks';
@@ -50,6 +50,9 @@ interface BubbleProps {
   onDelete?: () => void;
   /** Mine and still editable: change its text. */
   onEdit?: () => void;
+  /** In my Saved list (private to me), and the toggle for it. */
+  saved?: boolean;
+  onStar?: (saved: boolean) => void;
   onJumpTo?: (id: string) => void;
 }
 
@@ -75,6 +78,8 @@ export function Bubble({
   onDownload,
   onDelete,
   onEdit,
+  saved,
+  onStar,
   onJumpTo,
 }: BubbleProps) {
   const reactions = groupReactions(message.reactions, myId);
@@ -186,6 +191,11 @@ export function Bubble({
               <ToolButton label={message.pinned_at ? 'Unpin' : 'Pin'} onClick={() => onPin?.(!message.pinned_at)}>
                 {message.pinned_at ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
               </ToolButton>
+              {onStar ? (
+                <ToolButton label={saved ? 'Take out of Saved' : 'Save'} onClick={() => onStar(!saved)}>
+                  {saved ? <StarOff className="h-4 w-4" /> : <Star className="h-4 w-4" />}
+                </ToolButton>
+              ) : null}
               {onKeepSticker && message.media_kind === 'sticker' && isOurStickerPath(message.media_path) ? (
                 <ToolButton label="Save sticker" onClick={onKeepSticker}>
                   <Sticker className="h-4 w-4" />
@@ -380,6 +390,7 @@ export function Bubble({
               url && message.media_kind === 'image' && !hasText && 'rounded-full bg-black/40 px-1.5 py-1 text-white',
             )}
           >
+            {saved ? <Star className="h-3 w-3 fill-current" aria-label="Saved" /> : null}
             {message.pinned_at ? <Pin className="h-3 w-3" aria-label="Pinned" /> : null}
             {message.edited_at && !deleted ? <span>edited ·</span> : null}
             <time dateTime={message.created_at} suppressHydrationWarning>
@@ -424,7 +435,7 @@ export function Bubble({
 }
 
 /** Play / pause, a waveform that fills as it plays (click to jump), time and speed. */
-function VoicePlayer({ url, durationMs, waveform }: { url: string; durationMs?: number; waveform?: unknown }) {
+export function VoicePlayer({ url, durationMs, waveform }: { url: string; durationMs?: number; waveform?: unknown }) {
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [at, setAt] = useState(0);
@@ -511,7 +522,7 @@ function VoicePlayer({ url, durationMs, waveform }: { url: string; durationMs?: 
   );
 }
 
-function LinkCard({ preview }: { preview: LinkPreview }) {
+export function LinkCard({ preview }: { preview: LinkPreview }) {
   return (
     <a
       href={preview.url}

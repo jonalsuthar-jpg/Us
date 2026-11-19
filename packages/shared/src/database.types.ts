@@ -353,6 +353,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      saved_messages: {
+        Row: { owner_id: string; message_id: string; saved_at: string };
+        Insert: { owner_id: string; message_id: string; saved_at?: string };
+        Update: never;
+        Relationships: [];
+      };
+      chat_settings: {
+        Row: { owner_id: string; partner_nickname: string | null; updated_at: string };
+        Insert: { owner_id: string; partner_nickname?: string | null; updated_at?: string };
+        Update: { partner_nickname?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      chat_themes: {
+        Row: { couple_id: string; theme: 'paper' | 'rose' | 'teal' | 'sage' | 'gold' | 'night'; updated_by: string | null; updated_at: string };
+        Insert: { couple_id: string; theme: 'paper' | 'rose' | 'teal' | 'sage' | 'gold' | 'night'; updated_by: string; updated_at?: string };
+        Update: { theme?: 'paper' | 'rose' | 'teal' | 'sage' | 'gold' | 'night'; updated_by?: string; updated_at?: string };
+        Relationships: [];
+      };
       notification_prefs: {
         Row: { user_id: string; off: string[]; quiet_start: number | null; quiet_end: number | null; hide_preview: boolean; updated_at: string };
         Insert: { user_id: string; off?: string[]; quiet_start?: number | null; quiet_end?: number | null; hide_preview?: boolean; updated_at?: string };

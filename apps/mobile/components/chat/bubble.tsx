@@ -1,7 +1,7 @@
 import { describeCall, formatClock, formatVoiceLength, groupReactions, videoPoster, speedLabel, waveformBars, isGiphyUrl, isLinkedMedia, linkParts, linkPreviewOf, messagePreview, type CallMedia, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
 import { Image as AnimatedImage } from 'expo-image';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { Ban, Headphones, Pause, Phone, PhoneMissed, Pin, Play, Tv, Video } from 'lucide-react-native';
+import { Ban, Headphones, Pause, Phone, PhoneMissed, Pin, Play, Star, Tv, Video } from 'lucide-react-native';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, View } from 'react-native';
 import { cn } from '../ui/cn';
@@ -36,6 +36,7 @@ export const Bubble = memo(function Bubble({
   mediaUrl,
   quote,
   highlighted,
+  saved,
   onRetry,
   onLongPress,
   onReact,
@@ -54,6 +55,8 @@ export const Bubble = memo(function Bubble({
   mediaUrl?: string;
   quote?: ReplyQuote | null;
   highlighted?: boolean;
+  /** In my Saved list: a small star by the time. */
+  saved?: boolean;
   onRetry?: (id: string) => void;
   /** Opens reactions / reply / pin. */
   onLongPress?: (m: Message) => void;
@@ -239,6 +242,7 @@ export const Bubble = memo(function Bubble({
           {/* The key is still on its way (a moment at most): a quiet bar, not a lock. */}
           {message.e2ee === 'opening' ? <View accessibilityLabel="Opening message" className="my-1 h-3 w-32 rounded-full bg-ink/10" /> : null}
           <View className={cn('mt-0.5 flex-row items-center justify-end gap-1 self-end', photo && url && 'px-2 pb-1')}>
+            {saved ? <Star size={11} color={c.inkMuted} fill={c.inkMuted} /> : null}
             {message.pinned_at ? <Pin size={11} color={c.inkMuted} /> : null}
             {message.edited_at && !deleted ? <Text className="text-[12px] leading-[15px] text-ink-muted">edited ·</Text> : null}
             <Text className="text-[12px] leading-[15px] text-ink-muted">{formatClock(message.created_at)}</Text>
@@ -277,7 +281,7 @@ const photoAspect = (meta: Message['media_meta']) => (meta?.width && meta?.heigh
  * A voice note. Nothing native is made until it's first played, so a thread
  * full of voice notes scrolls as lightly as text.
  */
-function VoiceNote({ url, durationMs, waveform, mine }: { url?: string; durationMs?: number; waveform?: unknown; mine: boolean }) {
+export function VoiceNote({ url, durationMs, waveform, mine }: { url?: string; durationMs?: number; waveform?: unknown; mine: boolean }) {
   const [on, setOn] = useState(false);
   const bars = useMemo(() => waveformBars(waveform), [waveform]);
   if (on && url) return <VoicePlayer url={url} durationMs={durationMs} bars={bars} mine={mine} />;
@@ -431,7 +435,7 @@ export const CallEntry = memo(function CallEntry({ message, myId, onCallBack }: 
   );
 });
 
-function LinkCard({ preview }: { preview: LinkPreview }) {
+export function LinkCard({ preview }: { preview: LinkPreview }) {
   return (
     <Pressable
       accessibilityRole="link"

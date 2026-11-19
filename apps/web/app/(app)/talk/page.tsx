@@ -2,6 +2,13 @@
 
 import {
   canEdit,
+  chatBackground,
+  CHAT_THEME_TOPIC,
+  getChatTheme,
+  getNickname,
+  SAVED_TOPIC,
+  savedIds,
+  setSaved,
   clusters,
   formatDay,
   groupByDay,
@@ -55,6 +62,7 @@ import { Button, Spinner } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { PrivacyBadge } from "@/components/ui/privacy";
 import { useOpenedOnce, usePageActive } from "@/lib/hooks";
+import Link from "next/link";
 import { waveformOf } from "@/lib/voice";
 import { posterFrom } from "@/lib/video";
 import dynamic from "next/dynamic";
@@ -109,6 +117,14 @@ function Thread() {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [dropping, setDropping] = useState(false);
+  // My private nickname for my partner, the theme we share, and what I saved.
+  const nickname = useCoupleData("chat:nickname", () => getNickname(sb, me.id), [sb, me.id]);
+  const theme = useCoupleData(CHAT_THEME_TOPIC, () => getChatTheme(sb, couple.id), [sb, couple.id]);
+  const saved = useCoupleData(SAVED_TOPIC, () => savedIds(sb, me.id), [sb, me.id], undefined, "memory");
+  const shownName = nickname.data || partner.display_name;
+  // The page's light or dark mode, as set on <html> (see lib/theme).
+  const scheme = typeof document !== "undefined" && document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  const chatBg = theme.data && theme.data !== "paper" ? chatBackground(theme.data, scheme) : undefined;
   const [photo, setPhoto] = useState<string | null>(null);
   /** The chat message open in the lightbox (not a profile photo). */
   const [viewed, setViewed] = useState<Message | null>(null);
@@ -187,6 +203,36 @@ function Thread() {
     setTimeout(() => setHighlight(null), 1600);
     return true;
   }
+
+  // From the info page: ?jump=<id> (older pages load until it's found), or ?search=1.
+  const [pendingJump, setPendingJump] = useState<string | null>(null);
+  const jumpTries = useRef(0);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("jump")) setPendingJump(q.get("jump"));
+    if (q.get("search") === "1") setPanel("search");
+  }, []);
+  useEffect(() => {
+    if (!pendingJump || loading) return;
+    if (jumpTo(pendingJump)) {
+      setPendingJump(null);
+      window.history.replaceState(null, "", "/talk");
+    } else if (hasOlder && jumpTries.current < 30) {
+      jumpTries.current++;
+      void loadOlder();
+    } else {
+      setPendingJump(null);
+      fail(new Error("Couldn’t find that message any more."));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingJump, messages.length, loading, hasOlder]);
+  useEffect(
+    () =>
+      channel.changes.on((e) => {
+        if (e.topic === CHAT_THEME_TOPIC && e.from !== me.id) fail(new Error(`${partner.display_name} changed the chat theme`));
+      }),
+    [channel, me.id, partner.display_name],
+  );
 
   function sendWithReply(
     text: string,
@@ -464,6 +510,11 @@ function Thread() {
                   setActiveId(null);
                   setDeleting(m);
                 }}
+                saved={!!saved.data?.has(m.id)}
+                onStar={(on) => {
+                  setActiveId(null);
+                  void saved.mutate(() => setSaved(sb, me.id, m.id, on)).catch(fail);
+                }}
                 onEdit={
                   canEdit(m, me.id)
                     ? () => {
@@ -481,48 +532,25 @@ function Thread() {
       </section>
     )),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [messages, media, activeId, highlight, stickersOn, snaps.data, me.id, mySlot, partnerSlot, partner.display_name, sb, couple.id, channel],
+    [messages, media, activeId, highlight, stickersOn, snaps.data, saved.data, me.id, mySlot, partnerSlot, partner.display_name, sb, couple.id, channel],
   );
 
   const status = partnerTyping ? "typing…" : partnerOnline ? "online" : "away";
 
   return (
-    <div className="flex h-[calc(100dvh-64px-env(safe-area-inset-bottom))] flex-col bg-chat lg:h-dvh">
+    <div className="flex h-[calc(100dvh-64px-env(safe-area-inset-bottom))] flex-col bg-chat lg:h-dvh" style={chatBg ? { backgroundColor: chatBg } : undefined}>
       <header className="flex items-center gap-3 border-b border-paper-edge bg-paper-raised px-4 py-2.5 sm:px-8">
-        {partnerPhoto ? (
-          <button
-            type="button"
-            onClick={() => setPhoto(partnerPhoto)}
-            aria-label={`Open ${partner.display_name}'s photo`}
-            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-          >
-            <Avatar
-              name={partner.display_name}
-              slot={partnerSlot}
-              online={partnerOnline}
-            />
-          </button>
-        ) : (
-          <Avatar
-            name={partner.display_name}
-            slot={partnerSlot}
-            online={partnerOnline}
-          />
-        )}
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-lead text-ink">
-            {partner.display_name}
-          </h1>
-          <p
-            className={
-              partnerTyping || partnerOnline
-                ? "text-micro font-medium text-teal-700"
-                : "text-micro text-ink-muted"
-            }
-          >
-            {status}
-          </p>
-        </div>
+        <Link
+          href="/talk/info"
+          aria-label={`${shownName}. Chat info, media and more`}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+        >
+          <Avatar name={partner.display_name} slot={partnerSlot} online={partnerOnline} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-display text-lead text-ink">{shownName}</span>
+            <span className={partnerTyping || partnerOnline ? "block text-micro font-medium text-teal-700" : "block text-micro text-ink-muted"}>{status}</span>
+          </span>
+        </Link>
         <PrivacyBadge
           privacy="shared"
           partnerName={partner.display_name}

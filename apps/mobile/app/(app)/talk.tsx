@@ -1,10 +1,10 @@
-import { canEdit, clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, stickerPath, uuid, STICKERS_TOPIC, VIDEO_MAX_MS, VIDEO_PROFILES, VideoTooBigError, VideoTooLongError, type VideoQuality, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
+import { canEdit, chatBackground, CHAT_THEME_TOPIC, getChatTheme, getNickname, SAVED_TOPIC, savedIds, setSaved, clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, stickerPath, uuid, STICKERS_TOPIC, VIDEO_MAX_MS, VIDEO_PROFILES, VideoTooBigError, VideoTooLongError, type VideoQuality, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
 import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleLive, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from '@/lib/image-picker';
-import { router, useFocusEffect } from 'expo-router';
-import { ArrowLeft, ChevronsDown, Copy, Download, Pencil, Phone, Pin, PinOff, Plus, Reply, Search, Sticker, Trash2, Video } from 'lucide-react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, ChevronsDown, Copy, Download, Pencil, Phone, Pin, PinOff, Plus, Reply, Search, Star, StarOff, Sticker, Trash2, Video } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, AppState, FlatList, Modal, Platform, Pressable, TextInput, View, type ListRenderItem } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -122,6 +122,24 @@ function Thread() {
   }, []);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [panel, setPanel] = useState<'search' | 'pins' | null>(null);
+  // My private nickname for my partner, the theme we share, and what I saved.
+  const nickname = useCoupleData('chat:nickname', () => getNickname(sb, me.id), [sb, me.id]);
+  const theme = useCoupleData(CHAT_THEME_TOPIC, () => getChatTheme(sb, couple.id), [sb, couple.id]);
+  const saved = useCoupleData(SAVED_TOPIC, () => savedIds(sb, me.id), [sb, me.id], undefined, 'memory');
+  const shownName = nickname.data || partner.display_name;
+  // From the info screen: jump to a message (loading older pages to reach it), or open search.
+  const params = useLocalSearchParams<{ jump?: string; search?: string }>();
+  const [pendingJump, setPendingJump] = useState<string | null>(null);
+  useEffect(() => {
+    if (params.jump) setPendingJump(params.jump);
+    if (params.search === '1') setPanel('search');
+  }, [params.jump, params.search]);
+  const jumpTries = useRef(0);
+  // My partner gave the chat a new look: say so, once.
+  useEffect(
+    () => channel.changes.on((e) => e.topic === CHAT_THEME_TOPIC && e.from !== me.id && latest.current.say(`${partner.display_name} changed the chat theme`)),
+    [channel, me.id, partner.display_name],
+  );
   const [notice, setNotice] = useState<string | null>(null);
   /** 0–1 while a video is being made smaller. */
   const [shrinking, setShrinking] = useState<number | null>(null);
@@ -352,6 +370,21 @@ function Thread() {
     setTimeout(() => setHighlight(null), 1600);
     return true;
   }
+  useEffect(() => {
+    if (!pendingJump || loading) return;
+    if (jumpTo(pendingJump)) {
+      setPendingJump(null);
+      jumpTries.current = 0;
+    } else if (hasOlder && jumpTries.current < 30) {
+      jumpTries.current++;
+      void loadOlder();
+    } else {
+      setPendingJump(null);
+      jumpTries.current = 0;
+      say('Couldn’t find that message any more.');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingJump, rows.length, loading, hasOlder]);
   const pick = (m: Message) => {
     setPanel(null);
     if (!jumpTo(m.id)) say(`That one is from ${formatDay(m.created_at)}. Scroll up to load it.`);
@@ -393,6 +426,7 @@ function Thread() {
           mediaUrl={item.message.media_path ? media[item.message.media_path] : undefined}
           quote={item.quote}
           highlighted={highlight === item.message.id}
+          saved={!!saved.data?.has(item.message.id)}
           // Only rows that play something care, so leaving the app doesn't redraw the rest.
           animate={isLinkedMedia(item.message.media_kind) ? viewing : true}
           onRetry={onRetry}
@@ -404,7 +438,7 @@ function Thread() {
           onJumpTo={onJumpTo}
         />
       ),
-    [me.id, mySlot, partnerSlot, partner.display_name, media, highlight, viewing, onRetry, onLongPress, onReact, onReply, onJumpTo, onCallBack, openPhoto, openVideo],
+    [me.id, mySlot, partnerSlot, partner.display_name, media, highlight, viewing, saved.data, onRetry, onLongPress, onReact, onReply, onJumpTo, onCallBack, openPhoto, openVideo],
   );
   const typingHeader = useMemo(() => <TypingBubble visible={partnerTyping} name={partner.display_name} slot={partnerSlot} />, [partnerTyping, partner.display_name, partnerSlot]);
   const olderFooter = olderFailed ? (
@@ -430,26 +464,29 @@ function Thread() {
     // Android draws edge-to-edge, so the window no longer resizes for the keyboard:
     // lift the composer ourselves on both platforms. The offset takes back the
     // safe area under the composer, which the keyboard covers when it's up.
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.chat }} behavior="padding" keyboardVerticalOffset={-insets.bottom}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: theme.data && theme.data !== 'paper' ? chatBackground(theme.data, c.scheme) : c.chat }}
+      behavior="padding"
+      keyboardVerticalOffset={-insets.bottom}
+    >
       <View style={{ paddingTop: insets.top + 8 }} className="flex-row items-center gap-2 border-b border-paper-edge bg-paper-raised pb-2.5 pl-1 pr-2">
         <BackButton />
         <Pressable
-          accessibilityRole="imagebutton"
-          accessibilityLabel={`${partner.display_name}'s photo. Open`}
-          disabled={!partnerPhoto}
-          onPress={() => partnerPhoto && openPhoto(partnerPhoto)}
-          className="active:opacity-70"
+          accessibilityRole="button"
+          accessibilityLabel={`${shownName}. Chat info, media and more`}
+          onPress={() => router.push('/chat-info')}
+          className="flex-1 flex-row items-center gap-2 active:opacity-70"
         >
           <Avatar name={partner.display_name} slot={partnerSlot} online={partnerOnline} />
-        </Pressable>
         <View className="flex-1">
           <Display className="text-lead" numberOfLines={1}>
-            {partner.display_name}
+            {shownName}
           </Display>
           <Text className={cn('text-micro', partnerTyping || partnerOnline ? 'font-sans-medium text-teal-700' : 'text-ink-muted')}>
             {partnerTyping ? 'typing…' : partnerOnline ? 'online' : 'away'}
           </Text>
         </View>
+        </Pressable>
         <IconButton label={`Video call ${partner.display_name}`} size="sm" onPress={() => void calls.startCall('video')}>
           <Video size={22} color={c.ink} />
         </IconButton>
@@ -624,6 +661,13 @@ function Thread() {
           setEditing(m);
         }}
         onPin={(m, p) => void pin(m.id, p).catch(fail)}
+        saved={!!acting && !!saved.data?.has(acting.id)}
+        onStar={(m, on) =>
+          void saved
+            .mutate(() => setSaved(sb, me.id, m.id, on))
+            .then(() => say(on ? 'Saved. Find it in chat info.' : 'Taken out of Saved'))
+            .catch(fail)
+        }
         onKeepSticker={
           stickersOn
             ? (m) =>
@@ -713,6 +757,8 @@ function MessageActions({
   onReply,
   onEdit,
   onPin,
+  saved,
+  onStar,
   onKeepSticker,
   onSave,
   onDelete,
@@ -724,6 +770,9 @@ function MessageActions({
   onReply: (m: Message) => void;
   onEdit: (m: Message) => void;
   onPin: (m: Message, pinned: boolean) => void;
+  /** It's in my Saved list (private to me). */
+  saved: boolean;
+  onStar: (m: Message, saved: boolean) => void;
   /** Keep a sticker we made (one sent in chat) in Our stickers. */
   onKeepSticker?: (m: Message) => void;
   /** Photos, videos, GIFs and stickers: save to the gallery. */
@@ -776,6 +825,11 @@ function MessageActions({
                 label={message?.pinned_at ? 'Unpin' : 'Pin for both of you'}
                 onPress={act((m) => onPin(m, !m.pinned_at))}
                 icon={message?.pinned_at ? <PinOff size={20} color={c.ink} /> : <Pin size={20} color={c.ink} />}
+              />
+              <ActionRow
+                label={saved ? 'Take out of Saved' : 'Save'}
+                onPress={act((m) => onStar(m, !saved))}
+                icon={saved ? <StarOff size={20} color={c.ink} /> : <Star size={20} color={c.ink} />}
               />
             </>
           )}

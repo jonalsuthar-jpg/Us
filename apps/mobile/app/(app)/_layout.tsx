@@ -156,6 +156,7 @@ export default function AppLayout() {
           <Stack.Screen name="talk" dangerouslySingular options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="questions" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="chat-info" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="draw/index" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="draw/gallery" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="draw/guess" options={{ animation: 'slide_from_right' }} />

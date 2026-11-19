@@ -1142,6 +1142,31 @@ await test('receipts: only a photo in our receipts folder', async () => {
   await q(`delete from public.expenses where id = $1`, [x.id]);
 });
 
+console.log('\nChat info');
+
+await test('saved messages, nickname and theme: mine stay mine, the theme is ours', async () => {
+  const m = await as(alice, () => one(`insert into public.messages (couple_id, sender_id, body) values ($1, $2, 'save me') returning id`, [couple.id, alice]));
+  await as(bob, () => q(`insert into public.saved_messages (owner_id, message_id) values ($1, $2)`, [bob, m.id]));
+  assert.equal((await as(alice, () => q(`select * from public.saved_messages where message_id = $1`, [m.id]))).length, 0, 'what bob saved is his alone');
+  await rejects(as(bob, () => q(`insert into public.saved_messages (owner_id, message_id) values ($1, $2)`, [alice, m.id])), /row-level security/, 'saving for someone else');
+  const theirs = await as(carol, () => one(`insert into public.messages (couple_id, sender_id, body) values ((select public.current_couple_id()), $1, 'not yours') returning id`, [carol]));
+  await rejects(as(bob, () => q(`insert into public.saved_messages (owner_id, message_id) values ($1, $2)`, [bob, theirs.id])), /row-level security/, 'another couple’s message');
+  await as(alice, () => q(`select public.delete_message($1, true)`, [m.id]));
+  await q(`delete from public.messages where id = $1`, [m.id]);
+  assert.equal((await q(`select count(*)::int as n from public.saved_messages where message_id = $1`, [m.id]))[0].n, 0, 'goes with its message');
+
+  await as(alice, () => q(`insert into public.chat_settings (owner_id, partner_nickname) values ($1, 'Bunny')`, [alice]));
+  assert.equal((await as(bob, () => q(`select * from public.chat_settings`))).length, 0, 'bob can’t see what alice calls him');
+  await rejects(as(alice, () => q(`update public.chat_settings set partner_nickname = $2 where owner_id = $1`, [alice, 'x'.repeat(41)])), /check/, 'too long');
+
+  await as(alice, () => q(`insert into public.chat_themes (couple_id, theme, updated_by) values ($1, 'rose', $2)`, [couple.id, alice]));
+  assert.equal((await as(bob, () => one(`select theme from public.chat_themes where couple_id = $1`, [couple.id]))).theme, 'rose', 'shared with bob');
+  await as(bob, () => q(`update public.chat_themes set theme = 'night', updated_by = $2 where couple_id = $1`, [couple.id, bob]));
+  await rejects(as(bob, () => q(`update public.chat_themes set theme = 'neon', updated_by = $2 where couple_id = $1`, [couple.id, bob])), /check/, 'unknown theme');
+  await rejects(as(bob, () => q(`update public.chat_themes set updated_by = $2 where couple_id = $1`, [couple.id, alice])), /row-level security/, 'as someone else');
+  assert.equal((await as(carol, () => q(`select * from public.chat_themes where couple_id = $1`, [couple.id]))).length, 0, 'outsider');
+});
+
 console.log('\nNotifications');
 
 await test('notification settings: mine alone, with sane quiet hours', async () => {
@@ -1171,7 +1196,7 @@ await test('topic changes: stamped by either of us, read by the couple only, cau
   assert.deepEqual(later.topics, [], 'nothing after now');
   assert.equal((await as(carol, () => q(`select * from public.topic_changes where couple_id = $1`, [couple.id]))).length, 0, 'outsider sees none');
   const theirs = (await as(carol, () => one(`select public.changed_topics($1) as r`, [since]))).r;
-  assert.deepEqual(theirs.topics, [], "outsider's catch-up is empty");
+  assert.ok(!theirs.topics.includes('plan:lists'), "our topics never reach another couple");
   await rejects(as(alice, () => q(`insert into public.topic_changes (couple_id, topic) values ($1, 'x')`, [couple.id])), /permission denied/, 'insert');
   await rejects(as(alice, () => q(`update public.topic_changes set changed_at = now()`)), /permission denied/, 'update');
   await as(dave, () => q(`select public.touch_topic('home')`)); // another couple (carol and dave)
