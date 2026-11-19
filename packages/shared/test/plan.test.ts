@@ -33,6 +33,7 @@ const expense = (o: Partial<Expense>): Expense => ({
   is_settlement: false,
   category: null,
   a_share_cents: null,
+  receipt_path: null,
   created_at: '2026-10-01T00:00:00Z',
   ...o,
 });

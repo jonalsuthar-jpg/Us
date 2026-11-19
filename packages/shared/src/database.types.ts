@@ -26,6 +26,8 @@ export interface MediaMeta {
   [key: string]: number | string | undefined;
 }
 export type ListName = 'groceries' | 'bucket' | 'watch' | 'read';
+/** An item's list: a built-in one by name, or 'custom' with its list_id. */
+export type ItemList = ListName | 'custom';
 export type CallStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'declined';
 export type MessageKind = 'text' | 'call';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
@@ -250,6 +252,8 @@ export type Database = {
           category: ExpenseCategory | null;
           /** Exact share for partner A; wins over split_a_pct when set. */
           a_share_cents: number | null;
+          /** A photo of the receipt: "<couple_id>/receipts/<uuid>.jpg" in the memories bucket. */
+          receipt_path: string | null;
           created_at: string;
         };
         Insert: {
@@ -264,6 +268,7 @@ export type Database = {
           is_settlement?: boolean;
           category?: ExpenseCategory | null;
           a_share_cents?: number | null;
+          receipt_path?: string | null;
         };
         Update: {
           paid_by?: string;
@@ -274,6 +279,7 @@ export type Database = {
           spent_on?: string;
           category?: ExpenseCategory | null;
           a_share_cents?: number | null;
+          receipt_path?: string | null;
         };
         Relationships: [];
       };
@@ -344,7 +350,9 @@ export type Database = {
         Row: {
           id: string;
           couple_id: string;
-          list: ListName;
+          list: ItemList;
+          /** One of our own lists (with list 'custom'). */
+          list_id: string | null;
           text: string;
           note: string | null;
           added_by: string;
@@ -352,8 +360,14 @@ export type Database = {
           done_by: string | null;
           created_at: string;
         };
-        Insert: { id?: string; couple_id: string; list: ListName; text: string; note?: string | null; added_by: string };
+        Insert: { id?: string; couple_id: string; list: ItemList; list_id?: string | null; text: string; note?: string | null; added_by: string };
         Update: { text?: string; note?: string | null; done_at?: string | null; done_by?: string | null };
+        Relationships: [];
+      };
+      lists: {
+        Row: { id: string; couple_id: string; name: string; emoji: string | null; created_by: string; created_at: string };
+        Insert: { id?: string; couple_id: string; name: string; emoji?: string | null; created_by: string };
+        Update: { name?: string; emoji?: string | null };
         Relationships: [];
       };
       taps: {
@@ -761,6 +775,7 @@ export type MemoryRating = Tables['memory_ratings']['Row'];
 export type DailyQuestion = Tables['daily_questions']['Row'];
 export type Countdown = Tables['countdowns']['Row'];
 export type ListItem = Tables['list_items']['Row'];
+export type CustomList = Tables['lists']['Row'];
 export type Tap = Tables['taps']['Row'];
 export type SnapRow = Tables['snaps']['Row'];
 export type PlantDay = Tables['plant_days']['Row'];

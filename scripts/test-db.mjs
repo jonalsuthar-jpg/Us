@@ -1072,6 +1072,37 @@ await test('revoking a chat device: mine only, and its sealed key goes', async (
   await rejects(as(alice, () => q(`insert into public.chat_key_wraps (couple_id, key_version, device_id, wrapped_key, wrapped_by) values ($1, 1, $2, 'x', $3)`, [couple.id, bobDevice, aliceDevice])), /row-level security/, 'sealed to a revoked device');
 });
 
+console.log('\nPlan: our own lists, receipts');
+
+await test('own lists: ours alone, items stay inside them, at most twenty', async () => {
+  const list = await as(alice, () => one(`insert into public.lists (couple_id, name, created_by) values ($1, 'Gifts', $2) returning id`, [couple.id, alice]));
+  assert.equal((await as(bob, () => q(`select * from public.lists where id = $1`, [list.id]))).length, 1, 'partner sees it');
+  assert.equal((await as(carol, () => q(`select * from public.lists where id = $1`, [list.id]))).length, 0, 'outsider doesn’t');
+  await rejects(as(alice, () => q(`insert into public.lists (couple_id, name, created_by) values ($1, 'x', $2)`, [couple.id, bob])), /row-level security/, 'as someone else');
+  await as(bob, () => q(`insert into public.list_items (couple_id, list, list_id, text, added_by) values ($1, 'custom', $2, 'Scarf', $3)`, [couple.id, list.id, bob]));
+  await rejects(as(bob, () => q(`insert into public.list_items (couple_id, list, text, added_by) values ($1, 'custom', 'no list', $2)`, [couple.id, bob])), /list_items_list_check/, 'custom without a list');
+  await rejects(as(bob, () => q(`insert into public.list_items (couple_id, list, list_id, text, added_by) values ($1, 'groceries', $2, 'mixed', $3)`, [couple.id, list.id, bob])), /list_items_list_check/, 'built-in with a list id');
+  const theirs = await as(carol, () => one(`insert into public.lists (couple_id, name, created_by) values ((select public.current_couple_id()), 'Theirs', $1) returning id`, [carol]));
+  await rejects(as(bob, () => q(`insert into public.list_items (couple_id, list, list_id, text, added_by) values ($1, 'custom', $2, 'sneak', $3)`, [couple.id, theirs.id, bob])), /row-level security/, 'another couple’s list');
+  await rejects(as(bob, () => q(`update public.lists set couple_id = $1 where id = $2`, [couple.id, list.id])), /permission denied/, 'moving a list');
+  await as(bob, () => q(`update public.lists set name = 'Gift ideas' where id = $1`, [list.id]));
+  for (let i = 0; i < 19; i++) await as(alice, () => q(`insert into public.lists (couple_id, name, created_by) values ($1, $2, $3)`, [couple.id, `L${i}`, alice]));
+  await rejects(as(alice, () => q(`insert into public.lists (couple_id, name, created_by) values ($1, 'one too many', $2)`, [couple.id, alice])), /too_many_lists/, 'twenty-first');
+  await as(alice, () => q(`delete from public.lists where id = $1`, [list.id]));
+  assert.equal((await q(`select count(*)::int as n from public.list_items where list_id = $1`, [list.id]))[0].n, 0, 'its items go with it');
+  await q(`delete from public.lists where couple_id = $1`, [couple.id]);
+});
+
+await test('receipts: only a photo in our receipts folder', async () => {
+  const add = (path) => as(alice, () => one(`insert into public.expenses (couple_id, paid_by, description, amount_cents, receipt_path) values ($1, $2, 'Lunch', 1200, $3) returning id`, [couple.id, alice, path]));
+  const x = await add(`${couple.id}/receipts/a.jpg`);
+  await rejects(add(`${couple.id}/a.jpg`), /receipt_in_couple_folder/, 'outside receipts/');
+  await rejects(add('00000000-0000-0000-0000-000000000000/receipts/a.jpg'), /receipt_in_couple_folder/, 'another couple’s folder');
+  const edited = await as(bob, () => one(`update public.expenses set amount_cents = 1500, receipt_path = null where id = $1 returning amount_cents, receipt_path`, [x.id]));
+  assert.deepEqual(edited, { amount_cents: 1500, receipt_path: null }, 'either of us edits');
+  await q(`delete from public.expenses where id = $1`, [x.id]);
+});
+
 console.log('\nNotifications');
 
 await test('notification settings: mine alone, with sane quiet hours', async () => {

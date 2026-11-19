@@ -74,6 +74,7 @@ describe('lists', () => {
     id,
     couple_id: 'c',
     list: 'groceries',
+    list_id: null,
     text: id,
     note: null,
     added_by: 'A',

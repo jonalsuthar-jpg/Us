@@ -13,17 +13,23 @@ import {
   monthSpend,
   parseAmount,
   pctForShare,
+  receiptUrls,
+  removeReceipt,
   settlementFor,
   settleUp,
   toDateKey,
+  updateExpense,
+  uploadReceipt,
   type CurrencyBalance,
   type Expense,
   type ExpenseCategory,
 } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { ArrowRight, Check, ChevronLeft, Delete } from 'lucide-react-native';
+import { ArrowRight, Check, ChevronLeft, Delete, ReceiptText } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, TextInput, View } from 'react-native';
+import * as ImagePicker from '@/lib/image-picker';
+import { readyPicked } from '@/lib/photo';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import { EmptyNote, ErrorNote } from '../module-screen';
 import { Button } from '../ui/button';
@@ -51,6 +57,7 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
   const list = expenses.data ?? [];
   const balances = settleUp(list, couple).filter((b) => b.debtor);
   const [sheet, setSheet] = useState<'add' | 'settle' | null>(null);
+  const [editing, setEditing] = useState<Expense | null>(null);
   // The balance Settle up opened with: once it's recorded the live balance clears, and the sheet still has to say so.
   const [settling, setSettling] = useState<CurrencyBalance | null>(null);
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
@@ -72,6 +79,7 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
   const groups = [...new Set(shown.map((e) => e.spent_on.slice(0, 7)))].map((m) => ({ m, rows: shown.filter((e) => e.spent_on.startsWith(m)) }));
   const close = () => {
     setSheet(null);
+    setEditing(null);
     if (adding) onAdded?.();
   };
 
@@ -184,7 +192,7 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
                 expenseRow(x, () =>
                   Alert.alert(`Remove “${x.description}”?`, 'It comes off the balance for both of you.', [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Remove', style: 'destructive', onPress: () => void expenses.mutate(() => deleteExpense(sb, x.id)).catch((e: Error) => setError(e.message)) },
+                    { text: 'Remove', style: 'destructive', onPress: () => void expenses.mutate(() => deleteExpense(sb, x.id, x.receipt_path)).catch((e: Error) => setError(e.message)) },
                   ]),
                 )
               ))}
@@ -192,14 +200,26 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
           </View>
         ))
       )}
-      {list.length ? <Text className="text-center text-micro text-ink-muted">Press and hold a cost to remove it.</Text> : null}
+      {list.length ? <Text className="text-center text-micro text-ink-muted">Tap a cost to change it, press and hold to remove it.</Text> : null}
 
-      <FormSheet open={sheet === 'add'} title="Add expense" onClose={close}>
-        {sheet === 'add' ? (
+      <FormSheet open={sheet === 'add' || !!editing} title={editing ? 'Edit expense' : 'Add expense'} onClose={close}>
+        {sheet === 'add' || editing ? (
           <AddExpense
+            key={editing?.id ?? 'new'}
+            initial={editing}
             defaultCurrency={saved ?? currency}
-            onSave={async (row) => {
-              await expenses.mutate(() => addExpense(sb, row));
+            onSave={async (row, receipt) => {
+              // A new receipt goes up first; one that's replaced or taken off goes once the row is saved.
+              let path = editing?.receipt_path ?? null;
+              if (receipt === 'remove') path = null;
+              else if (receipt) path = await uploadReceipt(sb, couple.id, await (await fetch(receipt.uri)).arrayBuffer(), receipt.mimeType);
+              const withReceipt = { ...row, receipt_path: path };
+              if (editing) {
+                await expenses.mutate(() => updateExpense(sb, editing.id, withReceipt));
+                if (editing.receipt_path && editing.receipt_path !== path) await removeReceipt(sb, editing.receipt_path).catch(() => {});
+                return;
+              }
+              await expenses.mutate(() => addExpense(sb, withReceipt));
               void AsyncStorage.setItem(LAST_CURRENCY, row.currency!);
               setSaved(row.currency!);
             }}
@@ -223,7 +243,14 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
     const verb = { lent: 'you lent', borrowed: 'you borrowed', paidBack: 'you paid back', gotBack: 'paid you back', none: 'not shared' }[pos.kind];
     const tint = pos.kind === 'lent' ? 'text-teal-700' : pos.kind === 'borrowed' ? 'text-rose-700' : pos.kind === 'none' ? 'text-ink-muted' : 'text-sage-700';
     return (
-      <Pressable key={x.id} accessibilityRole="button" accessibilityHint="Press and hold to remove" onLongPress={onRemove} className="flex-row items-center gap-3 border-b border-paper-sunken py-3">
+      <Pressable
+        key={x.id}
+        accessibilityRole="button"
+        accessibilityHint={x.is_settlement ? 'Press and hold to remove' : 'Tap to change, press and hold to remove'}
+        onPress={x.is_settlement ? undefined : () => setEditing(x)}
+        onLongPress={onRemove}
+        className="flex-row items-center gap-3 border-b border-paper-sunken py-3"
+      >
         <View className="w-8 items-center">
           <Text className="font-sans-semibold text-[10px] uppercase text-ink-muted">{d.toLocaleDateString(undefined, { month: 'short' })}</Text>
           <Text className="font-sans-bold text-lead">{d.getDate()}</Text>
@@ -244,6 +271,24 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
           <Text className={cn('text-micro', tint)}>{verb}</Text>
           {pos.cents ? <Text className={cn('font-sans-bold', tint)}>{formatMoney(pos.cents, x.currency)}</Text> : null}
         </View>
+        {x.receipt_path ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Receipt for ${x.description}`}
+            hitSlop={8}
+            onPress={() =>
+              void receiptUrls(sb, [x.receipt_path!])
+                .then((u) => {
+                  const url = u[x.receipt_path!];
+                  if (url) void Linking.openURL(url);
+                })
+                .catch((e: Error) => setError(e.message))
+            }
+            className="h-9 w-9 items-center justify-center rounded-full active:bg-paper-sunken"
+          >
+            <ReceiptText size={18} color={c.inkSoft} />
+          </Pressable>
+        ) : null}
       </Pressable>
     );
   }
@@ -252,21 +297,55 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
 type Mode = 'equal' | 'pct' | 'exact' | 'one';
 type Row = Parameters<typeof addExpense>[1];
 
-function AddExpense({ defaultCurrency, onSave, onDone }: { defaultCurrency: string; onSave: (row: Row) => Promise<void>; onDone: () => void }) {
+/** A new receipt photo, taking the old one off, or leaving it as it is. */
+type ReceiptChange = { uri: string; mimeType: string } | 'remove' | undefined;
+
+/** How an expense was split, for editing it in the same form it was added with. */
+function splitOf(x: Expense, mySlot: 'a' | 'b'): { mode: Mode; myPct: number; exact: string; forMe: boolean } {
+  const myPct = mySlot === 'a' ? x.split_a_pct : 100 - x.split_a_pct;
+  if (x.a_share_cents !== null) {
+    const mine = mySlot === 'a' ? x.a_share_cents : x.amount_cents - x.a_share_cents;
+    return { mode: 'exact', myPct, exact: (mine / 100).toFixed(2), forMe: false };
+  }
+  if (myPct === 50) return { mode: 'equal', myPct, exact: '', forMe: false };
+  if (myPct === 0 || myPct === 100) return { mode: 'one', myPct, exact: '', forMe: myPct === 100 };
+  return { mode: 'pct', myPct, exact: '', forMe: false };
+}
+
+function AddExpense({
+  initial,
+  defaultCurrency,
+  onSave,
+  onDone,
+}: {
+  initial?: Expense | null;
+  defaultCurrency: string;
+  onSave: (row: Row, receipt: ReceiptChange) => Promise<void>;
+  onDone: () => void;
+}) {
   const { couple, me, partner, mySlot, partnerSlot } = useCouple();
   const c = usePalette();
+  const split = initial ? splitOf(initial, mySlot) : null;
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState(defaultCurrency);
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<ExpenseCategory | null>(null);
-  const [picked, setPicked] = useState(false);
-  const [iPaid, setIPaid] = useState(true);
-  const [mode, setMode] = useState<Mode>('equal');
-  const [myPct, setMyPct] = useState(50);
-  const [exact, setExact] = useState('');
-  const [forMe, setForMe] = useState(false);
-  const [date, setDate] = useState(() => toDateKey(new Date()));
+  // The keypad builds the amount as typed digits, so drop a trailing ".00".
+  const [amount, setAmount] = useState(initial ? (initial.amount_cents / 100).toFixed(2).replace(/\.00$/, '') : '');
+  const [currency, setCurrency] = useState(initial?.currency ?? defaultCurrency);
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [category, setCategory] = useState<ExpenseCategory | null>(initial?.category ?? null);
+  const [picked, setPicked] = useState(!!initial);
+  const [iPaid, setIPaid] = useState(initial ? initial.paid_by === me.id : true);
+  const [mode, setMode] = useState<Mode>(split?.mode ?? 'equal');
+  const [myPct, setMyPct] = useState(split?.myPct ?? 50);
+  const [exact, setExact] = useState(split?.exact ?? '');
+  const [forMe, setForMe] = useState(split?.forMe ?? false);
+  const [date, setDate] = useState(() => initial?.spent_on ?? toDateKey(new Date()));
+  const [receipt, setReceipt] = useState<ReceiptChange>(undefined);
+  const hasReceipt = (!!receipt && receipt !== 'remove') || (!!initial?.receipt_path && receipt !== 'remove');
+  async function pickReceipt() {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+    const asset = res.canceled ? null : res.assets[0];
+    if (asset) setReceipt(await readyPicked(asset));
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -303,8 +382,9 @@ function AddExpense({ defaultCurrency, onSave, onDone }: { defaultCurrency: stri
         split_a_pct: exactSplit ? pctForShare(aCents, cents) : mode === 'equal' ? 50 : Math.round((aCents / cents) * 100),
         a_share_cents: exactSplit ? aCents : null,
         spent_on: date,
-      });
-      setStep(3);
+      }, receipt);
+      if (initial) onDone();
+      else setStep(3);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -520,9 +600,19 @@ function AddExpense({ defaultCurrency, onSave, onDone }: { defaultCurrency: stri
         <Text className={cn('font-sans-semibold', owedToMe > 0 ? 'text-teal-700' : owedToMe < 0 ? 'text-rose-700' : 'text-ink-soft')}>{result}</Text>
       </View>
       <DateStepper label="When" value={date} onChange={setDate} />
+      <View className="flex-row flex-wrap items-center gap-2">
+        <Button variant="secondary" size="sm" icon={<ReceiptText size={16} color={c.ink} />} onPress={() => void pickReceipt()}>
+          {receipt && receipt !== 'remove' ? 'Receipt added' : hasReceipt ? 'Change receipt' : 'Add a receipt photo'}
+        </Button>
+        {hasReceipt ? (
+          <Button variant="quiet" size="sm" onPress={() => setReceipt(initial?.receipt_path ? 'remove' : undefined)}>
+            Remove receipt
+          </Button>
+        ) : null}
+      </View>
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       <Button size="lg" loading={busy} disabled={!cents || (mode === 'exact' && !exact.trim())} onPress={() => void save()}>
-        {`Add ${money(cents)}`}
+        {initial ? `Save ${money(cents)}` : `Add ${money(cents)}`}
       </Button>
     </>
   );

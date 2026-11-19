@@ -1,6 +1,10 @@
 import type { CalendarEvent, Couple, Database, DecisionOption, EventKind, Expense, ExpenseCategory, LaborEntry } from '../database.types';
 import type { UsClient } from '../supabase';
 import type { PartnerSlot } from '../tokens';
+import { uuid } from '../uuid';
+import { removeFiles, uploadFile } from './media';
+import { MEMORY_BUCKET } from './memory';
+import { signedUrls } from './signed-urls';
 
 type Insert<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert'];
 type Update<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update'];
@@ -267,8 +271,30 @@ export async function addExpense(sb: UsClient, row: Insert<'expenses'>): Promise
   return unwrap(await sb.from('expenses').insert(row).select('*').single());
 }
 
-export async function deleteExpense(sb: UsClient, id: string): Promise<void> {
+/** Change an expense (not a settle-up). */
+export async function updateExpense(sb: UsClient, id: string, patch: Update<'expenses'>): Promise<Expense> {
+  return unwrap(await sb.from('expenses').update(patch).eq('id', id).eq('is_settlement', false).select('*').single());
+}
+
+/** Delete an expense, and its receipt photo once the row is gone. */
+export async function deleteExpense(sb: UsClient, id: string, receiptPath?: string | null): Promise<void> {
   unwrap(await sb.from('expenses').delete().eq('id', id));
+  if (receiptPath) await removeReceipt(sb, receiptPath).catch(() => {});
+}
+
+// Receipts live in our folder of the memories bucket, under receipts/.
+export async function uploadReceipt(sb: UsClient, coupleId: string, body: Blob | ArrayBuffer | Uint8Array, contentType: string): Promise<string> {
+  const path = `${coupleId}/receipts/${uuid()}.${contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg'}`;
+  await uploadFile(sb, MEMORY_BUCKET, path, body, contentType);
+  return path;
+}
+
+export async function removeReceipt(sb: UsClient, path: string): Promise<void> {
+  await removeFiles(sb, MEMORY_BUCKET, [path]);
+}
+
+export function receiptUrls(sb: UsClient, paths: string[]): Promise<Record<string, string>> {
+  return signedUrls(sb, MEMORY_BUCKET, paths);
 }
 
 export const EXPENSE_CATEGORIES: Record<ExpenseCategory, { label: string }> = {

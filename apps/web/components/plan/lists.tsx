@@ -4,17 +4,26 @@ import {
   addDecisionOption,
   addListItem,
   clearDoneItems,
+  createList,
+  customKey,
+  deleteList,
   deleteListItem,
+  isCustomKey,
   LIST_NAMES,
+  listKeyOf,
+  listLists,
   LISTS,
   listDecisionOptions,
   listItems,
+  MAX_CUSTOM_LISTS,
+  renameList,
   setListItemDone,
   sortListItems,
+  type ListKey,
   type ListName,
 } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { BookOpen, Check, ChevronDown, ChevronRight, Clapperboard, Dices, Globe, Plus, ShoppingBag, X, type LucideIcon } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, ChevronRight, Clapperboard, Dices, Globe, ListPlus, ListTodo, Pencil, Plus, ShoppingBag, Trash2, X, type LucideIcon } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { ErrorNote } from '@/components/app/module-header';
 import { Button } from '@/components/ui/button';
@@ -30,12 +39,22 @@ const STYLE: Record<ListName, { tone: Tone; Icon: LucideIcon; ring: string; tile
   read: { tone: 'plum', Icon: BookOpen, ring: '#4B3468', tile: 'from-[#8A6BB8] to-[#4B3468]', decide: 'Next book' },
 };
 
-/** Shared lists: groceries, a bucket list, things to watch and read. Either of you ticks things off. */
+/** One of our own lists: the same look for each, named by us. */
+const CUSTOM_STYLE: { tone: Tone; Icon: LucideIcon; ring: string; tile: string; decide?: string } = {
+  tone: 'sage',
+  Icon: ListTodo,
+  ring: '#566447',
+  tile: 'from-[#9AAA8B] to-[#566447]',
+};
+
+/** Shared lists: groceries, a bucket list, things to watch and read, and any we make. Either of you ticks things off. */
 export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
   const { sb, couple, me, partner, mySlot, partnerSlot } = useCouple();
   const items = useCoupleData('plan:lists', () => listItems(sb, couple.id), [sb, couple.id, true]);
   const options = useCoupleData('plan:decisions', () => (onPick ? listDecisionOptions(sb, couple.id) : Promise.resolve([])), [sb, couple.id, !!onPick]);
-  const [list, setList] = useState<ListName>('groceries');
+  const own = useCoupleData('plan:lists', () => listLists(sb, couple.id), [sb, couple.id, 'own']);
+  const [list, setList] = useState<ListKey>('groceries');
+  const [naming, setNaming] = useState<{ id?: string; name: string } | null>(null);
   const [text, setText] = useState('');
   const [showDone, setShowDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -43,14 +62,18 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
   const fail = (e: Error) => setError(e.message);
 
   const all = items.data ?? [];
-  const shown = sortListItems(all.filter((i) => i.list === list));
+  const mine = own.data ?? [];
+  const custom = isCustomKey(list) ? mine.find((l) => customKey(l.id) === list) : undefined;
+  // A list of ours that's gone (deleted on the other phone): back to groceries.
+  const current: ListKey = isCustomKey(list) && !custom && own.data ? 'groceries' : list;
+  const shown = sortListItems(all.filter((i) => listKeyOf(i) === current));
   const open = shown.filter((i) => !i.done_at);
   const done = shown.filter((i) => i.done_at);
-  const meta = LISTS[list];
-  const style = STYLE[list];
+  const meta = custom ? { title: custom.name, placeholder: `Add to ${custom.name}`, doneLabel: 'Done' } : LISTS[current as ListName];
+  const style = custom ? CUSTOM_STYLE : STYLE[current as ListName];
   const nameOf = (id: string | null) => (id === me.id ? 'you' : id === partner.id ? partner.display_name : 'someone');
   const again =
-    list === 'groceries'
+    current === 'groceries'
       ? [...new Map(done.map((i) => [i.text.toLowerCase(), i])).values()].filter((i) => !open.some((o) => o.text.toLowerCase() === i.text.toLowerCase())).slice(0, 5)
       : [];
 
@@ -59,7 +82,7 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
     if (!text.trim()) return;
     setError(null);
     try {
-      await items.mutate(() => addListItem(sb, { couple_id: couple.id, list, text, added_by: me.id }));
+      await items.mutate(() => addListItem(sb, { couple_id: couple.id, list: current, text, added_by: me.id }));
       setText('');
     } catch (err) {
       fail(err as Error);
@@ -86,18 +109,20 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
     <div className="space-y-5">
       {/* All four lists at once: two by two on phones, a row on wider screens. */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
-        {LIST_NAMES.map((n) => {
-          const s = STYLE[n];
-          const of = all.filter((i) => i.list === n);
+        {[
+          ...LIST_NAMES.map((n) => ({ key: n as ListKey, title: LISTS[n].title, s: STYLE[n] })),
+          ...mine.map((l) => ({ key: customKey(l.id), title: l.emoji ? `${l.emoji} ${l.name}` : l.name, s: CUSTOM_STYLE })),
+        ].map(({ key, title, s }) => {
+          const of = all.filter((i) => listKeyOf(i) === key);
           const left = of.filter((i) => !i.done_at).length;
-          const on = n === list;
+          const on = key === current;
           const pct = of.length ? Math.round(((of.length - left) / of.length) * 100) : 0;
           return (
             <button
-              key={n}
+              key={key}
               type="button"
               aria-pressed={on}
-              onClick={() => (setList(n), setShowDone(false))}
+              onClick={() => (setList(key), setShowDone(false))}
               className={cn(
                 'flex items-center gap-2.5 rounded-[20px] p-2.5 text-left shadow-[0_10px_22px_-16px_rgba(63,44,102,0.7)] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
                 on ? cn('bg-gradient-to-br text-white', s.tile) : 'bg-paper-raised text-ink',
@@ -107,7 +132,7 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
                 <s.Icon className={cn('h-5 w-5', on ? '' : TONE[s.tone].ink)} style={on ? { color: s.ring } : undefined} />
               </span>
               <span className="min-w-0 flex-1 space-y-1">
-                <span className="block truncate text-small font-extrabold">{LISTS[n].title}</span>
+                <span className="block truncate text-small font-extrabold">{title}</span>
                 <span className="flex items-center gap-1.5">
                   <span className={cn('h-[5px] flex-1 overflow-hidden rounded-full', on ? 'bg-white/30' : TONE[s.tone].wash)}>
                     <span className="block h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: on ? '#fff' : s.ring }} />
@@ -118,7 +143,63 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
             </button>
           );
         })}
+        {mine.length < MAX_CUSTOM_LISTS ? (
+          <button
+            type="button"
+            onClick={() => setNaming({ name: '' })}
+            className="flex items-center gap-2.5 rounded-[20px] border-2 border-dashed border-plum-200 p-2.5 text-left text-ink-soft hover:border-plum-300 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-paper-sunken">
+              <ListPlus className="h-5 w-5" />
+            </span>
+            <span className="text-small font-extrabold">New list</span>
+          </button>
+        ) : null}
       </div>
+
+      {naming ? (
+        <ListNameForm
+          initial={naming.name}
+          renaming={!!naming.id}
+          onCancel={() => setNaming(null)}
+          onSave={async (name) => {
+            try {
+              if (naming.id) await own.mutate(() => renameList(sb, naming.id!, { name }));
+              else {
+                const made = await own.mutate(() => createList(sb, { couple_id: couple.id, created_by: me.id, name }));
+                setList(customKey(made.id));
+              }
+              setNaming(null);
+            } catch (e) {
+              fail(e as Error);
+            }
+          }}
+        />
+      ) : null}
+
+      {custom ? (
+        <div className="flex items-center justify-end gap-1">
+          <Button variant="quiet" size="sm" onClick={() => setNaming({ id: custom.id, name: custom.name })}>
+            <Pencil className="h-4 w-4" /> Rename
+          </Button>
+          <Button
+            variant="quiet"
+            size="sm"
+            onClick={() => {
+              if (!window.confirm(`Delete “${custom.name}” and everything on it, for both of you?`)) return;
+              void own
+                .mutate(() => deleteList(sb, custom.id))
+                .then(() => {
+                  setList('groceries');
+                  void items.reload();
+                })
+                .catch(fail);
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete list
+          </Button>
+        </div>
+      ) : null}
 
       <form onSubmit={add} className="flex gap-2">
         <input
@@ -238,7 +319,7 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
                     size="sm"
                     onClick={() =>
                       window.confirm(`Clear ${done.length} ticked ${done.length === 1 ? 'item' : 'items'} from ${meta.title}?`) &&
-                      void items.mutate(() => clearDoneItems(sb, couple.id, list)).catch(fail)
+                      void items.mutate(() => clearDoneItems(sb, couple.id, current)).catch(fail)
                     }
                   >
                     Clear ticked
@@ -250,5 +331,39 @@ export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+function ListNameForm({ initial, renaming, onSave, onCancel }: { initial: string; renaming: boolean; onSave: (name: string) => Promise<void>; onCancel: () => void }) {
+  const [name, setName] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setBusy(true);
+        await onSave(name);
+        setBusy(false);
+      }}
+      className="flex flex-wrap gap-2 rounded-sheet border border-paper-edge bg-paper-raised p-3"
+    >
+      <input
+        autoFocus
+        aria-label={renaming ? 'New name for the list' : 'Name of the new list'}
+        value={name}
+        maxLength={40}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+        placeholder="Gifts, Garden, Places to eat…"
+        className="h-11 min-w-0 flex-1 rounded-control border border-paper-edge bg-paper px-3 text-ink focus:border-rose-400 focus:outline-none"
+      />
+      <Button type="submit" loading={busy} disabled={!name.trim()}>
+        {renaming ? 'Rename' : 'Make list'}
+      </Button>
+      <Button type="button" variant="quiet" onClick={onCancel}>
+        Cancel
+      </Button>
+    </form>
   );
 }

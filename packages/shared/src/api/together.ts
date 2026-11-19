@@ -1,4 +1,4 @@
-import type { ArrivalCheck, Countdown, ListItem, ListName, LocationShare } from '../database.types';
+import type { ArrivalCheck, Countdown, CustomList, ListItem, ListName, LocationShare } from '../database.types';
 import type { UsClient } from '../supabase';
 import { fromDateKey, toDateKey } from './plan';
 import { notifyPartner } from './push';
@@ -205,10 +205,51 @@ export async function listItems(sb: UsClient, coupleId: string): Promise<ListIte
   return unwrap(await sb.from('list_items').select('*').eq('couple_id', coupleId).order('created_at').limit(1000));
 }
 
-export async function addListItem(sb: UsClient, row: { couple_id: string; list: ListName; text: string; added_by: string; note?: string | null }) {
+/**
+ * Which list, as one string: a built-in list's name, or "c:<id>" for one of
+ * ours. Screens keep the open list as a key.
+ */
+export type ListKey = ListName | `c:${string}`;
+export const customKey = (id: string): ListKey => `c:${id}`;
+export const isCustomKey = (k: ListKey): k is `c:${string}` => k.startsWith('c:');
+
+export function listKeyOf(item: Pick<ListItem, 'list' | 'list_id'>): ListKey {
+  return item.list === 'custom' && item.list_id ? customKey(item.list_id) : (item.list as ListName);
+}
+
+/** Where an item for `key` goes. */
+function listColumns(key: ListKey): { list: ListItem['list']; list_id: string | null } {
+  return isCustomKey(key) ? { list: 'custom', list_id: key.slice(2) } : { list: key, list_id: null };
+}
+
+export async function addListItem(sb: UsClient, row: { couple_id: string; list: ListKey; text: string; added_by: string; note?: string | null }) {
   const text = row.text.trim().slice(0, 200);
   if (!text) throw new Error('Write something first.');
-  return unwrap<ListItem>(await sb.from('list_items').insert({ ...row, text }).select('*').single());
+  return unwrap<ListItem>(await sb.from('list_items').insert({ ...row, ...listColumns(row.list), text }).select('*').single());
+}
+
+// Our own lists ("Gifts", "Garden"), beside the four built in.
+export const MAX_CUSTOM_LISTS = 20;
+
+export async function listLists(sb: UsClient, coupleId: string): Promise<CustomList[]> {
+  return unwrap(await sb.from('lists').select('*').eq('couple_id', coupleId).order('created_at'));
+}
+
+export async function createList(sb: UsClient, row: { couple_id: string; created_by: string; name: string; emoji?: string | null }): Promise<CustomList> {
+  const name = row.name.trim().slice(0, 40);
+  if (!name) throw new Error('Give the list a name.');
+  return unwrap(await sb.from('lists').insert({ ...row, name, emoji: row.emoji?.trim() || null }).select('*').single());
+}
+
+export async function renameList(sb: UsClient, id: string, patch: { name?: string; emoji?: string | null }) {
+  const name = patch.name?.trim().slice(0, 40);
+  if (patch.name !== undefined && !name) throw new Error('Give the list a name.');
+  unwrap(await sb.from('lists').update({ ...patch, ...(name ? { name } : {}) }).eq('id', id));
+}
+
+/** The list and everything on it. */
+export async function deleteList(sb: UsClient, id: string) {
+  unwrap(await sb.from('lists').delete().eq('id', id));
 }
 
 /** Tick (with my id) or untick an item. */
@@ -220,8 +261,11 @@ export async function deleteListItem(sb: UsClient, id: string) {
   unwrap(await sb.from('list_items').delete().eq('id', id));
 }
 
-export async function clearDoneItems(sb: UsClient, coupleId: string, list: ListName) {
-  unwrap(await sb.from('list_items').delete().eq('couple_id', coupleId).eq('list', list).not('done_at', 'is', null));
+export async function clearDoneItems(sb: UsClient, coupleId: string, list: ListKey) {
+  const where = listColumns(list);
+  let q = sb.from('list_items').delete().eq('couple_id', coupleId).eq('list', where.list).not('done_at', 'is', null);
+  if (where.list_id) q = q.eq('list_id', where.list_id);
+  unwrap(await q);
 }
 
 // ======================================================= thinking of you ===

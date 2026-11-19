@@ -22,7 +22,8 @@ export function planActivity(
   const who = (id: string | null) => (id === ctx.me.id ? 'You' : ctx.partner.display_name);
   const out: PlanActivity[] = [];
   for (const i of data.items ?? []) {
-    const list = LISTS[i.list]?.title ?? 'a list';
+    // One of our own lists has its name on the list row, not here.
+    const list = i.list === 'custom' ? 'a list' : (LISTS[i.list]?.title ?? 'a list');
     if (i.done_at && i.done_by) out.push({ id: `done-${i.id}`, mine: i.done_by === ctx.me.id, text: `${who(i.done_by)} ticked “${i.text}” off ${list}`, at: i.done_at });
     else if (i.added_by) out.push({ id: `add-${i.id}`, mine: i.added_by === ctx.me.id, text: `${who(i.added_by)} added “${i.text}” to ${list}`, at: i.created_at });
   }

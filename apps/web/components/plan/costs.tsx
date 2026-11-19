@@ -19,9 +19,14 @@ import {
   toDateKey,
   type CurrencyBalance,
   type ExpenseCategory,
+  receiptUrls,
+  removeReceipt,
+  updateExpense,
+  uploadReceipt,
+  type Expense,
 } from '@us/shared';
 import { useCouple, useCoupleData } from '@us/shared/react';
-import { ArrowRight, Check, ChevronLeft, X } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, ReceiptText, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { EmptyNote, ErrorNote } from '@/components/app/module-header';
 import { Button } from '@/components/ui/button';
@@ -30,6 +35,7 @@ import { Field } from '@/components/ui/field';
 import { IconButton } from '@/components/ui/icon-button';
 import { Segmented } from '@/components/ui/segmented';
 import { cn } from '@/lib/cn';
+import { shrinkPhoto } from '@/lib/image';
 import { GroupLabel, Initial, Pick, SplitBar } from './bits';
 import { CATEGORY_STYLE, SLOT_FILL, TONE } from './tones';
 
@@ -45,6 +51,7 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
   const list = expenses.data ?? [];
   const balances = settleUp(list, couple).filter((b) => b.debtor);
   const [sheet, setSheet] = useState<'add' | 'settle' | null>(null);
+  const [editing, setEditing] = useState<Expense | null>(null);
   // The balance Settle up opened with: once it's recorded the live balance clears, and the dialog still has to say so.
   const [settling, setSettling] = useState<CurrencyBalance | null>(null);
   const [filter, setFilter] = useState<ExpenseCategory | 'all'>('all');
@@ -69,6 +76,7 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
   const groups = [...new Set(shown.map((e) => e.spent_on.slice(0, 7)))].map((m) => ({ m, rows: shown.filter((e) => e.spent_on.startsWith(m)) }));
   const close = () => {
     setSheet(null);
+    setEditing(null);
     if (adding) onAdded?.();
   };
 
@@ -180,7 +188,12 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
                 const verb = { lent: 'you lent', borrowed: 'you borrowed', paidBack: 'you paid back', gotBack: 'paid you back', none: 'not shared' }[pos.kind];
                 const tint = pos.kind === 'lent' ? 'text-teal-700' : pos.kind === 'borrowed' ? 'text-rose-700' : pos.kind === 'none' ? 'text-ink-muted' : 'text-sage-700';
                 return (
-                  <li key={x.id} className="group flex items-center gap-3 border-b border-paper-sunken py-3 last:border-b-0">
+                  <li
+                    key={x.id}
+                    // Tap an expense to change it (settle-ups stay as they were).
+                    onClick={(e) => !x.is_settlement && !(e.target as HTMLElement).closest('button') && setEditing(x)}
+                    className={cn('group flex items-center gap-3 border-b border-paper-sunken py-3 last:border-b-0', !x.is_settlement && 'cursor-pointer hover:bg-paper-sunken/40')}
+                  >
                     <span className="w-8 text-center">
                       <span className="block text-[10px] font-semibold uppercase text-ink-muted">{d.toLocaleDateString(undefined, { month: 'short' })}</span>
                       <span className="block text-lead font-bold text-ink">{d.getDate()}</span>
@@ -199,13 +212,26 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
                       <span className={cn('block text-micro', tint)}>{verb}</span>
                       {pos.cents ? <span className={cn('block font-bold tabular-nums', tint)}>{formatMoney(pos.cents, x.currency)}</span> : null}
                     </span>
+                    {x.receipt_path ? (
+                      <IconButton
+                        label={`Receipt for ${x.description}`}
+                        size="sm"
+                        onClick={() =>
+                          void receiptUrls(sb, [x.receipt_path!])
+                            .then((u) => u[x.receipt_path!] && window.open(u[x.receipt_path!], '_blank', 'noopener'))
+                            .catch((e: Error) => setError(e.message))
+                        }
+                      >
+                        <ReceiptText className="h-4 w-4" />
+                      </IconButton>
+                    ) : null}
                     <IconButton
                       label={`Remove ${x.description}`}
                       size="sm"
                       className="opacity-60 group-hover:opacity-100"
                       onClick={() =>
                         window.confirm(`Remove “${x.description}”? It comes off the balance for both of you.`) &&
-                        void expenses.mutate(() => deleteExpense(sb, x.id)).catch((e: Error) => setError(e.message))
+                        void expenses.mutate(() => deleteExpense(sb, x.id, x.receipt_path)).catch((e: Error) => setError(e.message))
                       }
                     >
                       <X className="h-4 w-4" />
@@ -218,12 +244,22 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
         ))
       )}
 
-      <Dialog open={sheet === 'add'} onOpenChange={(o) => !o && close()} title="Add expense" className="max-h-[92dvh] overflow-y-auto">
-        {sheet === 'add' ? (
+      <Dialog open={sheet === 'add' || !!editing} onOpenChange={(o) => !o && close()} title={editing ? 'Edit expense' : 'Add expense'} className="max-h-[92dvh] overflow-y-auto">
+        {sheet === 'add' || editing ? (
           <AddExpense
+            key={editing?.id ?? 'new'}
+            initial={editing}
             defaultCurrency={saved ?? currency}
-            onSave={async (row) => {
-              await expenses.mutate(() => addExpense(sb, row));
+            onSave={async (row, receipt) => {
+              // A new receipt goes up first; one that's replaced or taken off goes once the row is saved.
+              const path = receipt instanceof File ? await uploadReceipt(sb, couple.id, ...(await shrinkReceipt(receipt))) : receipt === 'remove' ? null : (editing?.receipt_path ?? null);
+              const withReceipt = { ...row, receipt_path: path };
+              if (editing) {
+                await expenses.mutate(() => updateExpense(sb, editing.id, withReceipt));
+                if (editing.receipt_path && editing.receipt_path !== path) await removeReceipt(sb, editing.receipt_path).catch(() => {});
+                return;
+              }
+              await expenses.mutate(() => addExpense(sb, withReceipt));
               try {
                 localStorage.setItem(LAST_CURRENCY, row.currency!);
               } catch {}
@@ -242,20 +278,53 @@ export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () 
 
 type Mode = 'equal' | 'pct' | 'exact' | 'one';
 
-function AddExpense({ defaultCurrency, onSave, onDone }: { defaultCurrency: string; onSave: (row: Row) => Promise<void>; onDone: () => void }) {
+/** A new receipt photo, taking the old one off, or leaving it as it is. */
+type ReceiptChange = File | 'remove' | undefined;
+
+async function shrinkReceipt(file: File): Promise<[Blob, string]> {
+  const { blob, type } = await shrinkPhoto(file);
+  return [blob, type];
+}
+
+/** How an expense was split, for editing it in the same form it was added with. */
+function splitOf(x: Expense, mySlot: 'a' | 'b'): { mode: Mode; myPct: number; exact: string; forMe: boolean } {
+  const myPct = mySlot === 'a' ? x.split_a_pct : 100 - x.split_a_pct;
+  if (x.a_share_cents !== null) {
+    const mine = mySlot === 'a' ? x.a_share_cents : x.amount_cents - x.a_share_cents;
+    return { mode: 'exact', myPct, exact: (mine / 100).toFixed(2), forMe: false };
+  }
+  if (myPct === 50) return { mode: 'equal', myPct, exact: '', forMe: false };
+  if (myPct === 0 || myPct === 100) return { mode: 'one', myPct, exact: '', forMe: myPct === 100 };
+  return { mode: 'pct', myPct, exact: '', forMe: false };
+}
+
+function AddExpense({
+  initial,
+  defaultCurrency,
+  onSave,
+  onDone,
+}: {
+  initial?: Expense | null;
+  defaultCurrency: string;
+  onSave: (row: Row, receipt: ReceiptChange) => Promise<void>;
+  onDone: () => void;
+}) {
   const { couple, me, partner, mySlot, partnerSlot } = useCouple();
+  const split = initial ? splitOf(initial, mySlot) : null;
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState(defaultCurrency);
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<ExpenseCategory | null>(null);
-  const [picked, setPicked] = useState(false);
-  const [iPaid, setIPaid] = useState(true);
-  const [mode, setMode] = useState<Mode>('equal');
-  const [myPct, setMyPct] = useState(50);
-  const [exact, setExact] = useState('');
-  const [forMe, setForMe] = useState(false);
-  const [date, setDate] = useState(() => toDateKey(new Date()));
+  const [amount, setAmount] = useState(initial ? (initial.amount_cents / 100).toFixed(2) : '');
+  const [currency, setCurrency] = useState(initial?.currency ?? defaultCurrency);
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [category, setCategory] = useState<ExpenseCategory | null>(initial?.category ?? null);
+  const [picked, setPicked] = useState(!!initial);
+  const [iPaid, setIPaid] = useState(initial ? initial.paid_by === me.id : true);
+  const [mode, setMode] = useState<Mode>(split?.mode ?? 'equal');
+  const [myPct, setMyPct] = useState(split?.myPct ?? 50);
+  const [exact, setExact] = useState(split?.exact ?? '');
+  const [forMe, setForMe] = useState(split?.forMe ?? false);
+  const [date, setDate] = useState(() => initial?.spent_on ?? toDateKey(new Date()));
+  const [receipt, setReceipt] = useState<ReceiptChange>(undefined);
+  const hasReceipt = receipt instanceof File || (!!initial?.receipt_path && receipt !== 'remove');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -285,8 +354,9 @@ function AddExpense({ defaultCurrency, onSave, onDone }: { defaultCurrency: stri
         split_a_pct: mode === 'exact' ? pctForShare(aCents, cents) : mode === 'equal' ? 50 : Math.round((aCents / cents) * 100),
         a_share_cents: mode === 'exact' ? aCents : null,
         spent_on: date,
-      });
-      setStep(3);
+      }, receipt);
+      if (initial) onDone();
+      else setStep(3);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -505,9 +575,21 @@ function AddExpense({ defaultCurrency, onSave, onDone }: { defaultCurrency: stri
         <ArrowRight className="h-5 w-5" /> {result}
       </p>
       <Field label="When" type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-control border border-paper-edge bg-paper-raised px-3 text-small text-ink hover:bg-paper-sunken focus-within:ring-2 focus-within:ring-gold-400">
+          <ReceiptText className="h-4 w-4" />
+          {receipt instanceof File ? receipt.name.slice(0, 28) : hasReceipt ? 'Change receipt' : 'Add a receipt photo'}
+          <input type="file" accept="image/*" className="sr-only" onChange={(e) => e.target.files?.[0] && setReceipt(e.target.files[0])} />
+        </label>
+        {hasReceipt ? (
+          <Button type="button" variant="quiet" size="sm" onClick={() => setReceipt(initial?.receipt_path ? 'remove' : undefined)}>
+            Remove receipt
+          </Button>
+        ) : null}
+      </div>
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       <Button type="submit" size="lg" block loading={busy} disabled={!cents || (mode === 'exact' && !exact.trim())}>
-        Add {money(cents)}
+        {initial ? `Save ${money(cents)}` : `Add ${money(cents)}`}
       </Button>
     </form>
   );
