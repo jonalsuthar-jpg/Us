@@ -314,6 +314,10 @@ export type Database = {
           /** One short video: "<couple_id>/video/<uuid>.<ext>". */
           video_path: string | null;
           video_meta: { width?: number; height?: number; duration_ms?: number } | null;
+          /** A cover chosen by us; else the first photo, else the video's still (see memoryCover). */
+          cover_path: string | null;
+          /** A still from the video, made when it was added. */
+          video_poster_path: string | null;
           kind: MemoryKind;
           created_at: string;
           /** The snap this memory was kept from. */
@@ -330,6 +334,8 @@ export type Database = {
           photo_paths?: string[];
           video_path?: string | null;
           video_meta?: { width?: number; height?: number; duration_ms?: number } | null;
+          cover_path?: string | null;
+          video_poster_path?: string | null;
           kind?: MemoryKind;
           from_snap?: string | null;
         };
@@ -341,6 +347,8 @@ export type Database = {
           photo_paths?: string[];
           video_path?: string | null;
           video_meta?: { width?: number; height?: number; duration_ms?: number } | null;
+          cover_path?: string | null;
+          video_poster_path?: string | null;
           kind?: MemoryKind;
         };
         Relationships: [];

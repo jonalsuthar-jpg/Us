@@ -5,6 +5,8 @@ import {
   listMemories,
   MEMORY_KINDS,
   MEMORY_PHOTOS_MAX,
+  memoryCover,
+  memoryFiles,
   memoryPhotos,
   myRatings,
   offerRecap,
@@ -29,12 +31,13 @@ import { useBirthdayStoryMemories, useCouple, useCoupleData } from '@us/shared/r
 import * as ImagePicker from '@/lib/image-picker';
 import { readyPicked } from '@/lib/photo';
 import { router } from 'expo-router';
-import { ArrowLeft, BookHeart, ChevronLeft, ChevronRight, Film, Heart, ImagePlus, Plane, Play, Plus, Sparkles, Wine, X } from 'lucide-react-native';
+import { BookHeart, ChevronLeft, ChevronRight, Film, Heart, ImagePlus, Plane, Play, Plus, Sparkles, Star, Wine, X } from 'lucide-react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Image, Pressable, useWindowDimensions, View } from 'react-native';
 import { File as DeviceFile } from 'expo-file-system';
 import { fitVideo } from '@/modules/us-video';
+import { videoStill } from '@/lib/video-poster';
 import { Photo as CachedPhoto } from '../ui/photo';
 import { EmptyNote, ErrorNote } from '../module-screen';
 import { Button, IconButton } from '../ui/button';
@@ -64,7 +67,7 @@ async function pickPhotos(limit: number): Promise<Picked[]> {
   return Promise.all(res.assets.slice(0, limit).map((a) => readyPicked(a)));
 }
 
-type PickedVideo = { uri: string; mimeType: string; meta: { width?: number; height?: number; duration_ms: number } };
+type PickedVideo = { uri: string; mimeType: string; meta: { width?: number; height?: number; duration_ms: number }; still: Picked | null };
 
 /** One video, up to a minute, in high quality (see VIDEO_PROFILES.memory). */
 async function pickVideo(): Promise<PickedVideo | null> {
@@ -83,7 +86,9 @@ async function pickVideo(): Promise<PickedVideo | null> {
   }
   // Memories keep close to the original: 1080p at about 8 Mbps, or the file itself when it's already that efficient.
   const ready = await fitVideo({ uri: a.uri, width: a.width, height: a.height, durationMs }, size, 'memory');
-  return { uri: ready.uri, // Re-encoded videos are always mp4.
+  // A sharp still for the card, so a memory with only a video isn't blank.
+  const still = await videoStill(ready.uri);
+  return { still, uri: ready.uri, // Re-encoded videos are always mp4.
     mimeType: ready.uri === a.uri ? (a.mimeType ?? 'video/mp4') : 'video/mp4', meta: { width: ready.width, height: ready.height, duration_ms: ready.durationMs } };
 }
 
@@ -101,7 +106,7 @@ export function MemoryTimeline() {
   const openStory = (m: Memory) => router.push(`/memory-story/${m.id}`);
 
   const all = memories.data ?? [];
-  const filesOf = (m: Memory) => [...memoryPhotos(m), ...(m.video_path ? [m.video_path] : [])];
+  const filesOf = (m: Memory) => memoryFiles(m);
   const photoKey = all.map((m) => filesOf(m).join(',')).join('|');
   useEffect(() => {
     const paths = all.flatMap(filesOf).filter((p) => !urls[p]);
@@ -112,6 +117,21 @@ export function MemoryTimeline() {
   }, [sb, photoKey]);
 
   const resurfaced = useMemo(() => onThisDay(all), [all]);
+
+  // A video memory from before stills existed: make its still the first time it's opened.
+  const fixing = useRef(new Set<string>());
+  useEffect(() => {
+    const m = viewing;
+    const link = m?.video_path ? urls[m.video_path] : undefined;
+    if (!m || !link || m.video_poster_path || fixing.current.has(m.id)) return;
+    fixing.current.add(m.id);
+    void (async () => {
+      const still = await videoStill(link);
+      if (!still) return;
+      const path = await uploadMemoryPhoto(sb, couple.id, await (await fetch(still.uri)).arrayBuffer(), still.mimeType);
+      await memories.mutate(() => updateMemory(sb, m.id, { video_poster_path: path }));
+    })().catch(() => {});
+  }, [viewing, urls, sb, couple.id, memories]);
   const shown = filter === 'all' ? all : all.filter((m) => m.kind === filter);
 
   const count = (f: Filter) => (f === 'all' ? all.length : all.filter((m) => m.kind === f).length);
@@ -189,8 +209,8 @@ export function MemoryTimeline() {
           </View>
           {resurfaced.map((m) => (
             <Pressable key={m.id} onPress={() => setViewing(m)} className="flex-row items-center gap-3 rounded-[18px] bg-white/70 p-2 dark:bg-paper-raised" accessibilityRole="button">
-              {m.photo_path && urls[m.photo_path] ? (
-                <CachedPhoto uri={urls[m.photo_path]!} cacheKey={m.photo_path} style={{ width: 56, height: 56, borderRadius: 14 }} />
+              {memoryCover(m) && urls[memoryCover(m)!] ? (
+                <CachedPhoto uri={urls[memoryCover(m)!]!} cacheKey={memoryCover(m)} style={{ width: 56, height: 56, borderRadius: 14 }} />
               ) : (
                 <View className="h-14 w-14 items-center justify-center rounded-[14px] bg-gold-100">
                   <Sparkles size={22} color={c.onGold} />
@@ -226,7 +246,7 @@ export function MemoryTimeline() {
                   <MemoryCard
                     memory={m}
                     index={i}
-                    url={memoryPhotos(m)[0] ? urls[memoryPhotos(m)[0]!] : undefined}
+                    url={memoryCover(m) ? urls[memoryCover(m)!] : undefined}
                     rated={!!ratings.data?.[m.id]}
                     story={stories.has(m.id)}
                     onOpen={() => (stories.has(m.id) ? openStory(m) : setViewing(m))}
@@ -273,26 +293,32 @@ export function MemoryTimeline() {
             key={editing.memory?.id ?? 'new'}
             initial={editing.memory}
             urls={urls}
-            onSubmit={async ({ fields, photos, video }) => {
+            onSubmit={async ({ fields, photos, video, cover }) => {
               const before = editing.memory;
+              const upload = async (pk: Picked) => uploadMemoryPhoto(sb, couple.id, await (await fetch(pk.uri)).arrayBuffer(), pk.mimeType);
               await memories.mutate(async () => {
                 // New photos go up in their place in the order; the first is the cover.
                 const photo_paths: string[] = [];
                 for (const p of photos) {
                   if (p.path) photo_paths.push(p.path);
-                  else if (p.picked) photo_paths.push(await uploadMemoryPhoto(sb, couple.id, await (await fetch(p.picked.uri)).arrayBuffer(), p.picked.mimeType));
+                  else if (p.picked) photo_paths.push(await upload(p.picked));
                 }
                 let video_path = before?.video_path ?? null;
                 let video_meta = before?.video_meta ?? null;
-                if (video === null) [video_path, video_meta] = [null, null];
+                let video_poster_path = before?.video_poster_path ?? null;
+                if (video === null) [video_path, video_meta, video_poster_path] = [null, null, null];
                 else if (video) {
                   video_meta = video.meta;
                   video_path = await uploadMemoryVideo(sb, couple.id, await (await fetch(video.uri)).arrayBuffer(), video.mimeType);
+                  video_poster_path = video.still ? await upload(video.still) : null;
                 }
-                const row = { ...fields, photo_paths, photo_path: photo_paths[0] ?? null, video_path, video_meta };
+                // undefined: leave the chosen cover; null: back to automatic.
+                const cover_path = cover === undefined ? (before?.cover_path ?? null) : cover === null ? null : await upload(cover);
+                const row = { ...fields, photo_paths, photo_path: photo_paths[0] ?? null, video_path, video_meta, video_poster_path, cover_path };
                 const saved = before ? await updateMemory(sb, before.id, row) : await createMemory(sb, { ...row, couple_id: couple.id, created_by: me.id });
                 // Files taken off (or replaced) go once the memory no longer points at them.
-                const gone = before ? [...memoryPhotos(before).filter((x) => !photo_paths.includes(x)), ...(before.video_path && before.video_path !== video_path ? [before.video_path] : [])] : [];
+                const keep = new Set(memoryFiles(row as Memory));
+                const gone = before ? memoryFiles(before).filter((x) => !keep.has(x)) : [];
                 for (const g of gone) await removeMemoryPhoto(sb, g).catch(() => {});
                 return saved;
               });
@@ -346,8 +372,15 @@ function MemoryCard({ memory, index, url, rated, story, onOpen }: { memory: Memo
       }}
     >
       <View className="aspect-square overflow-hidden rounded-[6px] bg-paper-sunken">
-        {memoryPhotos(memory).length ? (
-          url ? <CachedPhoto uri={url} cacheKey={memoryPhotos(memory)[0]} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} /> : null
+        {memoryCover(memory) ? (
+          url ? <CachedPhoto uri={url} cacheKey={memoryCover(memory)} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} /> : null
+        ) : memory.video_path ? (
+          // A video whose still isn't made yet: a dark frame with a play mark, never blank.
+          <View className="h-full w-full items-center justify-center bg-plum-900">
+            <View className="h-12 w-12 items-center justify-center rounded-full bg-white/20">
+              <Play size={22} color="#fff" fill="#fff" />
+            </View>
+          </View>
         ) : (
           <GradientView from={art.from} to={art.to} className="h-full w-full items-center justify-center">
             <art.Icon size={44} color={art.ink} />
@@ -480,6 +513,8 @@ function MemoryForm({
     photos: FormPhoto[];
     /** A new video, null to take it off, undefined to leave it. */
     video: PickedVideo | null | undefined;
+    /** A cover photo chosen now, null for automatic, undefined to leave it. */
+    cover: Picked | null | undefined;
   }) => Promise<void>;
   onDelete?: () => Promise<void>;
 }) {
@@ -491,13 +526,16 @@ function MemoryForm({
   const [photos, setPhotos] = useState<FormPhoto[]>(() => (initial ? memoryPhotos(initial).map((p) => ({ key: p, path: p, url: urls[p] })) : []));
   const [video, setVideo] = useState<PickedVideo | null | undefined>(undefined);
   const hasVideo = !!video || (video === undefined && !!initial?.video_path);
+  const [cover, setCover] = useState<Picked | null | undefined>(undefined);
+  const coverShown = cover ? cover.uri : cover === undefined && initial?.cover_path ? urls[initial.cover_path] : undefined;
+  const ownCover = !!cover || (cover === undefined && !!initial?.cover_path);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const move = (i: number) =>
     setPhotos((ps) => {
       const next = [...ps];
       const [p] = next.splice(i, 1);
-      next.splice(i - 1, 0, p!);
+      next.unshift(p!);
       return next;
     });
 
@@ -519,15 +557,24 @@ function MemoryForm({
           {photos.map((p, i) => (
             <View key={p.key} className="h-24 w-24 overflow-hidden rounded-control bg-paper-sunken">
               {p.picked?.uri || p.url ? <Image source={{ uri: p.picked?.uri ?? p.url }} className="h-full w-full" resizeMode="cover" /> : null}
-              {i === 0 ? (
+              {i === 0 && !ownCover ? (
                 <View className="absolute left-1 top-1 rounded-full bg-white/90 px-1.5">
                   <Text className="font-sans-bold text-[10px]">Cover</Text>
                 </View>
               ) : null}
               <View className="absolute inset-x-1 bottom-1 flex-row justify-between">
-                {i > 0 ? (
-                  <Pressable accessibilityRole="button" accessibilityLabel="Move earlier" hitSlop={6} onPress={() => move(i)} className="rounded-full bg-plum-900/70 p-1">
-                    <ArrowLeft size={14} color="#fff" />
+                {i > 0 || ownCover ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Make cover"
+                    hitSlop={6}
+                    onPress={() => {
+                      move(i);
+                      setCover(null);
+                    }}
+                    className="rounded-full bg-plum-900/70 p-1"
+                  >
+                    <Star size={14} color="#fff" />
                   </Pressable>
                 ) : (
                   <View />
@@ -588,6 +635,23 @@ function MemoryForm({
           </Pressable>
         )}
       </View>
+      <View className="flex-row items-center gap-3 rounded-control bg-paper-sunken p-2.5">
+        <View className="h-14 w-14 overflow-hidden rounded-[10px] bg-paper-raised">
+          {coverShown ? <Image source={{ uri: coverShown }} className="h-full w-full" resizeMode="cover" /> : null}
+        </View>
+        <View className="flex-1">
+          <Text className="font-sans-medium text-small">Cover</Text>
+          <Text className="text-micro text-ink-muted">{ownCover ? 'Your own photo' : 'Automatic: the first photo, or a still from the video'}</Text>
+        </View>
+        {ownCover ? (
+          <Button variant="quiet" size="sm" onPress={() => setCover(null)}>
+            Automatic
+          </Button>
+        ) : null}
+        <Button variant="secondary" size="sm" onPress={() => void pickPhotos(1).then(([pk]) => pk && setCover(pk))}>
+          {ownCover ? 'Change' : 'Choose'}
+        </Button>
+      </View>
       <Field label="Title" value={title} onChangeText={setTitle} maxLength={200} placeholder="The night it rained in Lisbon" />
       <DateStepper label="When" value={day} onChange={setDay} />
       <View className="gap-1.5">
@@ -599,7 +663,7 @@ function MemoryForm({
       <Button
         loading={busy}
         disabled={!title.trim()}
-        onPress={() => run(() => onSubmit({ fields: { title: title.trim(), body: body.trim() || null, happened_on: day, kind }, photos, video }))}
+        onPress={() => run(() => onSubmit({ fields: { title: title.trim(), body: body.trim() || null, happened_on: day, kind }, photos, video, cover }))}
       >
         {initial ? 'Save' : 'Keep it'}
       </Button>

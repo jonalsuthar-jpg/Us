@@ -1,6 +1,6 @@
 import type { CalendarEvent, Countdown, Couple, Memory, Profile } from '../database.types';
 import type { UsClient } from '../supabase';
-import { listHomeMemories, onThisDay, removeMemoryPhoto, signedPhotoUrls, uploadMemoryPhoto } from './memory';
+import { listHomeMemories, memoryCover, onThisDay, removeMemoryPhoto, signedPhotoUrls, uploadMemoryPhoto } from './memory';
 import { listEvents } from './plan';
 import { listCountdowns, partnerTaps } from './together';
 
@@ -83,7 +83,7 @@ export type FeaturedMemory = Memory & { yearsAgo?: number };
 export function featuredMemory(memories: Memory[], now = new Date()): FeaturedMemory | null {
   const anniversary = onThisDay(memories, now)[0];
   if (anniversary) return anniversary;
-  return memories.find((m) => m.photo_path) ?? memories[0] ?? null;
+  return memories.find((m) => memoryCover(m)) ?? memories[0] ?? null;
 }
 
 export interface HomeData {
@@ -114,7 +114,8 @@ export async function getHome(sb: UsClient, ids: { coupleId: string; meId: strin
 
   const taps = await partnerTaps(sb, ids.coupleId, partner.id, now).catch(() => null);
   const memory = featuredMemory(memories, now);
-  const paths = [couple.photo_path, memory?.photo_path].filter((p): p is string => !!p);
+  const cover = memory ? memoryCover(memory) : null;
+  const paths = [couple.photo_path, cover].filter((p): p is string => !!p);
   const urls = paths.length ? await signedPhotoUrls(sb, paths).catch(() => ({}) as Record<string, string>) : {};
 
   return {
@@ -124,7 +125,7 @@ export async function getHome(sb: UsClient, ids: { coupleId: string; meId: strin
     photoUrl: (couple.photo_path && urls[couple.photo_path]) || null,
     nextEvent: events[0] ?? null,
     memory,
-    memoryPhotoUrl: (memory?.photo_path && urls[memory.photo_path]) || null,
+    memoryPhotoUrl: (cover && urls[cover]) || null,
     countdowns,
     taps,
   };

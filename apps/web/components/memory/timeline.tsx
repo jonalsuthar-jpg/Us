@@ -7,6 +7,8 @@ import {
   listMemories,
   MEMORY_KINDS,
   MEMORY_PHOTOS_MAX,
+  memoryCover,
+  memoryFiles,
   memoryPhotos,
   myRatings,
   offerRecap,
@@ -28,9 +30,9 @@ import {
   type MemoryRating,
 } from '@us/shared';
 import { useBirthdayStoryMemories, useCouple, useCoupleData } from '@us/shared/react';
-import { ArrowLeft, BookHeart, ChevronLeft, ChevronRight, Film, Heart, ImagePlus, Play, Plane, Plus, Sparkles, Wine, X, type LucideIcon } from 'lucide-react';
+import { BookHeart, ChevronLeft, ChevronRight, Film, Heart, ImagePlus, Play, Plane, Plus, Sparkles, Star, Wine, X, type LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { EmptyNote, ErrorNote } from '@/components/app/module-header';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -40,6 +42,7 @@ import { PrivacyBadge } from '@/components/ui/privacy';
 import { Segmented } from '@/components/ui/segmented';
 import { Sheet } from '@/components/ui/sheet';
 import { shrinkPhoto } from '@/lib/image';
+import { videoStill } from '@/lib/video';
 import { cn } from '@/lib/cn';
 
 type Filter = 'all' | MemoryKind;
@@ -65,7 +68,7 @@ export function MemoryTimeline() {
   const openStory = (m: Memory) => router.push(`/memory/story/${m.id}`);
 
   const all = memories.data ?? [];
-  const filesOf = (m: Memory) => [...memoryPhotos(m), ...(m.video_path ? [m.video_path] : [])];
+  const filesOf = (m: Memory) => memoryFiles(m);
   const photoKey = all.map((m) => filesOf(m).join(',')).join('|');
   useEffect(() => {
     const paths = all.flatMap(filesOf).filter((p) => !urls[p]);
@@ -76,6 +79,21 @@ export function MemoryTimeline() {
   }, [sb, photoKey]);
 
   const resurfaced = useMemo(() => onThisDay(all), [all]);
+
+  // A video memory from before stills existed: make its still the first time it's opened.
+  const fixing = useRef(new Set<string>());
+  useEffect(() => {
+    const m = viewing;
+    const link = m?.video_path ? urls[m.video_path] : undefined;
+    if (!m || !link || m.video_poster_path || fixing.current.has(m.id)) return;
+    fixing.current.add(m.id);
+    void (async () => {
+      const still = await videoStill(link);
+      if (!still) return;
+      const path = await uploadMemoryPhoto(sb, couple.id, still, 'image/jpeg');
+      await memories.mutate(() => updateMemory(sb, m.id, { video_poster_path: path }));
+    })().catch(() => {});
+  }, [viewing, urls, sb, couple.id, memories]);
   const shown = filter === 'all' ? all : all.filter((m) => m.kind === filter);
   const groups = groupByMonth(shown);
 
@@ -160,9 +178,9 @@ export function MemoryTimeline() {
             {resurfaced.map((m) => (
               <li key={m.id}>
                 <button type="button" onClick={() => setViewing(m)} className="flex w-full items-center gap-3.5 rounded-[18px] bg-white/70 p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 dark:bg-paper-raised">
-                  {m.photo_path && urls[m.photo_path] ? (
+                  {memoryCover(m) && urls[memoryCover(m)!] ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={urls[m.photo_path]} alt="" className="h-14 w-14 shrink-0 rounded-[14px] object-cover" />
+                    <img src={urls[memoryCover(m)!]} alt="" className="h-14 w-14 shrink-0 rounded-[14px] object-cover" />
                   ) : (
                     <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px] bg-gold-100 text-gold-700">
                       <Sparkles className="h-6 w-6" aria-hidden />
@@ -199,7 +217,7 @@ export function MemoryTimeline() {
                     <MemoryCard
                       memory={m}
                       index={i}
-                      url={memoryPhotos(m)[0] ? urls[memoryPhotos(m)[0]!] : undefined}
+                      url={memoryCover(m) ? urls[memoryCover(m)!] : undefined}
                       rated={!!ratings.data?.[m.id]}
                       story={stories.has(m.id)}
                       onOpen={() => (stories.has(m.id) ? openStory(m) : setViewing(m))}
@@ -239,29 +257,37 @@ export function MemoryTimeline() {
             key={editing.memory?.id ?? 'new'}
             initial={editing.memory}
             urls={urls}
-            onSubmit={async ({ fields, photos, video }) => {
+            onSubmit={async ({ fields, photos, video, cover }) => {
               const before = editing.memory;
+              const upload = async (f: File | Blob) => {
+                const { blob, type } = f instanceof File ? await shrinkPhoto(f) : { blob: f, type: 'image/jpeg' };
+                return uploadMemoryPhoto(sb, couple.id, blob, type);
+              };
               await memories.mutate(async () => {
                 // New photos go up in their place in the order; the first is the cover.
                 const photo_paths: string[] = [];
                 for (const p of photos) {
                   if (p.path) photo_paths.push(p.path);
-                  else if (p.file) {
-                    const { blob, type } = await shrinkPhoto(p.file);
-                    photo_paths.push(await uploadMemoryPhoto(sb, couple.id, blob, type));
-                  }
+                  else if (p.file) photo_paths.push(await upload(p.file));
                 }
                 let video_path = before?.video_path ?? null;
                 let video_meta = before?.video_meta ?? null;
-                if (video === null) [video_path, video_meta] = [null, null];
+                let video_poster_path = before?.video_poster_path ?? null;
+                if (video === null) [video_path, video_meta, video_poster_path] = [null, null, null];
                 else if (video instanceof File) {
                   video_meta = await videoInfo(video);
+                  // A sharp still for the card, so a memory with only a video isn't blank.
+                  const still = await videoStill(video);
                   video_path = await uploadMemoryVideo(sb, couple.id, video, video.type || 'video/mp4');
+                  video_poster_path = still ? await upload(still) : null;
                 }
-                const row = { ...fields, photo_paths, photo_path: photo_paths[0] ?? null, video_path, video_meta };
+                // undefined: leave the chosen cover; null: back to automatic.
+                const cover_path = cover === undefined ? (before?.cover_path ?? null) : cover === null ? null : await upload(cover);
+                const row = { ...fields, photo_paths, photo_path: photo_paths[0] ?? null, video_path, video_meta, video_poster_path, cover_path };
                 const saved = before ? await updateMemory(sb, before.id, row) : await createMemory(sb, { ...row, couple_id: couple.id, created_by: ctx.me.id });
                 // Files taken off (or replaced) go once the memory no longer points at them.
-                const gone = before ? [...memoryPhotos(before).filter((x) => !photo_paths.includes(x)), ...(before.video_path && before.video_path !== video_path ? [before.video_path] : [])] : [];
+                const keep = new Set(memoryFiles(row as Memory));
+                const gone = before ? memoryFiles(before).filter((x) => !keep.has(x)) : [];
                 for (const g of gone) await removeMemoryPhoto(sb, g).catch(() => {});
                 return saved;
               });
@@ -309,9 +335,16 @@ function MemoryCard({ memory, index, url, rated, story, onOpen }: { memory: Memo
       )}
     >
       <span className="relative block aspect-square overflow-hidden rounded-[6px] bg-paper-sunken">
-        {memoryPhotos(memory).length ? (
+        {memoryCover(memory) ? (
           // eslint-disable-next-line @next/next/no-img-element
           url ? <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" /> : null
+        ) : memory.video_path ? (
+          // A video whose still isn't made yet: a dark frame with a play mark, never blank.
+          <span className="flex h-full w-full items-center justify-center bg-plum-900">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20">
+              <Play className="h-6 w-6 fill-white text-white" aria-hidden />
+            </span>
+          </span>
         ) : (
           <span className={cn('flex h-full w-full items-center justify-center bg-gradient-to-br', art.wash)}>
             <art.Icon className={cn('h-12 w-12', art.ink)} aria-hidden />
@@ -451,6 +484,8 @@ function MemoryForm({
     photos: FormPhoto[];
     /** A new video, null to take it off, undefined to leave it. */
     video: File | null | undefined;
+    /** A cover photo chosen now, null for automatic, undefined to leave it. */
+    cover: File | null | undefined;
   }) => Promise<void>;
   onDelete?: () => Promise<void>;
 }) {
@@ -461,6 +496,16 @@ function MemoryForm({
   const [photos, setPhotos] = useState<FormPhoto[]>(() => (initial ? memoryPhotos(initial).map((p) => ({ key: p, path: p, url: urls[p] })) : []));
   const [video, setVideo] = useState<File | null | undefined>(undefined);
   const hasVideo = video instanceof File || (video === undefined && !!initial?.video_path);
+  const [cover, setCover] = useState<File | null | undefined>(undefined);
+  const [coverPreview, setCoverPreview] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!(cover instanceof File)) return setCoverPreview(undefined);
+    const u = URL.createObjectURL(cover);
+    setCoverPreview(u);
+    return () => URL.revokeObjectURL(u);
+  }, [cover]);
+  const ownCover = cover instanceof File || (cover === undefined && !!initial?.cover_path);
+  const coverShown = coverPreview ?? (cover === undefined && initial?.cover_path ? urls[initial.cover_path] : undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -486,7 +531,7 @@ function MemoryForm({
     setBusy(true);
     setError(null);
     try {
-      await onSubmit({ fields: { title: title.trim(), body: body.trim() || null, happened_on: day, kind }, photos, video });
+      await onSubmit({ fields: { title: title.trim(), body: body.trim() || null, happened_on: day, kind }, photos, video, cover });
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -502,10 +547,20 @@ function MemoryForm({
               <li key={p.key} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-control bg-paper-sunken">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 {p.url ? <img src={p.url} alt="" className="h-full w-full object-cover" /> : null}
-                {i === 0 ? <span className="absolute left-1 top-1 rounded-full bg-white/90 px-1.5 text-[10px] font-bold text-ink">Cover</span> : null}
+                {i === 0 && !ownCover ? <span className="absolute left-1 top-1 rounded-full bg-white/90 px-1.5 text-[10px] font-bold text-ink">Cover</span> : null}
                 <span className="absolute inset-x-1 bottom-1 flex justify-between">
-                  <button type="button" aria-label="Move earlier" disabled={i === 0} onClick={() => move(i, -1)} className="rounded-full bg-plum-900/70 p-1 text-paper disabled:opacity-0">
-                    <ArrowLeft className="h-3.5 w-3.5" />
+                  <button
+                    type="button"
+                    aria-label="Make cover"
+                    title="Make cover"
+                    disabled={i === 0 && !ownCover}
+                    onClick={() => {
+                      move(i, -i);
+                      setCover(null);
+                    }}
+                    className="rounded-full bg-plum-900/70 p-1 text-paper disabled:opacity-0"
+                  >
+                    <Star className="h-3.5 w-3.5" />
                   </button>
                   <button type="button" aria-label="Remove photo" onClick={() => setPhotos((ps) => ps.filter((x) => x.key !== p.key))} className="rounded-full bg-plum-900/70 p-1 text-paper">
                     <X className="h-3.5 w-3.5" />
@@ -552,6 +607,25 @@ function MemoryForm({
             </label>
           )}
         </div>
+      </div>
+      <div className="flex items-center gap-3 rounded-control bg-paper-sunken p-2.5">
+        <span className="h-14 w-14 shrink-0 overflow-hidden rounded-[10px] bg-paper-raised">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {coverShown ? <img src={coverShown} alt="" className="h-full w-full object-cover" /> : null}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-small font-medium text-ink">Cover</span>
+          <span className="block text-micro text-ink-muted">{ownCover ? 'Your own photo' : 'Automatic: the first photo, or a still from the video'}</span>
+        </span>
+        {ownCover ? (
+          <Button type="button" variant="quiet" size="sm" onClick={() => setCover(null)}>
+            Automatic
+          </Button>
+        ) : null}
+        <label className="inline-flex h-9 cursor-pointer items-center rounded-control border border-paper-edge bg-paper-raised px-3 text-small font-medium text-ink hover:bg-paper focus-within:ring-2 focus-within:ring-gold-400">
+          {ownCover ? 'Change' : 'Choose'}
+          <input type="file" accept="image/*" className="sr-only" onChange={(e) => (e.target.files?.[0] && setCover(e.target.files[0]), (e.target.value = ''))} />
+        </label>
       </div>
       <Field label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required placeholder="The night it rained in Lisbon" />
       <div className="grid gap-4 sm:grid-cols-2">

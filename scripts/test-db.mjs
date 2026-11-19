@@ -1087,6 +1087,15 @@ await test('memories: up to ten photos and a video, all in our folder; older row
   await q(`delete from public.memories where id = $1`, [m.id]);
 });
 
+await test('memory covers: our own cover and the video still stay in our folder', async () => {
+  const f = (name) => `${couple.id}/${name}`;
+  const m = await as(alice, () => one(`insert into public.memories (couple_id, created_by, title, happened_on, video_path, video_poster_path, cover_path) values ($1, $2, 'Beach', '2026-07-01', $3, $4, $5) returning id`, [couple.id, alice, f('video/v.mp4'), f('still.jpg'), f('mine.jpg')]));
+  await rejects(as(bob, () => q(`update public.memories set cover_path = 'someone-else/x.jpg' where id = $1`, [m.id])), /cover_in_couple_folder/, 'a cover outside our folder');
+  await rejects(as(bob, () => q(`update public.memories set video_poster_path = $2 where id = $1`, [m.id, f('../x.jpg')])), /poster_in_couple_folder/, 'a still that climbs out');
+  await as(bob, () => q(`update public.memories set cover_path = null where id = $1`, [m.id]));
+  await q(`delete from public.memories where id = $1`, [m.id]);
+});
+
 console.log('\nPlan: repeats and reminders');
 
 await test('repeating plans and reminders: sane values, and the sent-log is server only', async () => {

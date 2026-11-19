@@ -13,6 +13,8 @@ const mem = (id: string, happened_on: string, photo_path: string | null = null):
   photo_paths: [],
   video_path: null,
   video_meta: null,
+  cover_path: null,
+  video_poster_path: null,
   kind: 'moment',
   created_at: '',
   from_snap: null,

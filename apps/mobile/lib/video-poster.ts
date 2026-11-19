@@ -29,3 +29,27 @@ export async function videoPosterOf(uri: string): Promise<string | null> {
     player.release();
   }
 }
+
+/**
+ * A sharp still from early in a clip (local or a signed link), saved as a
+ * JPEG file: the card picture for a memory that has only a video. Null if the
+ * phone can't make one.
+ */
+export async function videoStill(uri: string, maxWidth = 720): Promise<{ uri: string; mimeType: 'image/jpeg' } | null> {
+  const player = createVideoPlayer(uri);
+  try {
+    const work = (async () => {
+      const [thumb] = await player.generateThumbnailsAsync(0.5, { maxWidth });
+      if (!thumb) return null;
+      const image = await ImageManipulator.manipulate(thumb).renderAsync();
+      const out = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.82 });
+      return { uri: out.uri, mimeType: 'image/jpeg' as const };
+    })();
+    const late = new Promise<null>((r) => setTimeout(() => r(null), 8000));
+    return await Promise.race([work, late]);
+  } catch {
+    return null;
+  } finally {
+    player.release();
+  }
+}

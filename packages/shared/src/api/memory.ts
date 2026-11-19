@@ -36,7 +36,7 @@ export async function listHomeMemories(sb: UsClient, coupleId: string, now = new
   const base = () => sb.from('memories').select('*').eq('couple_id', coupleId);
   const [onDay, withPhoto, latest] = await Promise.all([
     base().in('happened_on', sameDay).then(unwrap<Memory[]>),
-    base().not('photo_path', 'is', null).order('happened_on', { ascending: false }).order('created_at', { ascending: false }).limit(1).then(unwrap<Memory[]>),
+    base().or('photo_path.not.is.null,cover_path.not.is.null,video_poster_path.not.is.null').order('happened_on', { ascending: false }).order('created_at', { ascending: false }).limit(1).then(unwrap<Memory[]>),
     base().order('happened_on', { ascending: false }).order('created_at', { ascending: false }).limit(1).then(unwrap<Memory[]>),
   ]);
   const seen = new Set<string>();
@@ -57,12 +57,24 @@ export function memoryPhotos(m: Pick<Memory, 'photo_path'> & { photo_paths?: str
   return m.photo_path ? [m.photo_path] : [];
 }
 
+type WithMedia = Pick<Memory, 'photo_path'> & { photo_paths?: string[] | null; cover_path?: string | null; video_path?: string | null; video_poster_path?: string | null };
+
+/** What a memory's card shows: the cover we chose, else the first photo, else the video's still. */
+export function memoryCover(m: WithMedia): string | null {
+  return m.cover_path ?? memoryPhotos(m)[0] ?? m.video_poster_path ?? null;
+}
+
+/** Every file a memory points at: photos, cover, video and its still. */
+export function memoryFiles(m: WithMedia): string[] {
+  return [...new Set([...memoryPhotos(m), m.cover_path, m.video_path, m.video_poster_path].filter((p): p is string => !!p))];
+}
+
 /** At most this many photos on one memory. */
 export const MEMORY_PHOTOS_MAX = 10;
 
 /** Delete a memory with its photos and video (the files first, so nothing is orphaned on success). */
-export async function deleteMemory(sb: UsClient, memory: Pick<Memory, 'id' | 'photo_path'> & { photo_paths?: string[] | null; video_path?: string | null }): Promise<void> {
-  const files = [...memoryPhotos(memory), ...(memory.video_path ? [memory.video_path] : [])];
+export async function deleteMemory(sb: UsClient, memory: Pick<Memory, 'id'> & WithMedia): Promise<void> {
+  const files = memoryFiles(memory);
   if (files.length) {
     await removeFiles(sb, MEMORY_BUCKET, files);
     files.forEach((f) => forgetSignedUrl(MEMORY_BUCKET, f));
@@ -177,10 +189,10 @@ export function yearRecap(all: (Memory & { photo_paths?: string[] | null })[], y
   const byMonth = new Map<string, number>();
   for (const m of mine) byMonth.set(m.happened_on.slice(5, 7), (byMonth.get(m.happened_on.slice(5, 7)) ?? 0) + 1);
   const top = [...byMonth.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
-  const covers = mine.filter((m) => memoryPhotos(m).length);
+  const covers = mine.filter((m) => memoryCover(m));
   // Every k-th cover, so the collage spans the year rather than one busy week.
   const step = Math.max(1, Math.floor(covers.length / 6));
-  const highlights = covers.filter((_, i) => i % step === 0).slice(0, 6).map((m) => memoryPhotos(m)[0]!);
+  const highlights = covers.filter((_, i) => i % step === 0).slice(0, 6).map((m) => memoryCover(m)!);
   const end = year < now.getFullYear() ? new Date(year, 11, 31) : now;
   const start = new Date(pairedAt);
   return {
