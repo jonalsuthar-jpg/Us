@@ -1072,6 +1072,21 @@ await test('revoking a chat device: mine only, and its sealed key goes', async (
   await rejects(as(alice, () => q(`insert into public.chat_key_wraps (couple_id, key_version, device_id, wrapped_key, wrapped_by) values ($1, 1, $2, 'x', $3)`, [couple.id, bobDevice, aliceDevice])), /row-level security/, 'sealed to a revoked device');
 });
 
+console.log('\nMemory: photos and a video');
+
+await test('memories: up to ten photos and a video, all in our folder; older rows keep their cover', async () => {
+  const f = (name) => `${couple.id}/${name}`;
+  const m = await as(alice, () => one(`insert into public.memories (couple_id, created_by, title, happened_on, photo_paths, photo_path, video_path, video_meta) values ($1, $2, 'Lisbon', '2026-06-01', $3, $4, $5, '{"duration_ms":12000}') returning id, photo_paths`, [couple.id, alice, [f('a.jpg'), f('b.jpg')], f('a.jpg'), f('video/v.mp4')]));
+  assert.equal(m.photo_paths.length, 2);
+  await rejects(as(alice, () => q(`insert into public.memories (couple_id, created_by, title, happened_on, photo_paths) values ($1, $2, 'x', '2026-06-01', $3)`, [couple.id, alice, [f('a.jpg'), 'someone-else/b.jpg']])), /photos_in_couple_folder/, 'a photo outside our folder');
+  await rejects(as(alice, () => q(`insert into public.memories (couple_id, created_by, title, happened_on, photo_paths) values ($1, $2, 'x', '2026-06-01', $3)`, [couple.id, alice, [f('../x.jpg')]])), /photos_in_couple_folder/, 'a path that climbs out');
+  await rejects(as(alice, () => q(`insert into public.memories (couple_id, created_by, title, happened_on, photo_paths) values ($1, $2, 'x', '2026-06-01', $3)`, [couple.id, alice, Array.from({ length: 11 }, (_, i) => f(`${i}.jpg`))])), /photos_max/, 'eleven photos');
+  await rejects(as(alice, () => q(`insert into public.memories (couple_id, created_by, title, happened_on, video_path) values ($1, $2, 'x', '2026-06-01', $3)`, [couple.id, alice, f('v.mp4')])), /video_in_couple_folder/, 'a video outside video/');
+  const edited = await as(bob, () => one(`update public.memories set photo_paths = $2, photo_path = $3 where id = $1 returning photo_paths`, [m.id, [f('b.jpg')], f('b.jpg')]));
+  assert.deepEqual(edited.photo_paths, [f('b.jpg')], 'either of us edits');
+  await q(`delete from public.memories where id = $1`, [m.id]);
+});
+
 console.log('\nPlan: repeats and reminders');
 
 await test('repeating plans and reminders: sane values, and the sent-log is server only', async () => {

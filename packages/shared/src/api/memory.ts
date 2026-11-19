@@ -51,10 +51,31 @@ export async function updateMemory(sb: UsClient, id: string, patch: Update<'memo
   return unwrap(await sb.from('memories').update(patch).eq('id', id).select('*').single());
 }
 
-/** Delete a memory and its photo (the photo first, so nothing is orphaned on success). */
-export async function deleteMemory(sb: UsClient, memory: Pick<Memory, 'id' | 'photo_path'>): Promise<void> {
-  if (memory.photo_path) await removeMemoryPhoto(sb, memory.photo_path);
+/** Every photo of a memory, cover first (older rows have only photo_path). */
+export function memoryPhotos(m: Pick<Memory, 'photo_path'> & { photo_paths?: string[] | null }): string[] {
+  if (m.photo_paths?.length) return m.photo_paths;
+  return m.photo_path ? [m.photo_path] : [];
+}
+
+/** At most this many photos on one memory. */
+export const MEMORY_PHOTOS_MAX = 10;
+
+/** Delete a memory with its photos and video (the files first, so nothing is orphaned on success). */
+export async function deleteMemory(sb: UsClient, memory: Pick<Memory, 'id' | 'photo_path'> & { photo_paths?: string[] | null; video_path?: string | null }): Promise<void> {
+  const files = [...memoryPhotos(memory), ...(memory.video_path ? [memory.video_path] : [])];
+  if (files.length) {
+    await removeFiles(sb, MEMORY_BUCKET, files);
+    files.forEach((f) => forgetSignedUrl(MEMORY_BUCKET, f));
+  }
   unwrap(await sb.from('memories').delete().eq('id', memory.id));
+}
+
+/** A memory's video, to "<couple_id>/video/<uuid>.<ext>" in the private bucket; returns the path. */
+export async function uploadMemoryVideo(sb: UsClient, coupleId: string, body: Blob | ArrayBuffer | Uint8Array, contentType: string): Promise<string> {
+  const ext = contentType === 'video/quicktime' ? 'mov' : contentType === 'video/webm' ? 'webm' : 'mp4';
+  const path = `${coupleId}/video/${uuid()}.${ext}`;
+  await uploadFile(sb, MEMORY_BUCKET, path, body, contentType);
+  return path;
 }
 
 // ----------------------------------------------------------------- photos ---
@@ -131,3 +152,65 @@ export const MEMORY_KINDS: { value: Memory['kind']; label: string }[] = [
   { value: 'date', label: 'Date' },
   { value: 'trip', label: 'Trip' },
 ];
+
+// ------------------------------------------------------------------ recap ---
+
+export interface YearRecap {
+  year: number;
+  memories: number;
+  photos: number;
+  trips: number;
+  dates: number;
+  /** The month with the most memories, e.g. "June", and how many. */
+  busiest: { month: string; count: number } | null;
+  /** The year's first memory. */
+  first: Memory | null;
+  /** Up to six photos for the collage, spread across the year (cover photos first). */
+  highlights: string[];
+  /** Days together by the end of that year (or today, for this year). */
+  daysTogether: number;
+}
+
+/** "Our year": what this year's memories add up to. Pure, so it's easy to test. */
+export function yearRecap(all: (Memory & { photo_paths?: string[] | null })[], year: number, pairedAt: string, now = new Date()): YearRecap {
+  const mine = all.filter((m) => m.happened_on.startsWith(`${year}-`)).sort((a, b) => a.happened_on.localeCompare(b.happened_on));
+  const byMonth = new Map<string, number>();
+  for (const m of mine) byMonth.set(m.happened_on.slice(5, 7), (byMonth.get(m.happened_on.slice(5, 7)) ?? 0) + 1);
+  const top = [...byMonth.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+  const covers = mine.filter((m) => memoryPhotos(m).length);
+  // Every k-th cover, so the collage spans the year rather than one busy week.
+  const step = Math.max(1, Math.floor(covers.length / 6));
+  const highlights = covers.filter((_, i) => i % step === 0).slice(0, 6).map((m) => memoryPhotos(m)[0]!);
+  const end = year < now.getFullYear() ? new Date(year, 11, 31) : now;
+  const start = new Date(pairedAt);
+  return {
+    year,
+    memories: mine.length,
+    photos: mine.reduce((n, m) => n + memoryPhotos(m).length, 0),
+    trips: mine.filter((m) => m.kind === 'trip').length,
+    dates: mine.filter((m) => m.kind === 'date').length,
+    busiest: top ? { month: new Date(year, Number(top[0]) - 1, 15).toLocaleDateString(undefined, { month: 'long' }), count: top[1] } : null,
+    first: mine[0] ?? null,
+    highlights,
+    daysTogether: Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1),
+  };
+}
+
+/** Messages and calls between us in a year, for the recap (counts only, nothing is read). */
+export async function recapCounts(sb: UsClient, coupleId: string, year: number): Promise<{ messages: number; calls: number }> {
+  const from = new Date(year, 0, 1).toISOString();
+  const to = new Date(year + 1, 0, 1).toISOString();
+  const count = (kind: 'text' | 'call') =>
+    sb.from('messages').select('id', { count: 'exact', head: true }).eq('couple_id', coupleId).eq('kind', kind).gte('created_at', from).lt('created_at', to);
+  const [m, c] = await Promise.all([count('text'), count('call')]);
+  return { messages: m.count ?? 0, calls: c.count ?? 0 };
+}
+
+/** Offer "Our year" in December, and in the week after our pairing anniversary. */
+export function offerRecap(pairedAt: string, now = new Date()): boolean {
+  if (now.getMonth() === 11) return true;
+  const p = new Date(pairedAt);
+  const anniversary = new Date(now.getFullYear(), p.getMonth(), p.getDate());
+  const days = (now.getTime() - anniversary.getTime()) / 86_400_000;
+  return now.getFullYear() > p.getFullYear() && days >= 0 && days < 7;
+}

@@ -307,7 +307,13 @@ export type Database = {
           title: string;
           body: string | null;
           happened_on: string;
+          /** The cover: always photo_paths[0] when there are photos. */
           photo_path: string | null;
+          /** Every photo, in order (up to 10). Older rows may have only photo_path. */
+          photo_paths: string[];
+          /** One short video: "<couple_id>/video/<uuid>.<ext>". */
+          video_path: string | null;
+          video_meta: { width?: number; height?: number; duration_ms?: number } | null;
           kind: MemoryKind;
           created_at: string;
           /** The snap this memory was kept from. */
@@ -321,10 +327,22 @@ export type Database = {
           body?: string | null;
           happened_on: string;
           photo_path?: string | null;
+          photo_paths?: string[];
+          video_path?: string | null;
+          video_meta?: { width?: number; height?: number; duration_ms?: number } | null;
           kind?: MemoryKind;
           from_snap?: string | null;
         };
-        Update: { title?: string; body?: string | null; happened_on?: string; photo_path?: string | null; kind?: MemoryKind };
+        Update: {
+          title?: string;
+          body?: string | null;
+          happened_on?: string;
+          photo_path?: string | null;
+          photo_paths?: string[];
+          video_path?: string | null;
+          video_meta?: { width?: number; height?: number; duration_ms?: number } | null;
+          kind?: MemoryKind;
+        };
         Relationships: [];
       };
       notification_prefs: {

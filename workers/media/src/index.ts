@@ -47,14 +47,25 @@ export default {
     }
 
     if (req.method === 'GET') {
-      const obj = await env.BUCKET.get(path);
+      // Video players (Safari, iOS) ask for byte ranges, and seeking needs them.
+      const ranged = req.headers.has('range');
+      const obj = await env.BUCKET.get(path, ranged ? { range: req.headers } : undefined);
       if (!obj) return text('not found', 404, cors);
       const headers = new Headers(cors);
       obj.writeHttpMetadata(headers);
       headers.set('x-content-type-options', 'nosniff');
       headers.set('etag', obj.httpEtag);
+      headers.set('accept-ranges', 'bytes');
       // Paths are never reused, so a file can be kept for good.
       headers.set('cache-control', 'private, max-age=31536000, immutable');
+      const r = obj.range as { offset?: number; length?: number; suffix?: number } | undefined;
+      if (ranged && r && 'body' in obj) {
+        const offset = r.suffix !== undefined ? Math.max(0, obj.size - r.suffix) : (r.offset ?? 0);
+        const length = r.suffix !== undefined ? obj.size - offset : (r.length ?? obj.size - offset);
+        headers.set('content-range', `bytes ${offset}-${offset + length - 1}/${obj.size}`);
+        headers.set('content-length', String(length));
+        return new Response(obj.body, { status: 206, headers });
+      }
       return new Response(obj.body, { headers });
     }
 
@@ -93,7 +104,8 @@ function corsFor(req: Request, env: Env): Record<string, string> {
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-methods': 'GET, PUT, POST, DELETE, OPTIONS',
-    'access-control-allow-headers': 'content-type',
+    'access-control-allow-headers': 'content-type, range',
+    'access-control-expose-headers': 'content-range, accept-ranges, content-length',
     'access-control-max-age': '86400',
     vary: 'origin',
   };
