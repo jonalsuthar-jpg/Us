@@ -44,3 +44,13 @@ describe('link previews in a message', () => {
     expect(linkPreviewOf(null)).toBeNull();
   });
 });
+
+describe('video posters', () => {
+  it('show only a small JPEG data URL', async () => {
+    const { videoPoster, POSTER_MAX_CHARS } = await import('../src/api/chat-video');
+    expect(videoPoster({ poster: 'data:image/jpeg;base64,AAAA' })).toBe('data:image/jpeg;base64,AAAA');
+    expect(videoPoster({ poster: 'https://evil.test/x.jpg' })).toBeNull();
+    expect(videoPoster({ poster: 'data:image/jpeg;base64,' + 'A'.repeat(POSTER_MAX_CHARS) })).toBeNull();
+    expect(videoPoster(null)).toBeNull();
+  });
+});

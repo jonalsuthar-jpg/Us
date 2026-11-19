@@ -56,6 +56,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { PrivacyBadge } from "@/components/ui/privacy";
 import { useOpenedOnce, usePageActive } from "@/lib/hooks";
 import { waveformOf } from "@/lib/voice";
+import { posterFrom } from "@/lib/video";
 import dynamic from "next/dynamic";
 
 // Drawing, sticker cut-out and GIF search are big and rarely open: each loads the first time it's opened.
@@ -107,6 +108,7 @@ function Thread() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
+  const [dropping, setDropping] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
   /** The chat message open in the lightbox (not a profile photo). */
   const [viewed, setViewed] = useState<Message | null>(null);
@@ -224,15 +226,22 @@ function Thread() {
       width: number;
       height: number;
       duration_ms: number;
+      poster?: string;
     } | null>((resolve) => {
       const v = document.createElement("video");
-      v.preload = "metadata";
-      v.onloadedmetadata = () =>
-        resolve({
+      v.preload = "auto";
+      v.muted = true;
+      v.playsInline = true;
+      v.onloadeddata = async () => {
+        const info = {
           width: v.videoWidth,
           height: v.videoHeight,
           duration_ms: Math.round(v.duration * 1000),
-        });
+        };
+        // A still to show before it plays (kept inside the encryption).
+        const poster = await posterFrom(v);
+        resolve(poster ? { ...info, poster } : info);
+      };
       v.onerror = () => resolve(null);
       v.src = localUri;
     });
@@ -558,7 +567,34 @@ function Thread() {
         </button>
       ) : null}
 
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        className="relative flex min-h-0 flex-1 flex-col"
+        // Photos and videos dragged in from the desktop are sent as they land.
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+          setDropping(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+        }}
+        onDrop={(e) => {
+          if (!e.dataTransfer.files.length) return;
+          e.preventDefault();
+          setDropping(false);
+          const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+          if (!files.length) return fail(new Error("Only photos and videos can be dropped here."));
+          void (async () => {
+            for (const f of files.slice(0, 10)) await sendPhoto(f, "").catch(fail);
+          })();
+        }}
+      >
+        {dropping ? (
+          <div aria-hidden className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[24px] border-2 border-dashed border-rose-400 bg-paper/80 font-display text-heading text-rose-700">
+            Drop to send to {partner.display_name}
+          </div>
+        ) : null}
         <div
           ref={scroller}
           onScroll={(e) => {

@@ -45,6 +45,19 @@ export function videoPlan(sizeBytes: number, durationMs: number): VideoPlan {
   return { action: 'compress', videoBitrate, audioBitrate: VIDEO_TARGET.audioBitrate, maxHeight: videoBitrate >= VIDEO_TARGET.hdFloor ? 720 : 480 };
 }
 
+/**
+ * A still from the video, shown before it plays. It rides inside the
+ * encrypted message as a small JPEG data URL, so it's kept well under the
+ * ciphertext's size limit.
+ */
+export const POSTER_MAX_CHARS = 12_000;
+
+/** The poster in a video's details, if it's one we'd show. */
+export function videoPoster(meta: Record<string, unknown> | null | undefined): string | null {
+  const p = meta?.poster;
+  return typeof p === 'string' && p.startsWith('data:image/jpeg;base64,') && p.length <= POSTER_MAX_CHARS ? p : null;
+}
+
 export class VideoTooBigError extends Error {
   /** `compressed`: it was made smaller and still didn't fit. */
   constructor(compressed = false) {

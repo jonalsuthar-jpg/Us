@@ -1,4 +1,4 @@
-import { describeCall, formatClock, formatVoiceLength, groupReactions, speedLabel, waveformBars, isGiphyUrl, isLinkedMedia, linkParts, linkPreviewOf, messagePreview, type CallMedia, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
+import { describeCall, formatClock, formatVoiceLength, groupReactions, videoPoster, speedLabel, waveformBars, isGiphyUrl, isLinkedMedia, linkParts, linkPreviewOf, messagePreview, type CallMedia, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
 import { Image as AnimatedImage } from 'expo-image';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Ban, Headphones, Pause, Phone, PhoneMissed, Pin, Play, Tv, Video } from 'lucide-react-native';
@@ -199,7 +199,10 @@ export const Bubble = memo(function Bubble({
               style={{ width: 220, aspectRatio: Math.min(Math.max(photoAspect(meta), 0.75), 1.6) }}
               className="items-center justify-center overflow-hidden rounded-[14px] bg-plum-900"
             >
-              <View className="h-14 w-14 items-center justify-center rounded-full bg-white/20">
+              {videoPoster(meta) ? (
+                <AnimatedImage source={{ uri: videoPoster(meta)! }} contentFit="cover" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+              ) : null}
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-black/35">
                 {url ? <Play size={26} color="#fff" fill="#fff" /> : <ActivityIndicator color="#fff" />}
               </View>
               {meta?.duration_ms ? (

@@ -1,4 +1,4 @@
-import { formatClock, formatVoiceLength, groupReactions, speedLabel, waveformBars, isGiphyUrl, isLinkedMedia, isOurStickerPath, linkParts, linkPreviewOf, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
+import { formatClock, formatVoiceLength, groupReactions, videoPoster, speedLabel, waveformBars, isGiphyUrl, isLinkedMedia, isOurStickerPath, linkParts, linkPreviewOf, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
 import { Ban, Copy, Download, MoreHorizontal, Pause, Pencil, Pin, PinOff, Play, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useVoiceSpeed } from '@/lib/voice';
@@ -325,6 +325,7 @@ export function Bubble({
                 playsInline
                 preload="metadata"
                 src={url}
+                poster={videoPoster(message.media_meta) ?? undefined}
                 className="block max-h-96 w-72 max-w-full rounded-[14px] bg-black"
                 style={message.media_meta?.width && message.media_meta?.height ? { aspectRatio: `${message.media_meta.width} / ${message.media_meta.height}` } : undefined}
                 aria-label={`Video, ${formatVoiceLength(message.media_meta?.duration_ms)}`}

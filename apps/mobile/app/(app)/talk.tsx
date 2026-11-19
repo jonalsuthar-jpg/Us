@@ -25,6 +25,7 @@ import { saveToGallery } from '@/lib/save-media';
 import { KeyboardMediaSheet, type KeyboardSendAs } from '@/components/chat/keyboard-media-sheet';
 import type { RichContent } from '@/modules/us-rich-input';
 import { clearMessageNotifications } from '@/modules/us-call';
+import { videoPosterOf } from '@/lib/video-poster';
 import { preparePhoto, type ReadyPhoto } from '@/lib/photo';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
@@ -209,10 +210,12 @@ function Thread() {
     }
     const bytes = await (await fetch(ready.uri)).arrayBuffer();
     if (bytes.byteLength > VIDEO_MAX_BYTES) throw new VideoTooBigError(ready !== clip);
+    const poster = await videoPosterOf(ready.uri);
+    const info = { width: ready.width, height: ready.height, duration_ms: Math.round(ready.durationMs) };
     sendWithReply(caption, {
       media: {
         kind: 'video',
-        meta: { width: ready.width, height: ready.height, duration_ms: Math.round(ready.durationMs) },
+        meta: poster ? { ...info, poster } : info,
         localUri: ready.uri,
         // Re-encoded videos are always mp4.
         upload: { body: bytes, contentType: ready === clip ? (clip.mimeType ?? 'video/mp4') : 'video/mp4' },
