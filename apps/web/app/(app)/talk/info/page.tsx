@@ -24,6 +24,15 @@ import {
   setChatTheme,
   setNickname,
   videoPoster,
+  cancelCapsule,
+  CAPSULE_TOPIC,
+  capsulesWaiting,
+  capsuleText,
+  formatCapsuleMoment,
+  listMyCapsules,
+  notifyPartner,
+  openCapsuleNow,
+  type Capsule,
   type Message,
 } from '@us/shared';
 import { useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useCoupleLive, useFeature } from '@us/shared/react';
@@ -34,6 +43,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { FeatureOff } from '@/components/app/feature-off';
 import { ErrorNote } from '@/components/app/module-header';
 import { LinkCard, VoicePlayer } from '@/components/chat/bubble';
+import { CapsuleDialog } from '@/components/chat/capsule-dialog';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -71,6 +81,9 @@ function ChatInfo() {
   const saved = useCoupleData(SAVED_TOPIC, () => listSaved(sb, me.id, cipher), [sb, me.id, !!cipher, 'list'], undefined, 'memory');
   const prefs = useCoupleData('notify:prefs', () => getNotificationPrefs(sb, me.id), [sb, me.id]);
   const muted = !!prefs.data?.off.includes('messages');
+  const myCapsules = useCoupleData(CAPSULE_TOPIC, () => listMyCapsules(sb, me.id), [sb, me.id, 'mine']);
+  const waiting = useCoupleData(CAPSULE_TOPIC, () => capsulesWaiting(sb), [sb, 'waiting']);
+  const [capsule, setCapsule] = useState<{ capsule: Capsule; text: string } | null | 'new'>(null);
 
   const media = mediaList.data ?? [];
   const urls = useChatMedia([...media, ...(voice.data ?? [])]);
@@ -180,6 +193,53 @@ function ChatInfo() {
         </div>
       </Section>
 
+      <Section title="Time capsules">
+        {waiting.data?.waiting ? (
+          <p className="rounded-sheet bg-gold-50 px-4 py-3 text-gold-800">
+            <span className="block font-semibold">
+              💌 {name} has sealed {waiting.data.waiting === 1 ? 'a capsule' : `${waiting.data.waiting} capsules`} for you.
+            </span>
+            {waiting.data.nextAt ? <span className="block text-small">The next one opens {formatCapsuleMoment(waiting.data.nextAt)}.</span> : null}
+          </p>
+        ) : null}
+        <ul className="space-y-2">
+          {(myCapsules.data ?? []).map((cap) => {
+            const text = capsuleText(cap, cipher);
+            return (
+              <li key={cap.id} className="space-y-2 rounded-sheet bg-paper-raised px-4 py-3">
+                <p className="text-micro text-ink-muted">Opens {formatCapsuleMoment(cap.deliver_at)}</p>
+                <p className="line-clamp-2 text-ink">{text ?? 'Sealed'}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" disabled={text === null} onClick={() => text !== null && setCapsule({ capsule: cap, text })}>
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      void myCapsules
+                        .mutate(async () => {
+                          const m = await openCapsuleNow(sb, cap.id);
+                          void notifyPartner(sb, { category: 'new_message', messageId: m.id });
+                        })
+                        .catch(fail)
+                    }
+                  >
+                    Open now
+                  </Button>
+                  <Button size="sm" variant="quiet" onClick={() => window.confirm('Cancel this capsule? It won’t be sent.') && void myCapsules.mutate(() => cancelCapsule(sb, cap.id)).catch(fail)}>
+                    Cancel
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <Button variant="secondary" onClick={() => setCapsule('new')}>
+          Seal a new one 💌
+        </Button>
+      </Section>
+
       <Section title="Saved by you" icon={<Star className="h-4 w-4" />}>
         <MessageRows items={saved.data ?? []} empty={saved.loading ? 'Looking…' : 'Open a message’s actions and tap Save to keep it here. Only you see this list.'} meId={me.id} name={name} onPick={openInChat} />
       </Section>
@@ -219,6 +279,15 @@ function ChatInfo() {
         </div>
       </Section>
 
+      <CapsuleDialog
+        open={capsule !== null}
+        editing={capsule && capsule !== 'new' ? capsule : null}
+        onOpenChange={(o) => !o && setCapsule(null)}
+        onDone={() => {
+          setCapsule(null);
+          void myCapsules.reload();
+        }}
+      />
       <Lightbox src={photo} label="Photo" onClose={() => setPhoto(null)} />
       <Dialog open={!!video} onOpenChange={(o) => !o && setVideo(null)} title="Video">
         {video ? <video src={video} controls autoPlay playsInline className="max-h-[70dvh] w-full rounded-control bg-black" /> : null}

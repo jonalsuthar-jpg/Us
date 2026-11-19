@@ -80,6 +80,7 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
     deleted_at: null,
     hidden_for: [],
     edited_at: null,
+    capsule_sealed_at: null,
     call: null,
     pending: true,
     localUri: extras.media?.localUri,

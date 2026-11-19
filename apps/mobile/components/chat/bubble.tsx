@@ -122,12 +122,15 @@ export const Bubble = memo(function Bubble({
           className={cn(
             'rounded-bubble',
             photo && url ? 'overflow-hidden p-1' : linked || waiting ? 'overflow-hidden p-1' : 'px-3 pb-1.5 pt-2',
-            sticker ? 'bg-transparent' : mine ? MINE[slot] : THEIRS[slot],
+            sticker ? 'bg-transparent' : message.capsule_sealed_at ? 'border border-gold-300 bg-gold-50' : mine ? MINE[slot] : THEIRS[slot],
             last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
             message.pending && 'opacity-80',
             highlighted && 'border-2 border-gold-400',
           )}
         >
+          {message.capsule_sealed_at && !deleted ? (
+            <Text className="mb-1 font-sans-semibold text-micro text-gold-800">{`💌 Time capsule · sealed ${new Date(message.capsule_sealed_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`}</Text>
+          ) : null}
           {quote ? (
             <Pressable
               accessibilityRole="button"

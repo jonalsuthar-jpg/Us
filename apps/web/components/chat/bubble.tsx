@@ -268,13 +268,18 @@ export function Bubble({
           className={cn(
             'relative cursor-default rounded-bubble text-body transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 focus-visible:ring-offset-paper',
             (url && message.media_kind === 'image') || linked || waiting ? 'overflow-hidden p-1' : 'px-3.5 pb-1.5 pt-2',
-            sticker ? 'bg-transparent shadow-none' : mine ? MINE[slot] : THEIRS[slot],
+            sticker ? 'bg-transparent shadow-none' : message.capsule_sealed_at ? 'bg-gold-50 text-ink ring-1 ring-gold-300' : mine ? MINE[slot] : THEIRS[slot],
             last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
             message.pending && 'opacity-80',
             (active || highlighted) && 'ring-2 ring-gold-400 ring-offset-2 ring-offset-paper',
           )}
         >
           <span className="sr-only">{mine ? 'You' : authorName}: </span>
+          {message.capsule_sealed_at && !deleted ? (
+            <span className="mb-1 block text-micro font-semibold text-gold-800">
+              💌 Time capsule · sealed {new Date(message.capsule_sealed_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          ) : null}
 
           {quote ? (
             <button

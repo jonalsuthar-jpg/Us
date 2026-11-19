@@ -15,6 +15,7 @@ export * from './api/pairing';
 export * from './api/messages';
 export * from './api/links';
 export * from './api/chat-info';
+export * from './api/capsules';
 export * from './api/chat-keys';
 export * from './api/chat-media';
 export * from './api/chat-video';

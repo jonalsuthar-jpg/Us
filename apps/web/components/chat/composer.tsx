@@ -1,7 +1,7 @@
 'use client';
 
 import { formatVoiceLength } from '@us/shared';
-import { ArrowUp, ImagePlus, Mic, PenLine, Square, Sticker, Trash2, X } from 'lucide-react';
+import { ArrowUp, ImagePlus, MailOpen, Mic, PenLine, Square, Sticker, Trash2, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/cn';
 import type { ReplyQuote } from './bubble';
@@ -25,6 +25,8 @@ interface ComposerProps {
   onGif?: () => void;
   /** Draw a doodle and send it as a picture. */
   onDoodle?: () => void;
+  /** Seal a time capsule: a message that opens on a date and time. */
+  onCapsule?: () => void;
   /** Our stickers: send one, or make one from a photo. */
   onSticker?: () => void;
   /** A GIF, sticker or picture pasted into the box. */
@@ -37,7 +39,7 @@ function pickAudioType(): string | undefined {
 }
 
 /** Auto-growing textarea. Enter sends; Shift+Enter is a new line. Photos and voice notes too. */
-export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply, editing, onSaveEdit, onCancelEdit, onPhoto, onVoice, onGif, onDoodle, onSticker, onPasteMedia }: ComposerProps) {
+export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply, editing, onSaveEdit, onCancelEdit, onPhoto, onVoice, onGif, onDoodle, onCapsule, onSticker, onPasteMedia }: ComposerProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -250,6 +252,17 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-paper-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
             >
               <PenLine className="h-5 w-5" />
+            </button>
+          ) : null}
+          {onCapsule ? (
+            <button
+              type="button"
+              aria-label="Seal a time capsule"
+              title="Time capsule"
+              onClick={onCapsule}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-paper-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+            >
+              <MailOpen className="h-5 w-5" />
             </button>
           ) : null}
           <label htmlFor="composer" className="sr-only">

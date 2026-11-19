@@ -27,6 +27,7 @@ import type { RichContent } from '@/modules/us-rich-input';
 import { clearMessageNotifications } from '@/modules/us-call';
 import { videoPosterOf } from '@/lib/video-poster';
 import { VideoQualitySheet } from '@/components/chat/video-quality-sheet';
+import { CapsuleSheet } from '@/components/chat/capsule-sheet';
 import { preparePhoto, type ReadyPhoto } from '@/lib/photo';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
@@ -108,6 +109,7 @@ function Thread() {
   const [acting, setActing] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
+  const [capsule, setCapsule] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
   const [video, setVideo] = useState<string | null>(null);
   /** The chat message open in the photo / video viewer (not a profile photo). */
@@ -456,6 +458,7 @@ function Thread() {
     { key: 'camera', label: 'Camera', icon: ATTACH_ICONS.camera, tint: ATTACH_TINTS.camera, onPress: () => setCamera(true) },
     { key: 'video', label: 'Video', icon: ATTACH_ICONS.video, tint: ATTACH_TINTS.video, onPress: () => void sendVideo().catch(fail) },
     ...(draw ? [{ key: 'draw', label: 'Draw', icon: ATTACH_ICONS.draw, tint: ATTACH_TINTS.draw, onPress: () => setDoodle(true) }] : []),
+    { key: 'capsule', label: 'Time capsule', icon: ATTACH_ICONS.capsule, tint: ATTACH_TINTS.capsule, onPress: () => setCapsule(true) },
     { key: 'gif', label: 'GIF', icon: ATTACH_ICONS.gif, tint: ATTACH_TINTS.gif, onPress: () => setExpressions('gif') },
     ...(stickersOn ? [{ key: 'sticker', label: 'New sticker', icon: ATTACH_ICONS.sticker, tint: ATTACH_TINTS.sticker, onPress: () => setStickerMaker(true) }] : []),
   ];
@@ -640,6 +643,14 @@ function Thread() {
         onClose={() => setCamera(false)}
         onSend={(p, caption) => void sendImage(p, caption).catch(fail)}
         onSendVideo={(clip, caption) => void askQuality(clip, caption).catch(fail)}
+      />
+      <CapsuleSheet
+        open={capsule}
+        onClose={() => setCapsule(false)}
+        onDone={(when) => {
+          setCapsule(false);
+          say(`Sealed. It opens ${when}.`);
+        }}
       />
       <VideoQualitySheet
         video={asking ? { durationMs: asking.clip.durationMs, sizeBytes: asking.size, width: asking.clip.width, height: asking.clip.height } : null}

@@ -146,6 +146,8 @@ export type Database = {
           hidden_for: string[];
           /** When I last edited it. Set via edit_message(). */
           edited_at: string | null;
+          /** Came from a time capsule sealed at this moment. */
+          capsule_sealed_at: string | null;
         };
         Insert: {
           id?: string;
@@ -351,6 +353,12 @@ export type Database = {
           video_poster_path?: string | null;
           kind?: MemoryKind;
         };
+        Relationships: [];
+      };
+      time_capsules: {
+        Row: { id: string; couple_id: string; sender_id: string; ciphertext: string; key_version: number; deliver_at: string; created_at: string; delivered_at: string | null };
+        Insert: { id?: string; couple_id: string; sender_id: string; ciphertext: string; key_version: number; deliver_at: string };
+        Update: { ciphertext?: string; key_version?: number; deliver_at?: string };
         Relationships: [];
       };
       saved_messages: {
@@ -746,6 +754,8 @@ export type Database = {
         Returns: Database['public']['Tables']['messages']['Row'];
       };
       delete_message: { Args: { p_id: string; p_for_everyone: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };
+      capsules_waiting_for_me: { Args: Record<PropertyKey, never>; Returns: { waiting: number; next_at: string | null }[] };
+      open_capsule_now: { Args: { p_id: string }; Returns: Database['public']['Tables']['messages']['Row'] };
       edit_message: { Args: { p_id: string; p_ciphertext: string; p_key_version: number }; Returns: Database['public']['Tables']['messages']['Row'] };
       react_to_message: { Args: { p_id: string; p_emoji: string | null }; Returns: Database['public']['Tables']['messages']['Row'] };
       pin_message: { Args: { p_id: string; p_pinned: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };

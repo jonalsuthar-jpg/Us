@@ -63,6 +63,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { PrivacyBadge } from "@/components/ui/privacy";
 import { useOpenedOnce, usePageActive } from "@/lib/hooks";
 import Link from "next/link";
+import { CapsuleDialog } from "@/components/chat/capsule-dialog";
 import { waveformOf } from "@/lib/voice";
 import { posterFrom } from "@/lib/video";
 import dynamic from "next/dynamic";
@@ -117,6 +118,7 @@ function Thread() {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [dropping, setDropping] = useState(false);
+  const [capsule, setCapsule] = useState(false);
   // My private nickname for my partner, the theme we share, and what I saved.
   const nickname = useCoupleData("chat:nickname", () => getNickname(sb, me.id), [sb, me.id]);
   const theme = useCoupleData(CHAT_THEME_TOPIC, () => getChatTheme(sb, couple.id), [sb, couple.id]);
@@ -780,7 +782,16 @@ function Thread() {
             onGif={() => setExpressions("gif")}
             onDoodle={draw ? () => setDoodle(true) : undefined}
             onSticker={() => setExpressions("sticker")}
+            onCapsule={() => setCapsule(true)}
             onPasteMedia={setPasted}
+          />
+          <CapsuleDialog
+            open={capsule}
+            onOpenChange={setCapsule}
+            onDone={(when) => {
+              setCapsule(false);
+              fail(new Error(`Sealed. It opens ${when}.`));
+            }}
           />
           <PastedMediaDialog
             file={pasted}

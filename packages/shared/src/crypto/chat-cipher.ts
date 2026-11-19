@@ -13,6 +13,8 @@ export interface MessagePayload {
   mime?: string | null;
   /** When this text was edited: sealed in, so the server can't pass old text off as the edit. */
   edited?: string | null;
+  /** A time capsule's seal time: it was written then and opened later. */
+  capsule?: string | null;
 }
 
 /** Ties a message's ciphertext to its row, so it can't be moved to another one or another sender. */

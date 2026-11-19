@@ -1,6 +1,6 @@
 import { tokens } from '@us/shared';
 import * as Haptics from 'expo-haptics';
-import { Camera, Clapperboard, Image as ImageIcon, PenLine, Sparkles, Sticker, type LucideIcon } from 'lucide-react-native';
+import { Camera, Clapperboard, Image as ImageIcon, MailOpen, PenLine, Sparkles, Sticker, type LucideIcon } from 'lucide-react-native';
 import { Modal, Pressable, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,9 +26,10 @@ export const ATTACH_TINTS = {
   draw: [colors.teal[400], colors.teal[600]],
   gif: [colors.gold[400], colors.gold[600]],
   sticker: [colors.sage[400], colors.sage[600]],
+  capsule: [colors.gold[300], colors.rose[500]],
 } satisfies Record<string, [string, string]>;
 
-export const ATTACH_ICONS = { gallery: ImageIcon, camera: Camera, video: Clapperboard, draw: PenLine, gif: Sparkles, sticker: Sticker };
+export const ATTACH_ICONS = { gallery: ImageIcon, camera: Camera, video: Clapperboard, draw: PenLine, gif: Sparkles, sticker: Sticker, capsule: MailOpen };
 
 /**
  * What the paperclip opens: a card of round, colour-coded tiles floating

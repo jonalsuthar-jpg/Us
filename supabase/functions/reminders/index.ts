@@ -5,7 +5,9 @@
  *  - a plan's reminder (at the time, 15 minutes, an hour or a day before),
  *    to both of us, for one-off and repeating plans alike;
  *  - at about 9:00 in each person's own time zone, a memory from this day in
- *    an earlier year ("2 years ago today: Lisbon").
+ *    an earlier year ("2 years ago today: Lisbon");
+ *  - time capsules that are due open into the chat (deliver_due_capsules),
+ *    and the one they were sealed for hears about it.
  *
  * Each goes once (push_sent), and through sendPush, so notification settings
  * and quiet hours apply. Auth: x-cron-secret must match CRON_SECRET.
@@ -47,9 +49,10 @@ Deno.serve(async (req) => {
   const tzOf = new Map((people ?? []).map((p) => [p.id, (p.timezone as string | null) ?? DEFAULT_TZ]));
   const members = new Map((couples ?? []).map((c) => [c.id, [c.user_a_id, c.user_b_id] as string[]]));
 
+  const capsules = await openCapsules(admin, members);
   const plans = await planReminders(admin, now, members, tzOf);
   const memories = await onThisDay(admin, now, couples ?? [], tzOf);
-  return json({ plans, memories });
+  return json({ capsules, plans, memories });
 });
 
 /** Each reminder whose moment came in the last tick. */
@@ -129,6 +132,33 @@ async function onThisDay(admin: SupabaseClient, now: Date, couples: { id: string
     }
   }
   return sent;
+}
+
+/** Due capsules become chat messages (once, in the database); the other one of us is told. */
+async function openCapsules(admin: SupabaseClient, members: Map<string, string[]>): Promise<number> {
+  const { data, error } = await admin.rpc('deliver_due_capsules');
+  if (error) {
+    console.error('reminders: capsules', error);
+    return 0;
+  }
+  const opened = (data ?? []) as { id: string; couple_id: string; sender_id: string }[];
+  if (!opened.length) return 0;
+  const { data: people } = await admin.from('profiles').select('id, display_name').in('id', [...new Set(opened.map((c) => c.sender_id))]);
+  const nameOf = new Map((people ?? []).map((p) => [p.id, p.display_name as string]));
+  for (const c of opened) {
+    const to = (members.get(c.couple_id) ?? []).find((u) => u !== c.sender_id);
+    if (!to) continue;
+    await sendPush({
+      to,
+      heading: '💌 A time capsule just opened',
+      content: `${nameOf.get(c.sender_id) ?? 'Your partner'} sealed this for you. Open it in your chat.`,
+      url: '/talk',
+      category: 'letter_unlocked',
+      threadId: 'chat',
+      collapseId: `capsule-${c.id}`,
+    });
+  }
+  return opened.length;
 }
 
 /** Claim a push by its key; false if it has gone already. */

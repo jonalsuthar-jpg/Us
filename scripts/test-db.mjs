@@ -1167,6 +1167,44 @@ await test('saved messages, nickname and theme: mine stay mine, the theme is our
   assert.equal((await as(carol, () => q(`select * from public.chat_themes where couple_id = $1`, [couple.id]))).length, 0, 'outsider');
 });
 
+console.log('\nTime capsules');
+
+await test('time capsules: sealed from my partner, mine to change until they open, opened once', async () => {
+  const seal = (who, at, ct = 'c2VhbGVk') => as(who, () => one(`insert into public.time_capsules (couple_id, sender_id, ciphertext, key_version, deliver_at) values ($1, $2, $3, 1, ${at}) returning id`, [couple.id, who, ct]));
+  const cap = await seal(alice, "now() + interval '1 day'");
+  assert.equal((await as(bob, () => q(`select * from public.time_capsules`))).length, 0, 'bob can’t see it exists');
+  const teaser = await as(bob, () => one(`select * from public.capsules_waiting_for_me()`));
+  assert.equal(teaser.waiting, 1, 'but he knows one is waiting');
+  assert.ok(teaser.next_at, 'and when');
+  assert.equal((await as(alice, () => one(`select * from public.capsules_waiting_for_me()`))).waiting, 0, 'my own aren’t waiting for me');
+  await rejects(seal(alice, "now() + interval '2 minutes'"), /row-level security/, 'too soon');
+  await rejects(seal(alice, "now() + interval '11 years'"), /time_capsules_window/, 'too far');
+  await as(bob, () => q(`update public.time_capsules set ciphertext = 'Ym9i' where id = $1`, [cap.id]));
+  assert.equal((await one(`select ciphertext from public.time_capsules where id = $1`, [cap.id])).ciphertext, 'c2VhbGVk', 'bob can’t change it');
+  await as(alice, () => q(`update public.time_capsules set ciphertext = 'bmV3', deliver_at = now() + interval '2 days' where id = $1`, [cap.id]));
+  await rejects(as(alice, () => q(`update public.time_capsules set delivered_at = now() where id = $1`, [cap.id])), /permission denied/, 'opening it by hand');
+  await rejects(as(alice, () => q(`select * from public.deliver_due_capsules()`)), /permission denied/, 'running delivery');
+
+  // Due: the server opens it into the chat, once.
+  await q(`update public.time_capsules set deliver_at = now() - interval '1 minute' where id = $1`, [cap.id]);
+  const opened = await q(`select * from public.deliver_due_capsules()`);
+  assert.deepEqual(opened.map((r) => r.id), [cap.id]);
+  assert.equal((await q(`select * from public.deliver_due_capsules()`)).length, 0, 'only once');
+  const msg = await as(bob, () => one(`select ciphertext, capsule_sealed_at, sender_id from public.messages where id = $1`, [cap.id]));
+  assert.deepEqual([msg.ciphertext, msg.sender_id], ['bmV3', alice]);
+  assert.ok(msg.capsule_sealed_at, 'marked as a capsule');
+  await as(alice, () => q(`delete from public.time_capsules where id = $1`, [cap.id]));
+  assert.equal((await q(`select 1 from public.time_capsules where id = $1`, [cap.id])).length, 1, 'an opened capsule stays');
+
+  // Open now, by the sender only.
+  const early = await seal(alice, "now() + interval '30 days'");
+  await rejects(as(bob, () => q(`select public.open_capsule_now($1)`, [early.id])), /capsule_not_found/, 'partner opening it');
+  const m = await as(alice, () => one(`select * from public.open_capsule_now($1)`, [early.id]));
+  assert.equal(m.id, early.id);
+  await q(`delete from public.messages where id = any($1)`, [[cap.id, early.id]]);
+  await q(`delete from public.time_capsules where couple_id = $1`, [couple.id]);
+});
+
 console.log('\nNotifications');
 
 await test('notification settings: mine alone, with sane quiet hours', async () => {
