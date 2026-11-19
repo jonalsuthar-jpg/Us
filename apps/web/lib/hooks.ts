@@ -20,6 +20,17 @@ export function usePageActive(): boolean {
   );
 }
 
+/**
+ * False until `open` first turns true, then true for good: mount a heavy,
+ * lazily loaded dialog only once it's wanted, and keep it so it can close
+ * with its animation.
+ */
+export function useOpenedOnce(open: boolean): boolean {
+  const [opened, setOpened] = useState(open);
+  if (open && !opened) setOpened(true);
+  return opened || open;
+}
+
 /** Seconds since `start`, ticking once a second. */
 export function useElapsed(start: number | null): number {
   const [now, setNow] = useState(() => Date.now());

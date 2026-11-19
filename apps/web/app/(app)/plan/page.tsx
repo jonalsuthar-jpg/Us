@@ -5,12 +5,15 @@ import { ChevronLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { FeatureOff } from '@/components/app/feature-off';
 import { MobileSettingsLink } from '@/components/app/app-shell';
-import { PlanCalendar } from '@/components/plan/calendar';
-import { PlanCosts } from '@/components/plan/costs';
-import { PlanDecide } from '@/components/plan/decide';
+import dynamic from 'next/dynamic';
 import { PlanHub, PLAN_SECTIONS, type PlanOpen, type PlanSection } from '@/components/plan/hub';
-import { PlanLabour } from '@/components/plan/labour';
-import { PlanLists } from '@/components/plan/lists';
+
+// The hub draws from small summaries; each section's code loads when it's opened.
+const PlanCalendar = dynamic(() => import('@/components/plan/calendar').then((m) => m.PlanCalendar), { ssr: false });
+const PlanCosts = dynamic(() => import('@/components/plan/costs').then((m) => m.PlanCosts), { ssr: false });
+const PlanDecide = dynamic(() => import('@/components/plan/decide').then((m) => m.PlanDecide), { ssr: false });
+const PlanLabour = dynamic(() => import('@/components/plan/labour').then((m) => m.PlanLabour), { ssr: false });
+const PlanLists = dynamic(() => import('@/components/plan/lists').then((m) => m.PlanLists), { ssr: false });
 import { SunsetBanner } from '@/components/plan/art';
 import { Initial } from '@/components/plan/bits';
 

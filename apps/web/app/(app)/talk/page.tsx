@@ -41,12 +41,7 @@ import { FeatureOff } from "@/components/app/feature-off";
 import { Bubble, type ReplyQuote } from "@/components/chat/bubble";
 import { CallEntry } from "@/components/chat/call-entry";
 import { Composer } from "@/components/chat/composer";
-import { DoodleDialog } from "@/components/draw/doodle-dialog";
-import { StickerMaker } from "@/components/stickers/maker";
-import {
-  ExpressionPanel,
-  type ExpressionTab,
-} from "@/components/chat/expression-panel";
+import type { ExpressionTab } from "@/components/chat/expression-panel";
 import {
   PastedMediaDialog,
   type PastedSendAs,
@@ -58,7 +53,13 @@ import { Lightbox } from "@/components/ui/lightbox";
 import { Button, Spinner } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { PrivacyBadge } from "@/components/ui/privacy";
-import { usePageActive } from "@/lib/hooks";
+import { useOpenedOnce, usePageActive } from "@/lib/hooks";
+import dynamic from "next/dynamic";
+
+// Drawing, sticker cut-out and GIF search are big and rarely open: each loads the first time it's opened.
+const DoodleDialog = dynamic(() => import("@/components/draw/doodle-dialog").then((m) => m.DoodleDialog), { ssr: false });
+const StickerMaker = dynamic(() => import("@/components/stickers/maker").then((m) => m.StickerMaker), { ssr: false });
+const ExpressionPanel = dynamic(() => import("@/components/chat/expression-panel").then((m) => m.ExpressionPanel), { ssr: false });
 import { shrinkPhoto } from "@/lib/image";
 
 export default function TalkPage() {
@@ -116,6 +117,9 @@ function Thread() {
   /** The sticker / GIF panel, open on this tab. */
   const [expressions, setExpressions] = useState<ExpressionTab | null>(null);
   const [stickerMaker, setStickerMaker] = useState(false);
+  const makerOpened = useOpenedOnce(stickerMaker);
+  const doodleOpened = useOpenedOnce(doodle);
+  const expressionsOpened = useOpenedOnce(expressions !== null);
   const sendSticker = (st: Sticker, url?: string) =>
     sendWithReply("", {
       media: {
@@ -363,6 +367,100 @@ function Thread() {
 
   const latestPin = pins.data?.[0];
 
+  // The thread itself, rebuilt only when what it shows changes: a typing dot or
+  // my partner coming online re-renders the page, not every bubble in it.
+  const h = useRef({ retry, react, pin, download, jumpTo, fail, quoteFor, calls });
+  h.current = { retry, react, pin, download, jumpTo, fail, quoteFor, calls };
+  const thread = useMemo(
+    () =>
+      groupByDay(messages).map((group) => (
+      <section key={group.key} aria-label={group.day}>
+        <DayDivider label={group.day} />
+        <ol>
+          {group.items.map((m, i) =>
+            m.kind === "call" ? (
+              <CallEntry
+                key={m.id}
+                message={m}
+                myId={me.id}
+                onCallBack={(media) => void h.current.calls.startCall(media)}
+              />
+            ) : (
+              <Bubble
+                key={m.id}
+                message={m}
+                mine={m.sender_id === me.id}
+                slot={m.sender_id === me.id ? mySlot : partnerSlot}
+                authorName={partner.display_name}
+                myId={me.id}
+                first={!clusters(group.items[i - 1], m)}
+                last={!clusters(m, group.items[i + 1])}
+                mediaUrl={
+                  m.media_path ? media[m.media_path] : undefined
+                }
+                quote={h.current.quoteFor(m)}
+                active={activeId === m.id}
+                highlighted={highlight === m.id}
+                onToggleActive={() =>
+                  setActiveId((id) => (id === m.id ? null : m.id))
+                }
+                onRetry={() => h.current.retry(m.id)}
+                onReact={(emoji) => {
+                  setActiveId(null);
+                  void h.current.react(m.id, emoji).catch(fail);
+                }}
+                onReply={() => {
+                  setActiveId(null);
+                  setReplyTo(m);
+                }}
+                onPin={(p) => {
+                  setActiveId(null);
+                  void h.current.pin(m.id, p).catch(fail);
+                }}
+                onKeepSticker={
+                  stickersOn
+                    ? () => {
+                        setActiveId(null);
+                        void keepSticker(
+                          sb,
+                          couple.id,
+                          me.id,
+                          m.media_path!,
+                          {
+                            width: m.media_meta?.width,
+                            height: m.media_meta?.height,
+                          },
+                        )
+                          .then(() =>
+                            channel.sendChanged(STICKERS_TOPIC),
+                          )
+                          .catch(fail);
+                      }
+                    : undefined
+                }
+                onOpenPhoto={(url) => {
+                  setPhoto(url);
+                  setViewed(m);
+                }}
+                onDownload={() => {
+                  setActiveId(null);
+                  void h.current.download(m).catch(fail);
+                }}
+                onDelete={() => {
+                  setActiveId(null);
+                  setDeleting(m);
+                }}
+                onJumpTo={(id) => void h.current.jumpTo(id)}
+              />
+            ),
+          )}
+        </ol>
+      </section>
+    )),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [messages, media, activeId, highlight, stickersOn, snaps.data, me.id, mySlot, partnerSlot, partner.display_name, sb, couple.id, channel],
+  );
+
   const status = partnerTyping ? "typing…" : partnerOnline ? "online" : "away";
 
   return (
@@ -484,90 +582,7 @@ function Thread() {
                     </button>
                   </div>
                 )}
-                {groupByDay(messages).map((group) => (
-                  <section key={group.key} aria-label={group.day}>
-                    <DayDivider label={group.day} />
-                    <ol>
-                      {group.items.map((m, i) =>
-                        m.kind === "call" ? (
-                          <CallEntry
-                            key={m.id}
-                            message={m}
-                            myId={me.id}
-                            onCallBack={(media) => void calls.startCall(media)}
-                          />
-                        ) : (
-                          <Bubble
-                            key={m.id}
-                            message={m}
-                            mine={m.sender_id === me.id}
-                            slot={m.sender_id === me.id ? mySlot : partnerSlot}
-                            authorName={partner.display_name}
-                            myId={me.id}
-                            first={!clusters(group.items[i - 1], m)}
-                            last={!clusters(m, group.items[i + 1])}
-                            mediaUrl={
-                              m.media_path ? media[m.media_path] : undefined
-                            }
-                            quote={quoteFor(m)}
-                            active={activeId === m.id}
-                            highlighted={highlight === m.id}
-                            onToggleActive={() =>
-                              setActiveId((id) => (id === m.id ? null : m.id))
-                            }
-                            onRetry={() => retry(m.id)}
-                            onReact={(emoji) => {
-                              setActiveId(null);
-                              void react(m.id, emoji).catch(fail);
-                            }}
-                            onReply={() => {
-                              setActiveId(null);
-                              setReplyTo(m);
-                            }}
-                            onPin={(p) => {
-                              setActiveId(null);
-                              void pin(m.id, p).catch(fail);
-                            }}
-                            onKeepSticker={
-                              stickersOn
-                                ? () => {
-                                    setActiveId(null);
-                                    void keepSticker(
-                                      sb,
-                                      couple.id,
-                                      me.id,
-                                      m.media_path!,
-                                      {
-                                        width: m.media_meta?.width,
-                                        height: m.media_meta?.height,
-                                      },
-                                    )
-                                      .then(() =>
-                                        channel.sendChanged(STICKERS_TOPIC),
-                                      )
-                                      .catch(fail);
-                                  }
-                                : undefined
-                            }
-                            onOpenPhoto={(url) => {
-                              setPhoto(url);
-                              setViewed(m);
-                            }}
-                            onDownload={() => {
-                              setActiveId(null);
-                              void download(m).catch(fail);
-                            }}
-                            onDelete={() => {
-                              setActiveId(null);
-                              setDeleting(m);
-                            }}
-                            onJumpTo={(id) => void jumpTo(id)}
-                          />
-                        ),
-                      )}
-                    </ol>
-                  </section>
-                ))}
+                {thread}
               </>
             )}
             <TypingBubble
@@ -688,14 +703,14 @@ function Thread() {
             onClose={() => setPasted(null)}
             onSend={(f, as) => void sendPasted(f, as).catch(fail)}
           />
-          {stickersOn ? (
+          {stickersOn && makerOpened ? (
             <StickerMaker
               open={stickerMaker}
               onOpenChange={setStickerMaker}
               onSaved={(st, send) => send && sendSticker(st)}
             />
           ) : null}
-          {draw ? (
+          {draw && doodleOpened ? (
             <DoodleDialog
               open={doodle}
               onOpenChange={setDoodle}
@@ -703,6 +718,7 @@ function Thread() {
               onChatPhoto={(f) => void sendPhoto(f, "").catch(fail)}
             />
           ) : null}
+          {expressionsOpened ? (
           <ExpressionPanel
             open={expressions !== null}
             initialTab={expressions ?? "sticker"}
@@ -732,6 +748,7 @@ function Thread() {
               setStickerMaker(true);
             }}
           />
+          ) : null}
           <DeleteDialog
             message={deleting}
             mine={
