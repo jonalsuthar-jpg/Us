@@ -142,6 +142,8 @@ export type Database = {
           deleted_at: string | null;
           /** Who deleted it just for themselves. */
           hidden_for: string[];
+          /** When I last edited it. Set via edit_message(). */
+          edited_at: string | null;
         };
         Insert: {
           id?: string;
@@ -665,6 +667,7 @@ export type Database = {
         Returns: Database['public']['Tables']['messages']['Row'];
       };
       delete_message: { Args: { p_id: string; p_for_everyone: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };
+      edit_message: { Args: { p_id: string; p_ciphertext: string; p_key_version: number }; Returns: Database['public']['Tables']['messages']['Row'] };
       react_to_message: { Args: { p_id: string; p_emoji: string | null }; Returns: Database['public']['Tables']['messages']['Row'] };
       pin_message: { Args: { p_id: string; p_pinned: boolean }; Returns: Database['public']['Tables']['messages']['Row'] };
       mark_snap_seen: { Args: { p_id: string }; Returns: Database['public']['Tables']['snaps']['Row'] };

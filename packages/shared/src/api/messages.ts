@@ -79,6 +79,7 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
     key_version: null,
     deleted_at: null,
     hidden_for: [],
+    edited_at: null,
     call: null,
     pending: true,
     localUri: extras.media?.localUri,
@@ -285,6 +286,45 @@ export async function deleteMessage(sb: UsClient, m: Pick<Message, 'id' | 'media
   return data;
 }
 
+/** Edits are allowed for a day after sending. */
+export const EDIT_WINDOW_MS = 24 * 3600_000;
+
+/** Mine, settled, encrypted text that's still young enough to edit. */
+export function canEdit(m: Message, me: string, now = Date.now()): boolean {
+  return (
+    m.sender_id === me && m.kind === 'text' && !m.deleted_at && !m.pending && !m.failed && !!m.ciphertext && m.e2ee === 'ok' &&
+    !!m.body?.trim() && now - Date.parse(m.created_at) < EDIT_WINDOW_MS
+  );
+}
+
+/**
+ * New text for one of my messages. It's sealed again with the same media
+ * details (a photo keeps its size and type), a fresh link card if the link
+ * changed, and the edit time inside the encryption.
+ */
+export async function sealEdit(sb: UsClient, m: Message, text: string, cipher: ChatCipher): Promise<{ ciphertext: string; edited: string }> {
+  const body = text.trim();
+  if (!body) throw new Error('A message can’t be empty. Delete it instead.');
+  let meta = m.media_meta ?? null;
+  if (!m.media_kind) {
+    const url = firstLink(body);
+    if (!url) meta = null;
+    else if (meta?.link_url !== url) {
+      const preview = await fetchLinkPreview(sb, url);
+      meta = preview ? previewMeta(preview) : null;
+    }
+  }
+  const edited = new Date().toISOString();
+  return { ciphertext: cipher.encryptMessage(m, { body, meta, mime: m.mime ?? null, edited }), edited };
+}
+
+/** Save an edit sealed by sealEdit. */
+export async function saveEdit(sb: UsClient, id: string, ciphertext: string, cipher: ChatCipher): Promise<MessageRow> {
+  const { data, error } = await sb.rpc('edit_message', { p_id: id, p_ciphertext: ciphertext, p_key_version: cipher.version });
+  if (error) throw error;
+  return data;
+}
+
 /** Hidden from me with "Delete for me". */
 export const hiddenFor = (m: Pick<Message, 'hidden_for'>, me: string) => !!m.hidden_for?.includes(me);
 
@@ -371,7 +411,7 @@ export async function searchMessages(
 
 // --------------------------------------------------------------- opening ---
 
-type Opened = { body: string | null; meta: MediaMeta | null; mime: string | null } | null;
+type Opened = { body: string | null; meta: MediaMeta | null; mime: string | null; edited: boolean } | null;
 
 // Each ciphertext is opened once per key. Keyed by id and ciphertext, so an
 // edited message (new ciphertext, same id) is opened again.
@@ -390,6 +430,7 @@ function openPayload(m: Message, cipher: ChatCipher): Opened {
       body: typeof p.body === 'string' ? p.body : null,
       meta: p.meta && typeof p.meta === 'object' ? p.meta : null,
       mime: typeof p.mime === 'string' ? p.mime : null,
+      edited: typeof p.edited === 'string',
     };
   } catch {
     out = null;
@@ -429,7 +470,8 @@ export function openMessage(m: Message, cipher: ChatCipher | null, opening = fal
   if (!cipher) return { ...m, reactions, e2ee: opening ? 'opening' : 'locked' };
   const p = m.key_version === cipher.version ? openPayload(m, cipher) : null;
   if (!p) return { ...m, reactions, e2ee: 'failed' };
-  return { ...m, reactions, body: p.body, media_meta: p.meta, mime: p.mime, e2ee: 'ok' };
+  // "Edited" only when the sealed text says so too, so an old ciphertext can't pose as the edit.
+  return { ...m, reactions, body: p.body, media_meta: p.meta, mime: p.mime, e2ee: 'ok', edited_at: p.edited ? m.edited_at : null };
 }
 
 export function openMessages(rows: Message[], cipher: ChatCipher | null): Message[] {

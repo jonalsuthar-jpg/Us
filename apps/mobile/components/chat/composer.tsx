@@ -25,6 +25,9 @@ export function Composer({
   onChange,
   replyTo,
   onCancelReply,
+  editing,
+  onSaveEdit,
+  onCancelEdit,
   onVoice,
   onSticker,
   onAttach,
@@ -38,6 +41,10 @@ export function Composer({
   onChange: (text: string) => void;
   replyTo?: ReplyQuote | null;
   onCancelReply?: () => void;
+  /** Editing one of my messages: the box holds its text and sending saves it. */
+  editing?: { id: string; text: string } | null;
+  onSaveEdit?: (text: string) => void;
+  onCancelEdit?: () => void;
   onVoice?: (uri: string, durationMs: number) => void;
   /** Our stickers: send one, or make one from a photo. */
   onSticker?: () => void;
@@ -63,6 +70,21 @@ export function Composer({
   useEffect(() => {
     if (replyTo) input.current?.focus();
   }, [replyTo]);
+
+  // An edit borrows the box: the draft I was writing comes back when it's done.
+  const draft = useRef<string | null>(null);
+  const editingId = editing?.id;
+  useEffect(() => {
+    if (editing) {
+      draft.current ??= text;
+      setText(editing.text);
+      setTimeout(() => input.current?.focus(), 50);
+    } else if (draft.current !== null) {
+      setText(draft.current);
+      draft.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId]);
 
   useEffect(() => {
     if (recording && rec.durationMillis >= MAX_VOICE_MS) void stop(true);
@@ -97,7 +119,20 @@ export function Composer({
 
   return (
     <View className="gap-2">
-      {replyTo ? (
+      {editing ? (
+        <Animated.View entering={FadeIn.duration(140)} className="flex-row items-center gap-3 rounded-[18px] border border-paper-edge bg-paper-sunken px-4 py-2">
+          <View className="flex-1 border-l-[3px] border-gold-500 pl-2.5">
+            <Text className="font-sans-medium text-micro">Editing your message</Text>
+            <Text numberOfLines={1} className="text-small text-ink-soft">
+              {editing.text}
+            </Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" hitSlop={8} onPress={onCancelEdit}>
+            <X size={18} color={c.inkMuted} />
+          </Pressable>
+        </Animated.View>
+      ) : null}
+      {replyTo && !editing ? (
         <Animated.View entering={FadeIn.duration(140)} className="flex-row items-center gap-3 rounded-[18px] border border-paper-edge bg-paper-sunken px-4 py-2">
           <View className="flex-1 border-l-[3px] border-rose-400 pl-2.5">
             <Text className="font-sans-medium text-micro">{`Replying to ${replyTo.author}`}</Text>
@@ -140,7 +175,7 @@ export function Composer({
               value={text}
               onChangeText={(t) => {
                 setText(t);
-                onChange(t);
+                if (!editing) onChange(t);
               }}
               className="max-h-[140px] flex-1 px-1 py-3 font-sans text-body text-ink"
             />
@@ -163,10 +198,16 @@ export function Composer({
         )}
 
         <ActionButton
-          label={recording ? 'Send voice note' : canSend ? 'Send' : 'Record a voice note'}
-          disabled={!recording && !canSend && !onVoice}
+          label={recording ? 'Send voice note' : editing ? 'Save edit' : canSend ? 'Send' : 'Record a voice note'}
+          disabled={!recording && !canSend && (!onVoice || !!editing)}
           onPress={() => {
             if (recording) return void stop(true);
+            if (canSend && editing) {
+              void Haptics.selectionAsync().catch(() => {});
+              if (text.trim() !== editing.text.trim()) onSaveEdit?.(text.trim());
+              else onCancelEdit?.();
+              return;
+            }
             if (canSend) {
               void Haptics.selectionAsync().catch(() => {});
               onSend(text.trim());

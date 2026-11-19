@@ -236,6 +236,7 @@ export const Bubble = memo(function Bubble({
           {message.e2ee === 'opening' ? <View accessibilityLabel="Opening message" className="my-1 h-3 w-32 rounded-full bg-ink/10" /> : null}
           <View className={cn('mt-0.5 flex-row items-center justify-end gap-1 self-end', photo && url && 'px-2 pb-1')}>
             {message.pinned_at ? <Pin size={11} color={c.inkMuted} /> : null}
+            {message.edited_at && !deleted ? <Text className="text-[12px] leading-[15px] text-ink-muted">edited ·</Text> : null}
             <Text className="text-[12px] leading-[15px] text-ink-muted">{formatClock(message.created_at)}</Text>
             {mine && <Ticks status={message.status} pending={message.pending} failed={message.failed} />}
           </View>

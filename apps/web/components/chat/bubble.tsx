@@ -1,5 +1,5 @@
 import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, isOurStickerPath, linkParts, linkPreviewOf, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
-import { Ban, Copy, Download, MoreHorizontal, Pin, PinOff, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
+import { Ban, Copy, Download, MoreHorizontal, Pencil, Pin, PinOff, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Ticks } from '@/components/ui/ticks';
 import { cn } from '@/lib/cn';
@@ -47,6 +47,8 @@ interface BubbleProps {
   /** Photos, videos, GIFs and stickers: save as a file. */
   onDownload?: () => void;
   onDelete?: () => void;
+  /** Mine and still editable: change its text. */
+  onEdit?: () => void;
   onJumpTo?: (id: string) => void;
 }
 
@@ -71,6 +73,7 @@ export function Bubble({
   onOpenPhoto,
   onDownload,
   onDelete,
+  onEdit,
   onJumpTo,
 }: BubbleProps) {
   const reactions = groupReactions(message.reactions, myId);
@@ -185,6 +188,11 @@ export function Bubble({
               {onKeepSticker && message.media_kind === 'sticker' && isOurStickerPath(message.media_path) ? (
                 <ToolButton label="Save sticker" onClick={onKeepSticker}>
                   <Sticker className="h-4 w-4" />
+                </ToolButton>
+              ) : null}
+              {onEdit ? (
+                <ToolButton label="Edit" onClick={onEdit}>
+                  <Pencil className="h-4 w-4" />
                 </ToolButton>
               ) : null}
               {hasText ? (
@@ -361,7 +369,7 @@ export function Bubble({
           {/* The key is still on its way (a moment at most): a quiet bar, not a lock. */}
           {message.e2ee === 'opening' ? <span aria-label="Opening message" className="my-1 inline-block h-3 w-32 rounded-full bg-ink/10 align-middle" /> : null}
           {/* Meta floats bottom-right; the spacer reserves room on the last line. */}
-          <span aria-hidden className={cn('inline-block', message.pinned_at ? 'w-[5.25rem]' : 'w-[4.25rem]')} />
+          <span aria-hidden className={cn('inline-block', message.pinned_at ? 'w-[5.25rem]' : 'w-[4.25rem]', message.edited_at && 'pr-11')} />
           <span
             className={cn(
               'absolute bottom-1.5 right-3 flex items-center gap-1 text-[12px] leading-none text-ink-muted',
@@ -369,6 +377,7 @@ export function Bubble({
             )}
           >
             {message.pinned_at ? <Pin className="h-3 w-3" aria-label="Pinned" /> : null}
+            {message.edited_at && !deleted ? <span>edited ·</span> : null}
             <time dateTime={message.created_at} suppressHydrationWarning>
               {formatClock(message.created_at)}
             </time>

@@ -1046,6 +1046,25 @@ await test('legacy messages: encrypted once, in our thread, with the same reacti
   assert.equal(again.ciphertext, 'Y3Q=', 'only once');
 });
 
+await test('editing: my own encrypted text, within a day, under one of our keys', async () => {
+  const m = await as(alice, () => one(`insert into public.messages (couple_id, sender_id, ciphertext, key_version) values ($1, $2, 'b2xk', 1) returning id`, [couple.id, alice]));
+  const edit = (who, id, ct = 'bmV3', v = 1) => as(who, () => one(`select (public.edit_message($1, $2, $3::smallint)).*`, [id, ct, v]));
+  await rejects(edit(bob, m.id), /not_yours/, 'partner');
+  await rejects(edit(carol, m.id), /message_not_found/, 'outsider');
+  await rejects(edit(alice, m.id, 'bmV3', 9), /key_not_found/, 'unknown key');
+  const done = await edit(alice, m.id);
+  assert.equal(done.ciphertext, 'bmV3');
+  assert.ok(done.edited_at, 'edit time');
+  const plain = await as(alice, () => one(`insert into public.messages (couple_id, sender_id, body) values ($1, $2, 'plain') returning id`, [couple.id, alice]));
+  await rejects(edit(alice, plain.id), /not_editable/, 'not encrypted');
+  await as(alice, () => q(`select public.delete_message($1, true)`, [m.id]));
+  await rejects(edit(alice, m.id), /not_editable/, 'deleted');
+  const old = await as(alice, () => one(`insert into public.messages (couple_id, sender_id, ciphertext, key_version) values ($1, $2, 'b2xk', 1) returning id`, [couple.id, alice]));
+  await q(`update public.messages set created_at = now() - interval '25 hours' where id = $1`, [old.id]);
+  await rejects(edit(alice, old.id), /edit_too_late/, 'a day later');
+  await rejects(as(alice, () => q(`update public.messages set edited_at = now() where id = $1`, [old.id])), /permission denied/, 'no direct update');
+});
+
 await test('revoking a chat device: mine only, and its sealed key goes', async () => {
   await rejects(as(alice, () => q(`select public.revoke_chat_device($1)`, [bobDevice])), /device_not_found/, 'partner’s device');
   await as(bob, () => q(`select public.revoke_chat_device($1)`, [bobDevice]));

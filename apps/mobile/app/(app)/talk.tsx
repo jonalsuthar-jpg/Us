@@ -1,10 +1,10 @@
-import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, stickerPath, uuid, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
+import { canEdit, clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, stickerPath, uuid, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
 import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleLive, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from '@/lib/image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { ArrowLeft, ChevronsDown, Copy, Download, Phone, Pin, PinOff, Plus, Reply, Search, Sticker, Trash2, Video } from 'lucide-react-native';
+import { ArrowLeft, ChevronsDown, Copy, Download, Pencil, Phone, Pin, PinOff, Plus, Reply, Search, Sticker, Trash2, Video } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, AppState, FlatList, Modal, Platform, Pressable, TextInput, View, type ListRenderItem } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -100,11 +100,12 @@ function Thread() {
   useEffect(() => {
     if (viewing) clearMessageNotifications();
   }, [viewing]);
-  const { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, react, pin, remove } = useMessages({ viewing });
+  const { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, react, pin, remove, edit } = useMessages({ viewing });
   const media = useChatMedia(messages);
   const { cipher, sealer } = useChatKey();
   const [acting, setActing] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [video, setVideo] = useState<string | null>(null);
   /** The chat message open in the photo / video viewer (not a profile photo). */
@@ -552,6 +553,13 @@ function Thread() {
           }}
           replyTo={replyTo ? { id: replyTo.id, author: authorOf(replyTo), text: messagePreview(replyTo) } : null}
           onCancelReply={() => setReplyTo(null)}
+          editing={editing ? { id: editing.id, text: editing.body ?? '' } : null}
+          onCancelEdit={() => setEditing(null)}
+          onSaveEdit={(t) => {
+            const id = editing?.id;
+            setEditing(null);
+            if (id) void edit(id, t).catch(fail);
+          }}
           onSend={(t) => {
             onComposerSent();
             writeCache(draftKey, '');
@@ -588,6 +596,10 @@ function Thread() {
         onClose={() => setActing(null)}
         onReact={(m, emoji) => void react(m.id, emoji).catch(fail)}
         onReply={(m) => setReplyTo(m)}
+        onEdit={(m) => {
+          setReplyTo(null);
+          setEditing(m);
+        }}
         onPin={(m, p) => void pin(m.id, p).catch(fail)}
         onKeepSticker={
           stickersOn
@@ -676,6 +688,7 @@ function MessageActions({
   onClose,
   onReact,
   onReply,
+  onEdit,
   onPin,
   onKeepSticker,
   onSave,
@@ -686,6 +699,7 @@ function MessageActions({
   onClose: () => void;
   onReact: (m: Message, emoji: string | null) => void;
   onReply: (m: Message) => void;
+  onEdit: (m: Message) => void;
   onPin: (m: Message, pinned: boolean) => void;
   /** Keep a sticker we made (one sent in chat) in Our stickers. */
   onKeepSticker?: (m: Message) => void;
@@ -734,6 +748,7 @@ function MessageActions({
                 </View>
               ) : null}
               <ActionRow label="Reply" onPress={act(onReply)} icon={<Reply size={20} color={c.ink} />} />
+              {message && canEdit(message, myId) ? <ActionRow label="Edit" onPress={act(onEdit)} icon={<Pencil size={20} color={c.ink} />} /> : null}
               <ActionRow
                 label={message?.pinned_at ? 'Unpin' : 'Pin for both of you'}
                 onPress={act((m) => onPin(m, !m.pinned_at))}

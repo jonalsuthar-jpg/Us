@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ackMessages,
+  canEdit,
   deleteMessage,
   draftMessage,
   dropDeleted,
@@ -12,6 +13,8 @@ import {
   PAGE_SIZE,
   pinMessage,
   reactToMessage,
+  saveEdit,
+  sealEdit,
   sendMessage,
   type DraftExtras,
 } from '../api/messages';
@@ -272,6 +275,30 @@ export function useMessages({ viewing }: Options) {
     [sb, me.id, channel, patch, upsert],
   );
 
+  /**
+   * New text for one of my messages. Sealed here first, so the thread shows
+   * it at once (the row's new ciphertext opens to it); put back on failure.
+   */
+  const edit = useCallback(
+    async (id: string, text: string) => {
+      const before = messagesRef.current.find((m) => m.id === id);
+      const seal = await sealer();
+      if (!before || !seal) throw new Error('This message can’t be edited.');
+      const shown = openMessage(before, seal);
+      if (!canEdit(shown, me.id)) throw new Error('This message can’t be edited any more.');
+      const { ciphertext, edited } = await sealEdit(sb, shown, text, seal);
+      patch(id, () => ({ ciphertext, key_version: seal.version, edited_at: edited }));
+      try {
+        upsert(await saveEdit(sb, id, ciphertext, seal));
+        if (before.pinned_at) channel.sendChanged('chat:pins');
+      } catch (e) {
+        setMessages((prev) => prev.map((m) => (m.id === id ? before : m)));
+        throw e;
+      }
+    },
+    [sb, me.id, channel, patch, upsert, sealer],
+  );
+
   const pin = useCallback(
     async (id: string, pinned: boolean) => {
       const saved = await pinMessage(sb, id, pinned);
@@ -295,5 +322,5 @@ export function useMessages({ viewing }: Options) {
     [rows, opened, cipher, opening, me.id],
   );
 
-  return { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, markRead, react, pin, remove };
+  return { messages, loading, hasOlder, loadingOlder, olderFailed, loadOlder, send, retry, markRead, react, pin, remove, edit };
 }

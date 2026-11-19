@@ -15,6 +15,10 @@ interface ComposerProps {
   onChange: (text: string) => void;
   replyTo?: ReplyQuote | null;
   onCancelReply?: () => void;
+  /** Editing one of my messages: the box holds its text and sending saves it. */
+  editing?: { id: string; text: string } | null;
+  onSaveEdit?: (text: string) => void;
+  onCancelEdit?: () => void;
   onPhoto?: (file: File, caption: string) => void;
   onVoice?: (blob: Blob, durationMs: number) => void;
   /** Open the GIF and sticker picker. */
@@ -33,7 +37,7 @@ function pickAudioType(): string | undefined {
 }
 
 /** Auto-growing textarea. Enter sends; Shift+Enter is a new line. Photos and voice notes too. */
-export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply, onPhoto, onVoice, onGif, onDoodle, onSticker, onPasteMedia }: ComposerProps) {
+export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply, editing, onSaveEdit, onCancelEdit, onPhoto, onVoice, onGif, onDoodle, onSticker, onPasteMedia }: ComposerProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -58,6 +62,14 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
     if (replyTo) ref.current?.focus();
   }, [replyTo]);
 
+  // Start an edit with the message's text; leaving it empties the box again.
+  const editingId = editing?.id;
+  useEffect(() => {
+    setText(editing?.text ?? '');
+    if (editing) requestAnimationFrame(() => ref.current?.focus());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId]);
+
   useEffect(() => {
     if (!recording) return;
     const t = setInterval(() => {
@@ -74,6 +86,11 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
   function send() {
     const t = text.trim();
     if (!t) return;
+    if (editing) {
+      if (t !== editing.text.trim()) onSaveEdit?.(t);
+      else onCancelEdit?.();
+      return;
+    }
     onSend(t);
     setText('');
     ref.current?.focus();
@@ -84,7 +101,8 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
       e.preventDefault();
       send();
     }
-    if (e.key === 'Escape' && replyTo) onCancelReply?.();
+    if (e.key === 'Escape' && editing) onCancelEdit?.();
+    else if (e.key === 'Escape' && replyTo) onCancelReply?.();
   }
 
   async function startRecording() {
@@ -119,11 +137,22 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
     setRecording(false);
   }
 
-  const canRecord = !!onVoice && !text.trim();
+  const canRecord = !!onVoice && !text.trim() && !editing;
 
   return (
     <div className="space-y-2">
-      {replyTo ? (
+      {editing ? (
+        <div className="flex items-center gap-3 rounded-[18px] border border-paper-edge bg-paper-sunken px-4 py-2">
+          <div className="min-w-0 flex-1 border-l-[3px] border-gold-500 pl-2.5">
+            <p className="text-micro font-medium text-ink">Editing your message</p>
+            <p className="truncate text-small text-ink-soft">{editing.text}</p>
+          </div>
+          <button type="button" aria-label="Cancel edit" onClick={onCancelEdit} className="rounded-full p-1.5 text-ink-muted hover:bg-paper-raised hover:text-ink">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
+      {replyTo && !editing ? (
         <div className="flex items-center gap-3 rounded-[18px] border border-paper-edge bg-paper-sunken px-4 py-2">
           <div className="min-w-0 flex-1 border-l-[3px] border-rose-400 pl-2.5">
             <p className="text-micro font-medium text-ink">Replying to {replyTo.author}</p>
@@ -258,7 +287,7 @@ export function Composer({ partnerName, onSend, onChange, replyTo, onCancelReply
           ) : (
             <button
               type="submit"
-              aria-label="Send"
+              aria-label={editing ? 'Save edit' : 'Send'}
               disabled={!text.trim()}
               className={cn(
                 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-600 text-white transition-[opacity,transform] duration-quick',

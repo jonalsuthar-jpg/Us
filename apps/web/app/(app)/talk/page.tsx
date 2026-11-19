@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  canEdit,
   clusters,
   formatDay,
   groupByDay,
@@ -98,11 +99,13 @@ function Thread() {
     react,
     pin,
     remove,
+    edit,
   } = useMessages({ viewing: active });
   const media = useChatMedia(messages);
   const { cipher } = useChatKey();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   /** The chat message open in the lightbox (not a profile photo). */
   const [viewed, setViewed] = useState<Message | null>(null);
@@ -450,6 +453,15 @@ function Thread() {
                   setActiveId(null);
                   setDeleting(m);
                 }}
+                onEdit={
+                  canEdit(m, me.id)
+                    ? () => {
+                        setActiveId(null);
+                        setReplyTo(null);
+                        setEditing(m);
+                      }
+                    : undefined
+                }
                 onJumpTo={(id) => void h.current.jumpTo(id)}
               />
             ),
@@ -686,6 +698,13 @@ function Thread() {
                 : null
             }
             onCancelReply={() => setReplyTo(null)}
+            editing={editing ? { id: editing.id, text: editing.body ?? "" } : null}
+            onCancelEdit={() => setEditing(null)}
+            onSaveEdit={(t) => {
+              const id = editing?.id;
+              setEditing(null);
+              if (id) void edit(id, t).catch(fail);
+            }}
             onSend={(t) => {
               onComposerSent();
               sendWithReply(t);
