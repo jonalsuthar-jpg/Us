@@ -192,6 +192,55 @@ await step('push function rejects spoofed sender', async () => {
   return error ? 'forbidden' : 'skipped (OneSignal not configured, check runs after config)';
 });
 
+await step('link-preview: a public page gets a card, private addresses are refused', async () => {
+  const { data, error } = await alice.sb.functions.invoke('link-preview', { body: { url: 'https://example.com/' } });
+  if (error) throw error;
+  if (!data?.title) throw new Error(`no card: ${JSON.stringify(data)}`);
+  for (const url of ['https://127.0.0.1/', 'https://169.254.169.254/latest/meta-data/', 'http://example.com/', 'https://localhost/']) {
+    const { data: d } = await alice.sb.functions.invoke('link-preview', { body: { url } });
+    if (d?.title) throw new Error(`fetched ${url}`);
+  }
+  const { error: outsider } = await carol.sb.functions.invoke('link-preview', { body: { url: 'https://example.com/' } });
+  if (!outsider) throw new Error('an outsider got a preview');
+  return `“${data.title}” from ${data.host}; private and plain-http refused`;
+});
+
+await step('edit: only the sender, only encrypted text', async () => {
+  const { data: key } = await alice.sb.from('chat_keys').select('key_version').eq('couple_id', coupleId).limit(1).maybeSingle();
+  if (!key) return 'skipped: this test couple has no chat key yet';
+  const { data: m, error } = await alice.sb
+    .from('messages')
+    .insert({ couple_id: coupleId, sender_id: alice.id, ciphertext: 'ZTJlLW9sZA==', key_version: key.key_version })
+    .select('id')
+    .single();
+  if (error) throw error;
+  const { error: theirs } = await bob.sb.rpc('edit_message', { p_id: m.id, p_ciphertext: 'ZTJlLW5ldw==', p_key_version: key.key_version });
+  if (!theirs) throw new Error('bob edited alice’s message');
+  const { data: done, error: mine } = await alice.sb.rpc('edit_message', { p_id: m.id, p_ciphertext: 'ZTJlLW5ldw==', p_key_version: key.key_version });
+  if (mine) throw mine;
+  if (!done.edited_at) throw new Error('no edit time');
+  await alice.sb.rpc('delete_message', { p_id: m.id, p_for_everyone: true });
+  return 'partner refused, sender saved';
+});
+
+await step('notification settings: a muted group is skipped', async () => {
+  const { error: e1 } = await bob.sb.from('notification_prefs').upsert({ user_id: bob.id, off: ['messages'] });
+  if (e1) throw e1;
+  try {
+    const { data: m, error } = await alice.sb.from('messages').insert({ couple_id: coupleId, sender_id: alice.id, body: 'e2e muted' }).select('id').single();
+    if (error) throw error;
+    const { data, error: e2 } = await alice.sb.functions.invoke('push', { body: { category: 'new_message', messageId: m.id } });
+    if (e2) throw e2;
+    if (data?.skipped !== 'turned_off') throw new Error(`expected turned_off, got ${JSON.stringify(data)}`);
+    const { data: seen } = await alice.sb.from('notification_prefs').select('*').eq('user_id', bob.id);
+    if (seen?.length) throw new Error('alice can read bob’s settings');
+    await alice.sb.rpc('delete_message', { p_id: m.id, p_for_everyone: true });
+    return 'skipped: turned_off; settings private to bob';
+  } finally {
+    await bob.sb.from('notification_prefs').delete().eq('user_id', bob.id);
+  }
+});
+
 // ---------------------------------------------------------------- Phase 4–6
 // Rows created here are tagged "e2e" and removed at the end.
 const cleanup = [];
