@@ -8,11 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { getSupabase } from '@/lib/supabase/client';
+import { safeNext } from '@/lib/safe-next';
 
 export function SignInForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get('next') || '/home';
+  const next = safeNext(params.get('next'));
   const [mode, setMode] = useState<'password' | 'magic' | 'reset'>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

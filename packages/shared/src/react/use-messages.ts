@@ -129,6 +129,14 @@ export function useMessages({ viewing }: Options) {
     for (const m of messagesRef.current.filter((x) => x.failed)) await retry(m.id);
   }, [sb, couple.id, retry]);
 
+  // Held back while this device waited for the chat key: send them now it has it.
+  useEffect(() => {
+    if (keyStatus !== 'ready') return;
+    void (async () => {
+      for (const m of messagesRef.current.filter((x) => x.failed)) await retry(m.id);
+    })();
+  }, [keyStatus, retry]);
+
   useEffect(() => {
     void loadLatest().catch(() => setLoading(false));
     const offStatus = channel.status.on((s) => {

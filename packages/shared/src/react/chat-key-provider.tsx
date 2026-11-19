@@ -31,6 +31,9 @@ import { cacheKey, readCache, writeCache } from './data-cache';
  */
 export type ChatKeyStatus = 'loading' | 'ready' | 'waiting' | 'unavailable';
 
+/** Thrown by `sealer` instead of sending something unencrypted. */
+export const CHAT_KEY_MISSING = 'chat_key_missing';
+
 export interface PendingDevice {
   device: ChatDevice;
   /** Shown on the new device too; the same code means it's really that one. */
@@ -71,6 +74,7 @@ export interface ChatKeyValue {
   /**
    * The cipher to encrypt with right now, or null to send as before (my
    * partner has no app that reads encrypted chat yet). Waits for the first check.
+   * Throws CHAT_KEY_MISSING when we should encrypt but this device has no key yet.
    */
   sealer: () => Promise<ChatCipher | null>;
   /** Messages from before encryption are being encrypted in the background. */
@@ -217,7 +221,10 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
     if (!partnerSeenRef.current && Date.now() - lastLoad.current > 30_000) await load();
     // The key state set by that load lands on the next render.
     await new Promise((r) => setTimeout(r, 0));
-    return partnerSeenRef.current ? cipherRef.current : null;
+    if (!partnerSeenRef.current) return null;
+    // My partner reads encrypted chat but this device has no key yet: never fall back to plaintext.
+    if (!cipherRef.current) throw new Error(CHAT_KEY_MISSING);
+    return cipherRef.current;
   }, [settled, load]);
 
   // Once both of us can read encrypted chat, everything from before gets encrypted too.

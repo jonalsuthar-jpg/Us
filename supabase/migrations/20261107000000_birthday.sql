@@ -278,11 +278,12 @@ cross join lateral (
 where ju.email = 'jonalsuthar@gmail.com'
   and not exists (select 1 from public.birthday_rooms);
 
--- No couple found means a typo above, not "no birthday": stop here rather than ship an empty room.
+-- No couple found: a typo above, or a fresh database (local, CI, a new
+-- project) where they don't exist. Say so, but let the rest of the schema apply.
 do $$
 begin
   if not exists (select 1 from public.birthday_rooms) then
-    raise exception 'birthday room not seeded: Jonal and Parul aren''t a couple here';
+    raise notice 'birthday room not seeded: Jonal and Parul aren''t a couple here';
   end if;
 end;
 $$;

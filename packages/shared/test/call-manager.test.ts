@@ -599,6 +599,24 @@ describe('CallManager', () => {
     expect(w.statusLog).toContainEqual(['call-1', 'declined']);
   });
 
+  it('hanging up while the permission prompt is open releases the camera and logs no call', async () => {
+    const w = makeWorld();
+    let grant!: () => void;
+    const stream = new FakeStream([new FakeTrack('audio'), new FakeTrack('video')]);
+    const alice = w.manager('alice', 'bob', {
+      rtc: { getUserMedia: () => new Promise((r) => (grant = () => r(stream))) } as unknown as Partial<RtcAdapter>,
+    });
+    const starting = alice.startCall('video');
+    await vi.waitFor(() => expect(grant).toBeDefined());
+    await alice.hangup();
+    grant();
+    await starting;
+    expect(stream.getTracks().every((t) => t.stopped)).toBe(true);
+    expect(w.calls.size).toBe(0);
+    expect(w.pushes).toEqual([]);
+    expect(alice.getState().localStream).toBeNull();
+  });
+
   it('an unanswered call times out as missed and replaces the push', async () => {
     const w = makeWorld();
     const alice = w.manager('alice', 'bob', { ringTimeoutMs: 20 });

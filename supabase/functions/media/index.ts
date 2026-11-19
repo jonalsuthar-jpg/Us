@@ -87,11 +87,26 @@ Deno.serve(async (req) => {
     if (body.action === 'download') {
       const seconds = Math.min(DOWNLOAD_S, Math.max(60, Number(body.expiresIn) || DOWNLOAD_S));
       const urls: Record<string, string> = {};
-      for (const p of await allowed(caller, bucket, paths, false)) {
-        // Snaps vanish when they expire, so their links don't outlive them.
-        urls[p] = bucket === 'snaps' ? await presign('GET', key(bucket, p), seconds) : await stableDownload(key(bucket, p), seconds);
+      const ok = await allowed(caller, bucket, paths, false);
+      // Snaps vanish when they expire, so their links don't outlive them.
+      const snapLeft = new Map<string, number>();
+      if (bucket === 'snaps' && ok.length) {
+        const { data } = await caller.asUser.from('snaps').select('photo_path, expires_at').in('photo_path', ok);
+        for (const s of data ?? []) snapLeft.set(s.photo_path, Math.floor((Date.parse(s.expires_at) - Date.now()) / 1000));
       }
-      return json({ urls, expiresIn: seconds });
+      let shortest = seconds;
+      for (const p of ok) {
+        if (bucket === 'snaps') {
+          const left = Math.min(seconds, snapLeft.get(p) ?? 0);
+          if (left < 1) continue;
+          shortest = Math.min(shortest, left);
+          urls[p] = await presign('GET', key(bucket, p), left);
+        } else {
+          urls[p] = await stableDownload(key(bucket, p), seconds);
+        }
+      }
+      // Clients cache links for expiresIn, so report the soonest one to lapse.
+      return json({ urls, expiresIn: shortest });
     }
 
     if (body.action === 'remove') {

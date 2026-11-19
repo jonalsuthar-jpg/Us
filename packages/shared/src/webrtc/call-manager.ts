@@ -266,6 +266,8 @@ export class CallManager {
   /** "HD always", kept from call to call. */
   private hdAlways = false;
   private lingerTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Bumped by every end(), so work that was waiting (e.g. a permission prompt) knows its call is gone. */
+  private session = 0;
 
   constructor(private opts: CallManagerOptions) {
     this.unsubscribe = this.listen();
@@ -314,6 +316,7 @@ export class CallManager {
     this.unsubscribe();
     if (this.isBusy()) void this.hangup();
     this.teardown();
+    clearTimeout(this.lingerTimer);
     this.listeners.clear();
   }
 
@@ -326,7 +329,8 @@ export class CallManager {
     this.prefetchIce();
 
     try {
-      await this.acquireLocalMedia(media);
+      // Hung up while the permission prompt was open: nothing to create.
+      if (!(await this.acquireLocalMedia(media))) return;
     } catch (e) {
       this.end('media-denied', mediaErrorCopy(e));
       return;
@@ -396,7 +400,7 @@ export class CallManager {
     this.set({ phase: 'connecting' });
 
     try {
-      await this.acquireLocalMedia(call.media);
+      if (!(await this.acquireLocalMedia(call.media))) return;
     } catch (e) {
       await this.opts.backend.setStatus(call.id, 'declined').catch(() => {});
       await this.send({ type: 'decline', callId: call.id });
@@ -899,19 +903,26 @@ export class CallManager {
     this.iceServers ??= this.opts.backend.iceServers().catch(() => []);
   }
 
-  private async acquireLocalMedia(media: CallMedia) {
-    if (this.state.localStream) return;
+  /** False when the call ended while we waited; the stream is then released. */
+  private async acquireLocalMedia(media: CallMedia): Promise<boolean> {
+    if (this.state.localStream) return true;
+    const session = this.session;
     if (media === 'video') await this.pickTier();
     const stream = await this.opts.rtc.getUserMedia({
       audio: AUDIO_CONSTRAINTS,
       video: media === 'video' ? { ...cameraConstraints(this.state.videoTier), facingMode: 'user' } : false,
     });
+    if (session !== this.session) {
+      stream.getTracks().forEach((t) => t.stop());
+      return false;
+    }
     this.cameraTrack = stream.getVideoTracks()[0] ?? null;
     const mic = stream.getAudioTracks()[0];
     this.watchMic(mic);
     this.set({ localStream: stream });
     this.setLocal({ mic: true, camera: Boolean(this.cameraTrack), screen: false }, false);
     void this.refreshCameraOptions();
+    return true;
   }
 
   private async createPeer() {
@@ -1012,7 +1023,7 @@ export class CallManager {
     ] as const) {
       if (!tx) continue;
       tx.direction = 'sendrecv';
-      void tx.sender.replaceTrack(track);
+      tx.sender.replaceTrack(track).catch((e) => this.log('replaceTrack failed', e));
       tx.sender.setStreams?.(stream);
     }
   }
@@ -1055,7 +1066,7 @@ export class CallManager {
     }
     this.iceRestarts += 1;
     // Fixed roles: only the caller re-offers. The callee just waits for it.
-    if (this.state.direction === 'outgoing') void this.makeOffer(true);
+    if (this.state.direction === 'outgoing') this.makeOffer(true).catch((e) => this.log('ice restart offer failed', e));
     this.reconnectTimer = setTimeout(() => {
       if (this.state.phase === 'reconnecting') this.restartIce();
     }, 10_000);
@@ -1139,7 +1150,9 @@ export class CallManager {
   }
 
   private end(reason: EndReason, error: string | null = null) {
+    this.session += 1;
     this.teardown();
+    clearTimeout(this.lingerTimer);
     this.set({ phase: 'ended', endReason: reason, error, localStream: null, remoteStream: null });
     this.lingerTimer = setTimeout(() => {
       if (this.state.phase === 'ended') this.set({ ...INITIAL });

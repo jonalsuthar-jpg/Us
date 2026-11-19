@@ -1,13 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getServerSupabase } from '@/lib/supabase/server';
+import { safeNext } from '@/lib/safe-next';
 
 /** Email confirmation + magic-link landing: swap the code for a session. */
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const code = url.searchParams.get('code');
-  const nextParam = url.searchParams.get('next') ?? '/home';
-  // Only allow same-site relative redirects.
-  const next = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/home';
+  const next = safeNext(url.searchParams.get('next'));
 
   if (code) {
     const supabase = await getServerSupabase();

@@ -122,11 +122,13 @@ Deno.serve(async (req) => {
   const name = me?.display_name ?? 'Your partner';
   // The photo sits in our private bucket, so the phone gets a signed link it
   // can fetch for the notification (a week covers a push delivered late).
-  const avatar = me?.avatar_url
-    ? /^https?:/.test(me.avatar_url)
-      ? me.avatar_url
-      : await presign('GET', `memories/${me.avatar_url}`, 7 * 24 * 3600).catch(() => null)
-    : null;
+  // avatar_url is mine to edit, so only sign a path inside our own folder.
+  const avatarPath = me?.avatar_url ?? '';
+  const avatar = /^https:/.test(avatarPath)
+    ? avatarPath
+    : avatarPath.startsWith(`${coupleId}/`) && !avatarPath.includes('..')
+      ? await presign('GET', `memories/${avatarPath}`, 7 * 24 * 3600).catch(() => null)
+      : null;
 
   let category: Category;
   let heading = name;

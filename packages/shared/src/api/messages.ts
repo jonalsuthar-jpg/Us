@@ -11,7 +11,11 @@ const SELECT = '*, call:calls(*)';
 
 export const PAGE_SIZE = 50;
 
-/** Newest-first page of the thread; pass the oldest loaded created_at to page back. */
+/**
+ * Newest-first page of the thread; pass the oldest loaded created_at to page back.
+ * Inclusive, so rows sharing that timestamp (a call and its log line) aren't
+ * skipped; the boundary row comes back again and merges by id.
+ */
 export async function fetchMessages(sb: UsClient, coupleId: string, before?: string): Promise<Message[]> {
   let q = sb
     .from('messages')
@@ -19,7 +23,7 @@ export async function fetchMessages(sb: UsClient, coupleId: string, before?: str
     .eq('couple_id', coupleId)
     .order('created_at', { ascending: false })
     .limit(PAGE_SIZE);
-  if (before) q = q.lt('created_at', before);
+  if (before) q = q.lte('created_at', before);
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as Message[];
@@ -329,21 +333,25 @@ export async function searchMessages(
   const q = query.trim().toLocaleLowerCase();
   if (q.length < 2) return [];
   const found: Message[] = [];
+  const seen = new Set<string>();
   let before: string | undefined;
   for (;;) {
     let page = sb.from('messages').select(SELECT).eq('couple_id', coupleId).eq('kind', 'text').order('created_at', { ascending: false }).limit(SEARCH_PAGE);
-    if (before) page = page.lt('created_at', before);
+    // Inclusive (see fetchMessages); `seen` drops the boundary rows read twice.
+    if (before) page = page.lte('created_at', before);
     const { data, error } = await page;
     if (error) throw error;
     if (opts.signal?.aborted) return found;
-    const rows = (data ?? []) as Message[];
+    const all = (data ?? []) as Message[];
+    const rows = all.filter((m) => !seen.has(m.id));
+    for (const m of rows) seen.add(m.id);
     for (const m of openMessages(rows, cipher)) {
       if (found.length < SEARCH_LIMIT && m.body?.toLocaleLowerCase().includes(q)) found.push(m);
     }
-    const done = rows.length < SEARCH_PAGE || found.length >= SEARCH_LIMIT;
+    const done = all.length < SEARCH_PAGE || !rows.length || found.length >= SEARCH_LIMIT;
     opts.onProgress?.([...found], done);
     if (done) return found;
-    before = rows[rows.length - 1]!.created_at;
+    before = all[all.length - 1]!.created_at;
   }
 }
 

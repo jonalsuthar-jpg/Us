@@ -1,7 +1,7 @@
 'use client';
 
 import { clearMediaVault, getCoupleContext, getMyAccess, preloadChatKey, type CoupleContext, type MyAccess } from '@us/shared';
-import { AccessProvider, CallProvider, CoupleProvider } from '@us/shared/react';
+import { AccessProvider, CallProvider, clearDataCache, CoupleProvider } from '@us/shared/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ChatKeyApproval } from '@/components/chat/chat-key';
@@ -41,8 +41,9 @@ export function SessionGate({ children }: { children: ReactNode }) {
     });
     const { data: sub } = sb.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
-        void clearMediaVault();
-        router.replace('/sign-in');
+        clearDataCache();
+        // A full load, so nothing of the last person (messages, drafts, links) stays in memory.
+        void clearMediaVault().finally(() => window.location.replace('/sign-in'));
       }
     });
     return () => {

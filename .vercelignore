@@ -23,3 +23,6 @@ supabase/functions/.env
 apps/mobile/ios
 apps/mobile/android
 apps/mobile/.expo
+
+# Local DB dumps and old project keys: never upload
+backups

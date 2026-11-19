@@ -26,7 +26,12 @@ export default {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
 
     const url = new URL(req.url);
-    const path = url.pathname.slice(1).split('/').map(decodeURIComponent).join('/');
+    let path: string;
+    try {
+      path = url.pathname.slice(1).split('/').map(decodeURIComponent).join('/');
+    } catch {
+      return text('bad path', 400, cors);
+    }
     const exp = Number(url.searchParams.get('exp'));
     const sig = url.searchParams.get('sig') ?? '';
     if (!path || !Number.isFinite(exp) || exp * 1000 < Date.now()) return text('expired', 403, cors);
@@ -46,6 +51,7 @@ export default {
       if (!obj) return text('not found', 404, cors);
       const headers = new Headers(cors);
       obj.writeHttpMetadata(headers);
+      headers.set('x-content-type-options', 'nosniff');
       headers.set('etag', obj.httpEtag);
       // Paths are never reused, so a file can be kept for good.
       headers.set('cache-control', 'private, max-age=31536000, immutable');
@@ -53,9 +59,12 @@ export default {
     }
 
     if (req.method === 'PUT') {
-      const size = Number(req.headers.get('content-length') ?? 0);
-      if (size > MAX_PUT_BYTES) return text('too large', 413, cors);
-      await env.BUCKET.put(path, req.body, { httpMetadata: { contentType: req.headers.get('content-type') ?? 'application/octet-stream' } });
+      // R2 needs the length up front anyway, so a chunked upload can't slip past the limit.
+      const length = req.headers.get('content-length');
+      if (length === null) return text('length required', 411, cors);
+      const size = Number(length);
+      if (!Number.isFinite(size) || size > MAX_PUT_BYTES) return text('too large', 413, cors);
+      await env.BUCKET.put(path, req.body, { httpMetadata: { contentType: mediaType(req.headers.get('content-type')) } });
       return new Response(null, { status: 200, headers: cors });
     }
 
@@ -96,4 +105,11 @@ async function verify(key: string, message: string, sig: string): Promise<boolea
   const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
   const bytes = sig.match(/^[0-9a-f]{64}$/) ? new Uint8Array(sig.match(/../g)!.map((h) => parseInt(h, 16))) : null;
   return !!bytes && crypto.subtle.verify('HMAC', k, bytes, new TextEncoder().encode(message));
+}
+
+/** Only media (and drawing JSON) is served as itself; anything else, say text/html, comes back as plain bytes. */
+function mediaType(type: string | null): string {
+  const t = (type ?? '').split(';')[0]!.trim().toLowerCase();
+  if (t === 'application/json') return t;
+  return /^(image|video|audio)\/[a-z0-9.+-]+$/.test(t) && t !== 'image/svg+xml' ? t : 'application/octet-stream';
 }
