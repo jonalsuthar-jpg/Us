@@ -133,6 +133,49 @@ export async function addCountdown(
   return unwrap(await sb.from('countdowns').insert(row).select('*').single());
 }
 
+/** First-run setup is offered to a couple this new (or straight after pairing). */
+export const SETUP_WINDOW_MS = 3 * 86_400_000;
+export const setupDoneKey = (userId: string) => `us:setup-done:${userId}`;
+
+export function offerFirstRun(pairedAt: string, now = Date.now()): boolean {
+  return now - Date.parse(pairedAt) < SETUP_WINDOW_MS;
+}
+
+export interface FirstRunAnswers {
+  /** YYYY-MM-DD, each optional. */
+  anniversary?: string;
+  myBirthday?: string;
+  theirBirthday?: string;
+}
+
+/** A typed date ("14/08/1995", "14-8-1995", "1995-08-14") as YYYY-MM-DD, or null. Day first. */
+export function parseTypedDate(s: string): string | null {
+  const t = s.trim();
+  let y: number, m: number, d: number;
+  const iso = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const dmy = t.match(/^(\d{1,2})[/.\- ](\d{1,2})[/.\- ](\d{4})$/);
+  if (iso) [y, m, d] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  else if (dmy) [d, m, y] = [Number(dmy[1]), Number(dmy[2]), Number(dmy[3])];
+  else return null;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d || y < 1900 || y > 2100) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/** The yearly countdowns the first-run answers make. */
+export function firstRunCountdowns(a: FirstRunAnswers, names: { me: string; partner: string }): { title: string; emoji: string; on_date: string }[] {
+  const ok = (d?: string): d is string => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const out: { title: string; emoji: string; on_date: string }[] = [];
+  if (ok(a.anniversary)) out.push({ title: 'Our anniversary', emoji: '💞', on_date: a.anniversary });
+  if (ok(a.myBirthday)) out.push({ title: `${names.me}’s birthday`, emoji: '🎂', on_date: a.myBirthday });
+  if (ok(a.theirBirthday)) out.push({ title: `${names.partner}’s birthday`, emoji: '🎂', on_date: a.theirBirthday });
+  return out;
+}
+
+export async function saveFirstRun(sb: UsClient, ids: { coupleId: string; meId: string }, rows: ReturnType<typeof firstRunCountdowns>): Promise<void> {
+  for (const r of rows) await addCountdown(sb, { couple_id: ids.coupleId, created_by: ids.meId, yearly: true, ...r });
+}
+
 export async function updateCountdown(sb: UsClient, id: string, patch: { title?: string; emoji?: string | null; on_date?: string; yearly?: boolean }) {
   unwrap(await sb.from('countdowns').update(patch).eq('id', id));
 }

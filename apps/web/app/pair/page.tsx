@@ -6,12 +6,16 @@ import {
   friendlyError,
   getCoupleContext,
   getMyAccess,
+  inviteCodeFrom,
+  inviteLink,
+  inviteMessage,
   redeemInvite,
   watchForPairing,
   type CoupleContext,
   type Invite,
 } from '@us/shared';
 import { AnimatePresence, motion } from 'framer-motion';
+import QRCode from 'qrcode';
 import { Check, Copy, Share2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -20,6 +24,7 @@ import { Button, Spinner } from '@/components/ui/button';
 import { inputStyles } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
+import { forgetInvite, pendingInvite, rememberInvite } from '@/lib/pending-invite';
 import { getSupabase } from '@/lib/supabase/client';
 
 type Step = 'loading' | 'choose' | 'invite' | 'join' | 'paired';
@@ -34,6 +39,13 @@ export default function PairPage() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [paired, setPaired] = useState<CoupleContext | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
+  // Came from an invite link: straight to "I have a code", filled in.
+  const [linked] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    rememberInvite(window.location.href);
+    return inviteCodeFrom(new URLSearchParams(window.location.search).get('code')) || pendingInvite();
+  });
 
   useEffect(() => {
     const sb = getSupabase();
@@ -44,9 +56,20 @@ export default function PairPage() {
       if (access && access.status !== 'approved') return router.replace('/waiting');
       const ctx = await getCoupleContext(sb, data.user.id).catch(() => null);
       if (ctx) router.replace('/home');
-      else setStep('choose');
+      else if (linked) {
+        setCode(linked);
+        setStep('join');
+      } else setStep('choose');
     });
-  }, [router]);
+  }, [router, linked]);
+
+  // The invite as a QR code, for my partner's phone camera.
+  useEffect(() => {
+    if (!invite) return;
+    void QRCode.toString(inviteLink(location.origin, invite.code), { type: 'svg', margin: 1, color: { dark: '#2A1F2D', light: '#FFFFFF' } })
+      .then((svg) => setQr(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`))
+      .catch(() => setQr(null));
+  }, [invite]);
 
   // While my invite is out, wait for my partner to redeem it.
   useEffect(() => {
@@ -55,9 +78,11 @@ export default function PairPage() {
   }, [step, userId]);
 
   function onPaired(ctx: CoupleContext) {
+    forgetInvite();
     setPaired(ctx);
     setStep('paired');
-    setTimeout(() => router.replace('/home'), 2200);
+    // Home opens the first-run setup for a couple this new.
+    setTimeout(() => router.replace('/home?welcome=1'), 2200);
   }
 
   async function startInvite() {
@@ -99,8 +124,8 @@ export default function PairPage() {
 
   async function share() {
     if (!invite) return;
-    const text = `Join me on Us — our code is ${invite.code}`;
-    if (navigator.share) await navigator.share({ title: 'Us', text, url: location.origin }).catch(() => {});
+    const url = inviteLink(location.origin, invite.code);
+    if (navigator.share) await navigator.share({ title: 'Us', text: inviteMessage(url, invite.code) }).catch(() => {});
     else await copy();
   }
 
@@ -187,6 +212,12 @@ export default function PairPage() {
                     </Button>
                   )}
                 </div>
+                {qr ? (
+                  <figure className="mt-6 flex flex-col items-center gap-2">
+                    <img src={qr} alt={`QR code that opens the invite with code ${invite.code}`} width={176} height={176} className="rounded-[12px] border border-paper-edge bg-white p-1" />
+                    <figcaption className="text-small text-ink-soft">Or they can point their phone camera here.</figcaption>
+                  </figure>
+                ) : null}
                 <p className="mt-6 text-micro text-ink-muted">
                   Works once · expires {new Date(invite.expires_at).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}
                 </p>
@@ -204,8 +235,15 @@ export default function PairPage() {
 
           {step === 'join' && (
             <motion.section key="join" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              <h1 className="font-display text-title text-ink">Enter their code.</h1>
-              <p className="mt-2 text-ink-soft">Eight letters and numbers — capitals don’t matter.</p>
+              <h1 className="font-display text-title text-ink">{linked ? 'Your invite is here.' : 'Enter their code.'}</h1>
+              <p className="mt-2 text-ink-soft">
+                {linked ? 'Check the code and pair. ' : 'Eight letters and numbers — capitals don’t matter. '}
+                {linked && /Android|iPhone|iPad/i.test(typeof navigator === 'undefined' ? '' : navigator.userAgent) ? (
+                  <a href={`us://pair?code=${encodeURIComponent(linked)}`} className="font-medium text-rose-700 underline underline-offset-2">
+                    Open in the Us app
+                  </a>
+                ) : null}
+              </p>
               <form onSubmit={join} className="mt-8 space-y-4">
                 <label htmlFor="code" className="sr-only">
                   Invite code

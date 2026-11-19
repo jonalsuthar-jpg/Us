@@ -126,3 +126,23 @@ describe('chat helpers', () => {
     expect(escapeLike('50% off_now')).toBe('50\\% off\\_now');
   });
 });
+
+describe('first-run setup', async () => {
+  const { firstRunCountdowns, offerFirstRun, parseTypedDate } = await import('../src/api/together');
+  it('reads typed dates day first, and refuses impossible ones', () => {
+    expect(parseTypedDate('14/08/1995')).toBe('1995-08-14');
+    expect(parseTypedDate('1-2-2020')).toBe('2020-02-01');
+    expect(parseTypedDate('2024-02-29')).toBe('2024-02-29');
+    expect(parseTypedDate('31/02/2020')).toBeNull();
+    expect(parseTypedDate('soon')).toBeNull();
+  });
+  it('makes a countdown for each date given, and is offered only to new couples', () => {
+    expect(firstRunCountdowns({ anniversary: '2024-05-01', theirBirthday: '1996-03-09', myBirthday: '' }, { me: 'Sam', partner: 'Alex' })).toEqual([
+      { title: 'Our anniversary', emoji: '💞', on_date: '2024-05-01' },
+      { title: 'Alex’s birthday', emoji: '🎂', on_date: '1996-03-09' },
+    ]);
+    const now = Date.parse('2026-11-20T12:00:00Z');
+    expect(offerFirstRun('2026-11-19T12:00:00Z', now)).toBe(true);
+    expect(offerFirstRun('2026-10-01T12:00:00Z', now)).toBe(false);
+  });
+});

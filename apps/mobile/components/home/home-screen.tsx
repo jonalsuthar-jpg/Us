@@ -16,6 +16,7 @@ import { useAccess, useCallManager, useCouple, useCoupleLive, useCoupleData, use
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from '@/lib/image-picker';
 import { readyPicked } from '@/lib/photo';
+import { FirstRunSetup } from './first-run';
 import { router, useFocusEffect } from 'expo-router';
 import { Camera, HeartPulse, MessageCircleHeart, Pencil, Phone, Settings, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -150,6 +151,7 @@ export function HomeScreen() {
         checkPlant();
       }}
     >
+      {d ? <FirstRunSetup hasPhoto={!!d.couple.photo_path} onPhoto={changePhoto} onSaved={() => void home.reload()} /> : null}
       <View className="flex-row items-center gap-2.5">
         <View className="flex-1">
           <Text className="text-small text-ink-muted">{greeting()},</Text>

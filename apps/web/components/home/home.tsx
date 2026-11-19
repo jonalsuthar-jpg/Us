@@ -33,6 +33,7 @@ import { Chip } from '@/components/ui/segmented';
 import { Sheet } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
 import { shrinkPhoto } from '@/lib/image';
+import { FirstRunSetup } from './first-run';
 import { ComingUp } from './countdowns';
 import { MemoryCard, NextUpCard, QuestionCard } from './home-cards';
 import { SafetyCard } from './safety';
@@ -111,6 +112,7 @@ export function Home() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-5 py-8 sm:px-10 sm:py-12">
+      {d ? <FirstRunSetup hasPhoto={!!d.couple.photo_path} onPhoto={changePhoto} onSaved={() => void home.reload()} /> : null}
       <header className="flex items-center gap-2.5">
         <div className="min-w-0 flex-1">
           <p className="text-small text-ink-muted" suppressHydrationWarning>

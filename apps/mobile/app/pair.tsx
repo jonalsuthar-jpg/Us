@@ -4,13 +4,18 @@ import {
   friendlyError,
   getCoupleContext,
   getMyAccess,
+  inviteCodeFrom,
+  inviteLink,
+  inviteMessage,
   redeemInvite,
   watchForPairing,
   type CoupleContext,
   type Invite,
 } from '@us/shared';
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router, useLocalSearchParams } from 'expo-router';
+import QRCode from 'react-native-qrcode-svg';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Share, TextInput, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
@@ -21,9 +26,12 @@ import { cn } from '@/components/ui/cn';
 import { Sheet } from '@/components/ui/sheet';
 import { Display, Text } from '@/components/ui/text';
 import { supabase } from '@/lib/supabase';
+import { env } from '@/lib/env';
 import { usePalette } from '@/components/ui/palette';
 
 type Step = 'loading' | 'choose' | 'invite' | 'join' | 'paired';
+
+const INVITE_KEY = 'us:invite-code';
 
 export default function Pair() {
   const insets = useSafeAreaInsets();
@@ -35,18 +43,27 @@ export default function Pair() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [paired, setPaired] = useState<CoupleContext | null>(null);
+  // Opened from an invite link (us://pair?code=…): kept on the phone through sign-in and approval.
+  const params = useLocalSearchParams<{ code?: string }>();
+  const fromLink = inviteCodeFrom(params.code);
 
   useEffect(() => {
-    void supabase.auth.getUser().then(async ({ data }) => {
+    void (async () => {
+      if (fromLink) await AsyncStorage.setItem(INVITE_KEY, fromLink).catch(() => {});
+      const linked = fromLink || inviteCodeFrom(await AsyncStorage.getItem(INVITE_KEY).catch(() => null));
+      const { data } = await supabase.auth.getUser();
       if (!data.user) return router.replace('/sign-in');
       setUserId(data.user.id);
       const access = await getMyAccess(supabase).catch(() => null);
       if (access && access.status !== 'approved') return router.replace('/waiting');
       const ctx = await getCoupleContext(supabase, data.user.id).catch(() => null);
       if (ctx) router.replace('/home');
-      else setStep('choose');
-    });
-  }, []);
+      else if (linked) {
+        setCode(linked);
+        setStep('join');
+      } else setStep('choose');
+    })();
+  }, [fromLink]);
 
   useEffect(() => {
     if (step !== 'invite' || !userId) return;
@@ -54,9 +71,11 @@ export default function Pair() {
   }, [step, userId]);
 
   function onPaired(ctx: CoupleContext) {
+    void AsyncStorage.removeItem(INVITE_KEY).catch(() => {});
     setPaired(ctx);
     setStep('paired');
-    setTimeout(() => router.replace('/home'), 2200);
+    // Home opens the first-run setup for a couple this new.
+    setTimeout(() => router.replace({ pathname: '/home', params: { welcome: '1' } }), 2200);
   }
 
   async function startInvite() {
@@ -141,8 +160,24 @@ export default function Pair() {
                 <Button variant="secondary" onPress={() => void Clipboard.setStringAsync(invite.code)}>
                   Copy
                 </Button>
-                <Button onPress={() => void Share.share({ message: `Join me on Us — our code is ${invite.code}` })}>Share</Button>
+                <Button
+                  onPress={() =>
+                    void Share.share({
+                      message: env.webUrl ? inviteMessage(inviteLink(env.webUrl, invite.code), invite.code) : `Join me on Us — our code is ${invite.code}`,
+                    })
+                  }
+                >
+                  Share
+                </Button>
               </View>
+              {env.webUrl ? (
+                <View className="mt-6 items-center gap-2" accessible accessibilityLabel={`QR code that opens the invite with code ${invite.code}`}>
+                  <View className="rounded-[12px] bg-white p-2">
+                    <QRCode value={inviteLink(env.webUrl, invite.code)} size={168} color="#2A1F2D" backgroundColor="#FFFFFF" />
+                  </View>
+                  <Text className="text-small text-ink-soft">Or they can point their phone camera here.</Text>
+                </View>
+              ) : null}
               <Text className="mt-5 text-micro text-ink-muted">
                 Works once · expires {new Date(invite.expires_at).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}
               </Text>

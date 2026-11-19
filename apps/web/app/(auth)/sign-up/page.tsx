@@ -3,11 +3,13 @@
 import { friendlyError } from '@us/shared';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { getSupabase } from '@/lib/supabase/client';
+import { rememberInvite } from '@/lib/pending-invite';
+import { safeNext } from '@/lib/safe-next';
 
 /**
  * There's no public directory of users and nothing to "join" — signing up
@@ -21,6 +23,13 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  // From an invite link: after signing up, straight to that invite.
+  const [next, setNext] = useState('/pair');
+  useEffect(() => {
+    const n = safeNext(new URLSearchParams(location.search).get('next'), '/pair');
+    rememberInvite(n);
+    if (n.startsWith('/pair')) setNext(n);
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -36,12 +45,12 @@ export default function SignUpPage() {
         password,
         options: {
           data: { display_name: name.trim() },
-          emailRedirectTo: `${location.origin}/auth/callback?next=/pair`,
+          emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
       });
       if (error) throw error;
       if (data.session) {
-        router.replace('/pair');
+        router.replace(next);
         router.refresh();
       } else {
         setConfirm(true);

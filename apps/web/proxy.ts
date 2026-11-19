@@ -38,7 +38,8 @@ export async function proxy(request: NextRequest) {
   if (!user && inApp) {
     const to = request.nextUrl.clone();
     to.pathname = '/sign-in';
-    to.search = `?next=${encodeURIComponent(path)}`;
+    // Keep the query (an invite link's ?code=) for after signing in.
+    to.search = `?next=${encodeURIComponent(path + request.nextUrl.search)}`;
     return NextResponse.redirect(to);
   }
   if (user && inAuth) {

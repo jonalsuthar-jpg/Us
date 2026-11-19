@@ -3,17 +3,20 @@
 import { friendlyError } from '@us/shared';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { getSupabase } from '@/lib/supabase/client';
 import { safeNext } from '@/lib/safe-next';
+import { rememberInvite } from '@/lib/pending-invite';
 
 export function SignInForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get('next'));
+  // Came from an invite link: keep its code through sign-in (or sign-up and approval).
+  useEffect(() => rememberInvite(next), [next]);
   const [mode, setMode] = useState<'password' | 'magic' | 'reset'>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -139,7 +142,7 @@ export function SignInForm() {
 
       <p className="border-t border-paper-edge pt-6 text-small text-ink-soft">
         New here?{' '}
-        <Link href="/sign-up" className="font-medium text-rose-700 underline-offset-4 hover:underline">
+        <Link href={next.startsWith('/pair') ? `/sign-up?next=${encodeURIComponent(next)}` : '/sign-up'} className="font-medium text-rose-700 underline-offset-4 hover:underline">
           Create your space
         </Link>
       </p>

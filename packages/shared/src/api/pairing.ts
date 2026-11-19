@@ -149,3 +149,20 @@ export function personFor(ctx: Pick<CoupleContext, 'me' | 'partner' | 'mySlot' |
     name: mine ? 'You' : ctx.partner.display_name,
   };
 }
+
+/** The link that opens Us on the join screen with my code filled in. */
+export function inviteLink(origin: string, code: string): string {
+  return `${origin.replace(/\/$/, '')}/pair?code=${encodeURIComponent(code)}`;
+}
+
+/** What to send along with the link, for apps that only show text. */
+export function inviteMessage(link: string, code: string): string {
+  return `Join me on Us: ${link}
+Or enter our code: ${code}`;
+}
+
+/** A code from a pasted link or a ?code= value, formatted; '' if there isn't a plausible one. */
+export function inviteCodeFrom(raw: string | null | undefined): string {
+  const code = formatInviteCode(raw ?? '');
+  return code.length === 9 ? code : '';
+}
