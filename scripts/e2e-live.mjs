@@ -253,6 +253,18 @@ await step('memory: private photos in R2, scoped to the couple', async () => {
   return 'partner reads, outsider blocked, copy works, links are bound to their path';
 });
 
+await step('catch-up: a change stamped by one partner is listed for the other, never for an outsider', async () => {
+  const since = new Date(Date.now() - 60_000).toISOString();
+  const { error } = await bob.sb.rpc('touch_topic', { p_topic: 'e2e:catch-up' });
+  if (error) throw error;
+  const { data, error: e2 } = await alice.sb.rpc('changed_topics', { p_since: since });
+  if (e2) throw e2;
+  if (!data.topics.includes('e2e:catch-up')) throw new Error(`not listed: ${JSON.stringify(data)}`);
+  const { data: theirs } = await carol.sb.rpc('changed_topics', { p_since: since });
+  if (theirs?.topics?.length) throw new Error('outsider saw our topics');
+  return `${data.topics.length} topic(s) since a minute ago`;
+});
+
 for (const undo of cleanup.reverse()) await undo();
 
 for (const c of [aliceCh, bobCh]) await c?.ch.unsubscribe();
