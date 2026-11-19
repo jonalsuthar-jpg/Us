@@ -1,6 +1,6 @@
 import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, isOurStickerPath, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
-import { Ban, Copy, Download, Pin, PinOff, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Ban, Copy, Download, MoreHorizontal, Pin, PinOff, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Ticks } from '@/components/ui/ticks';
 import { cn } from '@/lib/cn';
 
@@ -90,9 +90,50 @@ export function Bubble({
   const still = giphy ? (message.localUri ?? (typeof message.media_meta?.still === 'string' ? message.media_meta.still : undefined)) : undefined;
   const hasMedia = !deleted && !!message.media_kind && message.media_kind !== 'audio';
   const [more, setMore] = useState(false);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  // Opened from the keyboard: focus moves into the toolbar, and back to the bubble when it closes.
+  const keyboard = useRef(false);
   useEffect(() => {
-    if (!active) setMore(false);
+    if (active) {
+      if (keyboard.current) toolbarRef.current?.querySelector<HTMLElement>('button')?.focus();
+      return;
+    }
+    setMore(false);
+    if (keyboard.current) {
+      keyboard.current = false;
+      bubbleRef.current?.focus();
+    }
   }, [active]);
+  const openActions = (fromKeyboard: boolean) => {
+    if (!settled) return;
+    keyboard.current = fromKeyboard;
+    if (!active) onToggleActive?.();
+  };
+  const onBubbleKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+      e.preventDefault();
+      if (active) onToggleActive?.();
+      else openActions(true);
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      // Walk the thread one message at a time.
+      const all = [...document.querySelectorAll<HTMLElement>('[data-bubble]')];
+      const next = all[all.indexOf(e.currentTarget) + (e.key === 'ArrowUp' ? -1 : 1)];
+      if (next) {
+        e.preventDefault();
+        next.focus();
+      }
+    }
+  };
+  const onToolbarKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+    const buttons = [...e.currentTarget.querySelectorAll<HTMLElement>('button')];
+    const at = buttons.indexOf(document.activeElement as HTMLElement);
+    const to = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1 : (at + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+    e.preventDefault();
+    buttons[to]?.focus();
+  };
   const reactButton = (e: string) => (
     <button
       key={e}
@@ -116,8 +157,10 @@ export function Bubble({
     >
       {active && settled ? (
         <div
+          ref={toolbarRef}
           role="toolbar"
           aria-label="Message actions"
+          onKeyDown={onToolbarKey}
           className={cn(
             // Wraps rather than running off a phone-width screen.
             'mb-1 flex max-w-[calc(100vw-2rem)] flex-wrap items-center gap-0.5 rounded-[22px] border border-paper-edge bg-paper-raised p-1 shadow-[0_8px_24px_-12px_rgba(36,25,51,0.4)] sm:max-w-md',
@@ -164,7 +207,33 @@ export function Bubble({
       ) : null}
 
       <div className="relative max-w-[min(78%,34rem)]">
+        {settled && onToggleActive ? (
+          <button
+            type="button"
+            aria-label="Message actions"
+            tabIndex={-1}
+            onClick={() => (active ? onToggleActive() : openActions(false))}
+            className={cn(
+              'absolute top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-ink-muted opacity-0 transition-opacity hover:bg-paper-sunken hover:text-ink focus-visible:opacity-100 group-hover/msg:opacity-100 group-focus-within/msg:opacity-100',
+              mine ? '-left-10' : '-right-10',
+            )}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        ) : null}
         <div
+          ref={bubbleRef}
+          data-bubble
+          tabIndex={settled ? 0 : -1}
+          // Read as the message itself (author, text, time); Enter opens its actions.
+          role="article"
+          aria-keyshortcuts="Enter"
+          onKeyDown={onBubbleKey}
+          onContextMenu={(e) => {
+            if (!settled || (e.target as HTMLElement).closest('a,audio,video')) return;
+            e.preventDefault();
+            openActions(false);
+          }}
           onClick={(e) => {
             // Taps on links, media controls and quotes do their own thing.
             if ((e.target as HTMLElement).closest('a,button,audio')) return;
@@ -177,7 +246,7 @@ export function Bubble({
             onReact?.(myReaction === '❤️' ? null : '❤️');
           }}
           className={cn(
-            'relative cursor-default rounded-bubble text-body transition-shadow',
+            'relative cursor-default rounded-bubble text-body transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:ring-offset-2 focus-visible:ring-offset-paper',
             (url && message.media_kind === 'image') || linked || waiting ? 'overflow-hidden p-1' : 'px-3.5 pb-1.5 pt-2',
             sticker ? 'bg-transparent shadow-none' : mine ? MINE[slot] : THEIRS[slot],
             last && (mine ? 'rounded-br-hair' : 'rounded-bl-hair'),
