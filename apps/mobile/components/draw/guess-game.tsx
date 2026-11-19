@@ -33,7 +33,7 @@ import {
   type PackId,
   type Word,
 } from '@us/shared';
-import { useCouple, useDrawGame, useDrawGames, useDrawHub, useDrawSession } from '@us/shared/react';
+import { useCouple, useCoupleLive, useDrawGame, useDrawGames, useDrawHub, useDrawSession } from '@us/shared/react';
 import { router } from 'expo-router';
 import { Clock, Send, X } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -249,7 +249,8 @@ export function GuessGame() {
 // ----------------------------------------------------------------- lobby ---
 
 function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: string | null }) {
-  const { sb, couple, me, partner, partnerOnline } = useCouple();
+  const { sb, couple, me, partner } = useCouple();
+  const { partnerOnline } = useCoupleLive();
   const c = usePalette();
   const insets = useSafeAreaInsets();
   const game = useDrawGame();

@@ -1,7 +1,7 @@
 'use client';
 
 import { dailyState, QUIZ_INFO, quizState, quizVerdict, rateGap, roundScore, type QuizKind, type QuizRound } from '@us/shared';
-import { useCouple, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, useQuizzes } from '@us/shared/react';
+import { useCouple, useCoupleLive, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, useQuizzes } from '@us/shared/react';
 import { Check, Lock, Play, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
@@ -34,7 +34,8 @@ export function ConnectCorner({ settings }: { settings?: ReactNode }) {
   const dailyOn = useFeature('daily_question');
   const quizzes = useQuizzes(quizzesOn);
   const daily = useDaily();
-  const { partner, partnerOnline } = useCouple();
+  const { partner } = useCouple();
+  const { partnerOnline } = useCoupleLive();
   const streak = daily.data?.streak ?? 0;
   const done = QUIZ_ORDER.filter((k) => quizzes.today[k] && quizState(quizzes.today[k]!) !== 'mine').length;
   const upNext = QUIZ_ORDER.find((k) => quizzes.today[k] && quizState(quizzes.today[k]!) === 'mine');
@@ -109,7 +110,8 @@ function Section({ title, bar, right, children }: { title: string; bar: string; 
 const pill = 'mt-1.5 inline-flex self-start rounded-full px-3.5 py-[7px] text-[13px] font-bold';
 
 function DrawTogetherCard() {
-  const { partner, partnerOnline } = useCouple();
+  const { partner } = useCouple();
+  const { partnerOnline } = useCoupleLive();
   const drawing = usePartnerDrawing();
   const name = partner.display_name;
   const line = drawing ? `${name} is drawing now` : partnerOnline ? `${name} is online` : 'Paint on the same page';

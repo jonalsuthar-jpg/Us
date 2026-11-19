@@ -1,10 +1,11 @@
 import { dailyState, QUIZ_INFO, quizState, quizVerdict, rateGap, roundScore, type QuizKind, type QuizRound } from '@us/shared';
-import { useCouple, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, useQuizzes } from '@us/shared/react';
+import { useCouple, useCoupleLive, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, useQuizzes } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { Check, Lock, Play, Plus } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
-import { Image, Pressable, View, type ViewStyle } from 'react-native';
+import { Pressable, View, type ViewStyle } from 'react-native';
+import { Photo } from '../ui/photo';
 import { GradientView } from '../plan/art';
 import { Initial } from '../plan/bits';
 import { cn } from '../ui/cn';
@@ -39,7 +40,8 @@ export function ConnectCorner({ daily, settings }: { daily: ReturnType<typeof us
   const quizzesOn = useFeature('quizzes');
   const dailyOn = useFeature('daily_question');
   const quizzes = useQuizzes(quizzesOn);
-  const { partner, partnerOnline } = useCouple();
+  const { partner } = useCouple();
+  const { partnerOnline } = useCoupleLive();
   const streak = daily.data?.streak ?? 0;
   const done = QUIZ_ORDER.filter((k) => quizzes.today[k] && quizState(quizzes.today[k]!) !== 'mine').length;
   const upNext = QUIZ_ORDER.find((k) => quizzes.today[k] && quizState(quizzes.today[k]!) === 'mine');
@@ -126,7 +128,8 @@ function Pill({ label, className, textClass }: { label: string; className: strin
 }
 
 function DrawTogetherCard() {
-  const { partner, partnerOnline } = useCouple();
+  const { partner } = useCouple();
+  const { partnerOnline } = useCoupleLive();
   const drawing = usePartnerDrawing();
   const name = partner.display_name;
   const line = drawing ? `${name} is drawing now` : partnerOnline ? `${name} is online` : 'Paint on the same page';
@@ -345,7 +348,7 @@ function Drawings() {
               className="h-24 flex-1 rounded-[6px] bg-white p-1.5 pb-4"
               style={[{ transform: [{ rotate: tilt[i]! }] }, lift()]}
             >
-              <Image source={{ uri: urls[d.png_path] }} style={{ flex: 1, borderRadius: 3 }} resizeMode="contain" />
+              {urls[d.png_path] ? <Photo uri={urls[d.png_path]!} cacheKey={d.png_path} fit="contain" style={{ flex: 1, borderRadius: 3 }} /> : null}
             </Pressable>
           ))}
           {Array.from({ length: 3 - recent.length }, (_, i) => (
@@ -361,7 +364,7 @@ function Polaroid({ rotate, url, tint = '#fff', locked, dashed }: { rotate: stri
   return (
     <View className="w-14 rounded-[6px] bg-white p-1 pb-3" style={[{ transform: [{ rotate }] }, lift()]}>
       <View className={cn('h-12 items-center justify-center overflow-hidden rounded-[3px]', dashed && 'border-2 border-dashed border-rose-300')} style={{ backgroundColor: dashed ? '#fff' : tint }}>
-        {url ? <Image source={{ uri: url }} style={{ width: 48, height: 48 }} /> : dashed ? <Plus size={20} color="#E2336A" /> : locked ? <Lock size={16} color="#095F58" /> : null}
+        {url ? <Photo uri={url} style={{ width: 48, height: 48 }} /> : dashed ? <Plus size={20} color="#E2336A" /> : locked ? <Lock size={16} color="#095F58" /> : null}
       </View>
     </View>
   );

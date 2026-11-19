@@ -1,6 +1,7 @@
 import { postSnap } from '@us/shared';
 import { useChatKey, useCouple } from '@us/shared/react';
 import * as ImagePicker from '@/lib/image-picker';
+import { readyPicked } from '@/lib/photo';
 import { Camera, ImageIcon } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Image, useWindowDimensions, View } from 'react-native';
@@ -43,7 +44,7 @@ export function PostSnap({ open, onClose, mutate }: { open: boolean; onClose: ()
     const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.7 };
     const res = from === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
     const asset = res.canceled ? null : res.assets[0];
-    if (asset) setPhoto({ uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg' });
+    if (asset) setPhoto(await readyPicked(asset));
   }
 
   async function share() {

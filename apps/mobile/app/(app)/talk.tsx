@@ -1,5 +1,5 @@
 import { clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, stickerPath, uuid, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
-import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
+import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleLive, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from '@/lib/image-picker';
@@ -92,7 +92,8 @@ export default function Talk() {
 
 function Thread() {
   const insets = useSafeAreaInsets();
-  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, photoOf, channel } = useCouple();
+  const { sb, couple, me, partner, mySlot, partnerSlot, photoOf, channel } = useCouple();
+  const { partnerOnline } = useCoupleLive();
   const partnerPhoto = photoOf(partnerSlot);
   const viewing = useViewing();
   // Reading the chat: the gathered "new messages" notification is done with.

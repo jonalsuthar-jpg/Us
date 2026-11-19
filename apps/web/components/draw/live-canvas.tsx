@@ -1,7 +1,7 @@
 'use client';
 
 import { BRUSH_MAX, BRUSH_MIN, LIVE_CANVAS, notifyPartner } from '@us/shared';
-import { useCouple, useDrawings, useDrawSession } from '@us/shared/react';
+import { useCouple, useCoupleLive, useDrawings, useDrawSession } from '@us/shared/react';
 import { ArrowLeft, Download, Send, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -44,7 +44,8 @@ export function useDrawTools(onUndo: () => void) {
  * panel over the call (`variant="call"`), audio carrying on underneath.
  */
 export function LiveCanvas({ variant = 'page', onClose }: { variant?: 'page' | 'call'; onClose?: () => void }) {
-  const { me, partner, partnerSlot, mySlot, partnerOnline, connection, sb } = useCouple();
+  const { me, partner, partnerSlot, mySlot, sb } = useCouple();
+  const { partnerOnline, connection } = useCoupleLive();
   const { session, state, cursor, partnerHere } = useDrawSession(LIVE_CANVAS);
   const tools = useDrawTools(() => session.undo());
   const photoUrl = useBgPhotoUrl(state.bg);

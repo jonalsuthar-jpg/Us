@@ -1,5 +1,5 @@
 import { LIVE_CANVAS, notifyPartner } from '@us/shared';
-import { useCouple, useDrawSession } from '@us/shared/react';
+import { useCouple, useCoupleLive, useDrawSession } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { ChevronLeft, Download, X } from 'lucide-react-native';
@@ -20,7 +20,8 @@ import { Toolbar, useBrush } from './toolbar';
  * body of a sheet over the call, with fewer colours and no extras.
  */
 export function LiveBoard({ variant = 'screen', onClose }: { variant?: 'screen' | 'call'; onClose?: () => void }) {
-  const { partner, partnerSlot, partnerOnline, connection, sb } = useCouple();
+  const { partner, partnerSlot, sb } = useCouple();
+  const { partnerOnline, connection } = useCoupleLive();
   const { session, state, cursor, partnerHere } = useDrawSession(LIVE_CANVAS);
   const c = usePalette();
   const insets = useSafeAreaInsets();

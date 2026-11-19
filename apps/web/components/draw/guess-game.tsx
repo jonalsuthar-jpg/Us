@@ -36,7 +36,7 @@ import {
   type PackId,
   type Word,
 } from '@us/shared';
-import { useCouple, useDrawGame, useDrawGames, useDrawHub, useDrawSession } from '@us/shared/react';
+import { useCouple, useCoupleLive, useDrawGame, useDrawGames, useDrawHub, useDrawSession } from '@us/shared/react';
 import { ArrowLeft, Clock, Send, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
@@ -220,7 +220,8 @@ export function GuessGame() {
 // ----------------------------------------------------------------- lobby ---
 
 function Lobby({ onTurn, left }: { onTurn: (m: 'draw' | 'guess') => void; left: string | null }) {
-  const { sb, couple, me, partner, partnerOnline } = useCouple();
+  const { sb, couple, me, partner } = useCouple();
+  const { partnerOnline } = useCoupleLive();
   const game = useDrawGame();
   const turns = useDrawGames();
   const [packs, setPacks] = useState<PackId[]>(['everyday', 'food']);

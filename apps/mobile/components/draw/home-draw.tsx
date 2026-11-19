@@ -1,9 +1,10 @@
-import { markDoodleSeen, type Drawing } from '@us/shared';
-import { useCouple, useDrawings, usePartnerDrawing, useUnseenDoodles } from '@us/shared/react';
+import { drawingUrls, markDoodleSeen, type Drawing } from '@us/shared';
+import { useCouple, usePartnerDrawing, useUnseenDoodles } from '@us/shared/react';
 import { router } from 'expo-router';
 import { PenLine, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Image, Modal, Pressable, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, useWindowDimensions, View } from 'react-native';
+import { Photo } from '../ui/photo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePalette } from '../ui/palette';
 import { Display, Text } from '../ui/text';
@@ -37,15 +38,24 @@ export function DoodleNote() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { doodles, reload } = useUnseenDoodles();
-  const { urls, reload: reloadUrls } = useDrawings();
+  // Just this doodle's link, not the whole gallery's (kept links make a repeat free).
+  const [urls, setUrls] = useState<Record<string, string>>({});
   const [open, setOpen] = useState<Drawing | null>(null);
   const [back, setBack] = useState(false);
   const doodle = doodles[0];
   const name = partner.display_name;
 
+  const path = doodle?.png_path;
   useEffect(() => {
-    if (doodle && !urls[doodle.png_path]) reloadUrls();
-  }, [doodle, urls, reloadUrls]);
+    if (!path) return;
+    let live = true;
+    void drawingUrls(sb, [path])
+      .then((links) => live && setUrls((prev) => ({ ...prev, ...links })))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [sb, path]);
 
   if (!doodle) return <DoodleSheet open={back} onClose={() => setBack(false)} />;
   const url = urls[doodle.png_path];
@@ -85,7 +95,7 @@ export function DoodleNote() {
             </View>
           </View>
           <View className="my-1.5 overflow-hidden" style={{ height: ((noteW - 36) * 230) / 264 }}>
-            {url ? <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} resizeMode="contain" /> : null}
+            {url ? <Photo uri={url} cacheKey={doodle?.png_path} fit="contain" style={{ width: '100%', height: '100%' }} /> : null}
           </View>
           <Display light italic className="text-lead text-gold-800">
             {doodle.note ? `“${doodle.note}” — ${name}` : `— ${name}`}
@@ -121,7 +131,7 @@ export function DoodleNote() {
             </View>
             {open?.note ? <Text className="text-body text-ink-soft">{open.note}</Text> : null}
             {open && urls[open.png_path] ? (
-              <Image source={{ uri: urls[open.png_path] }} className="w-full rounded-[18px] border border-paper-edge bg-white" style={{ aspectRatio: 3 / 4 }} />
+              <Photo uri={urls[open.png_path]!} cacheKey={open.png_path} fit="fill" className="w-full rounded-[18px] border border-paper-edge bg-white" style={{ aspectRatio: 3 / 4 }} />
             ) : null}
             <Pressable
               accessibilityRole="button"

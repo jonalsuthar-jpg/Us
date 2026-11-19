@@ -15,7 +15,9 @@ import * as Haptics from 'expo-haptics';
 import { BookmarkCheck, BookmarkPlus, Check, Send, Trash2, X } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, TextInput, useWindowDimensions, View } from 'react-native';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 import { IconButton } from '../ui/button';
 import { cn } from '../ui/cn';
 import { Text } from '../ui/text';
@@ -40,7 +42,9 @@ export function StoryViewer({ snaps, start, kept, onClose, mutate }: Props) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(start);
-  const [progress, setProgress] = useState(0);
+  // How far through this snap, 0 to 1. Animated on the UI thread: a state update
+  // each frame would re-render the whole full-screen viewer 60 times a second.
+  const progress = useSharedValue(0);
   const [held, setHeld] = useState(false);
   const [typing, setTyping] = useState(false);
   const [reply, setReply] = useState('');
@@ -66,31 +70,26 @@ export function StoryViewer({ snaps, start, kept, onClose, mutate }: Props) {
   }, [snapId]);
 
   useEffect(() => {
-    setProgress(0);
+    cancelAnimation(progress);
+    progress.value = 0;
     setNote(null);
-  }, [snapId]);
+  }, [snapId, progress]);
 
   // Advance through the story; paused while held, typing or saving.
-  const last = useRef<number | null>(null);
+  const nextRef = useRef(next);
+  nextRef.current = next;
+  const [restart, setRestart] = useState(0);
   useEffect(() => {
     if (!open || paused) {
-      last.current = null;
+      cancelAnimation(progress);
       return;
     }
-    let frame = requestAnimationFrame(function tick(t) {
-      if (last.current !== null) {
-        const step = (t - last.current) / SNAP_SHOW_MS;
-        setProgress((p) => Math.min(1, p + step));
-      }
-      last.current = t;
-      frame = requestAnimationFrame(tick);
+    const left = Math.max(0, 1 - progress.value);
+    progress.value = withTiming(1, { duration: left * SNAP_SHOW_MS, easing: Easing.linear }, (done) => {
+      if (done) scheduleOnRN(() => nextRef.current());
     });
-    return () => cancelAnimationFrame(frame);
-  }, [open, paused, snapId]);
-  useEffect(() => {
-    if (progress >= 1) next();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress]);
+    return () => cancelAnimation(progress);
+  }, [open, paused, snapId, restart, progress]);
 
   function next() {
     if (!snaps) return;
@@ -99,7 +98,11 @@ export function StoryViewer({ snaps, start, kept, onClose, mutate }: Props) {
   }
   function back() {
     if (index > 0) setIndex(index - 1);
-    else setProgress(0);
+    else {
+      cancelAnimation(progress);
+      progress.value = 0;
+      setRestart((n) => n + 1);
+    }
   }
 
   async function act(label: string, write: () => Promise<unknown>) {
@@ -148,7 +151,7 @@ export function StoryViewer({ snaps, start, kept, onClose, mutate }: Props) {
               <View className="flex-row gap-1">
                 {snaps!.map((s, i) => (
                   <View key={s.id} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/30">
-                    <View className="h-full bg-white" style={{ width: `${i < index ? 100 : i === index ? progress * 100 : 0}%` }} />
+                    {i === index ? <ProgressFill progress={progress} /> : <View className="h-full bg-white" style={{ width: i < index ? '100%' : '0%' }} />}
                   </View>
                 ))}
               </View>
@@ -257,4 +260,9 @@ function Pill({ label, disabled, onPress, children }: { label: string; disabled?
       <Text className="text-small text-paper">{label}</Text>
     </Pressable>
   );
+}
+
+function ProgressFill({ progress }: { progress: SharedValue<number> }) {
+  const style = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+  return <Animated.View className="h-full bg-white" style={style} />;
 }

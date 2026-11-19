@@ -1,7 +1,7 @@
 "use client";
 
 import { MODULES, TAB_FEATURES, type ModuleId } from "@us/shared";
-import { useCouple, useFeatures } from "@us/shared/react";
+import { useCouple, useCoupleLive, useFeatures } from "@us/shared/react";
 import {
   HeartHandshake,
   House,
@@ -41,10 +41,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     partner,
     mySlot,
     partnerSlot,
-    partnerOnline,
-    unread,
-    connection,
   } = useCouple();
+  const { partnerOnline, unread, connection } = useCoupleLive();
   const has = useFeatures();
   // Only the areas this couple has something in.
   const modules = MODULES.filter((m) => TAB_FEATURES[m.id].some(has));

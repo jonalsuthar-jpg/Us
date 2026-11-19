@@ -51,6 +51,8 @@ export interface MediaRequest {
   mime?: string | null;
 }
 
+const MEDIA_AT_ONCE = 3;
+
 /**
  * Local URIs for chat files that may be encrypted: each is fetched once,
  * opened here and kept in the vault. A file that turns out not to be
@@ -67,24 +69,29 @@ export async function openChatMedia(sb: Parameters<typeof chatMediaUrls>[0], cip
   }
   if (!missing.length) return out;
   const signed = await chatMediaUrls(sb, missing.map((m) => m.path));
-  await Promise.all(
-    missing.map(async ({ path, mime }) => {
-      const url = signed[path];
-      if (!url) return;
-      try {
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        if (fileKeyVersion(bytes) === null) {
-          out[path] = url;
-          return;
-        }
-        if (!cipher) return;
-        out[path] = await vault.put(path, cipher.decryptFile(path, bytes), mime || 'application/octet-stream');
-      } catch {
-        // Try again next time.
+  // A few at a time: decrypting runs on the JS thread, and a thread full of
+  // photos opened all at once would freeze scrolling and spike the CPU.
+  const queue = [...missing];
+  const worker = async () => {
+    for (let item = queue.shift(); item; item = queue.shift()) await openOne(item);
+  };
+  const openOne = async ({ path, mime }: MediaRequest) => {
+    const url = signed[path];
+    if (!url) return;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (fileKeyVersion(bytes) === null) {
+        out[path] = url;
+        return;
       }
-    }),
-  );
+      if (!cipher) return;
+      out[path] = await vault.put(path, cipher.decryptFile(path, bytes), mime || 'application/octet-stream');
+    } catch {
+      // Try again next time.
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(MEDIA_AT_ONCE, queue.length) }, worker));
   return out;
 }

@@ -12,13 +12,15 @@ import {
   type PartnerSlot,
   type Status,
 } from '@us/shared';
-import { useAccess, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
+import { useAccess, useCallManager, useCouple, useCoupleLive, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from '@/lib/image-picker';
+import { readyPicked } from '@/lib/photo';
 import { router, useFocusEffect } from 'expo-router';
 import { Camera, HeartPulse, MessageCircleHeart, Pencil, Phone, Settings, Video } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Photo } from '../ui/photo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bootHome, saveHome } from '@/lib/boot-cache';
 import { CLEAR_CHAT_FAB } from '../chat/chat-fab';
@@ -49,7 +51,8 @@ function greeting(now = new Date()) {
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const c = usePalette();
-  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, unread, channel } = useCouple();
+  const { sb, couple, me, partner, mySlot, partnerSlot, channel } = useCouple();
+  const { partnerOnline, unread } = useCoupleLive();
   const { partnerTyping } = useTyping();
   const calls = useCallManager();
   const has = useFeatures();
@@ -72,10 +75,15 @@ export function HomeScreen() {
   // Back after a gap: anything at all that moved meanwhile.
   useEffect(() => channel.resync.on((r) => (r === 'all' || r.topics.size > 0) && void home.reload()), [channel, home.reload]);
   const [focused, setFocused] = useState(false);
+  // Swiping back to Home refreshes it, but not again within half a minute: pings keep it current meanwhile.
+  const focusLoadedAt = useRef(0);
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
-      void home.reload();
+      if (Date.now() - focusLoadedAt.current > 30_000) {
+        focusLoadedAt.current = Date.now();
+        void home.reload();
+      }
       return () => setFocused(false);
     }, [home.reload]),
   );
@@ -117,8 +125,9 @@ export function HomeScreen() {
     setPhotoBusy(true);
     setPhotoError(null);
     try {
-      const bytes = await (await fetch(asset.uri)).arrayBuffer();
-      await home.mutate(() => setCouplePhoto(sb, d.couple, bytes, asset.mimeType ?? 'image/jpeg'));
+      const photo = await readyPicked(asset);
+      const bytes = await (await fetch(photo.uri)).arrayBuffer();
+      await home.mutate(() => setCouplePhoto(sb, d.couple, bytes, photo.mimeType));
     } catch (e) {
       setPhotoError((e as Error).message);
     } finally {
@@ -165,7 +174,7 @@ export function HomeScreen() {
       <View className="overflow-hidden rounded-[28px] bg-plum-800">
         {d?.photoUrl ? (
           <Pressable accessibilityRole="imagebutton" accessibilityLabel="Photo of you two. Open full screen" onPress={() => setViewing(d.photoUrl)}>
-            <Image source={{ uri: d.photoUrl }} className="aspect-[4/3] w-full" resizeMode="cover" />
+            <Photo uri={d.photoUrl} className="aspect-[4/3] w-full" />
           </Pressable>
         ) : (
           <View className="aspect-[4/3] w-full items-center justify-center overflow-hidden">

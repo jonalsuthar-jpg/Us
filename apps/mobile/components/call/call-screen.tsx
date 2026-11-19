@@ -2,7 +2,7 @@ import { formatDuration, isWideVideo, selfViewAspect, videoFit, type CallState, 
 import { useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { Bluetooth, Check, ChevronDown, Ear, Headphones, Layers, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, Smartphone, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { AppState, Modal, Pressable, StatusBar, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
@@ -254,6 +254,16 @@ function useElapsed(start: number | null) {
   return start ? now - start : 0;
 }
 
+/**
+ * The status line. While connected it's the call clock, which ticks here on
+ * its own, so the whole call screen (and its video views) doesn't re-render
+ * every second.
+ */
+function Status({ text, clock, prefix = '', ...props }: { text: string; clock: number | null; prefix?: string } & ComponentProps<typeof Text>) {
+  const elapsed = useElapsed(clock);
+  return <Text {...props}>{prefix + (clock ? formatDuration(elapsed) : text)}</Text>;
+}
+
 function Surface({
   state,
   remoteSize,
@@ -273,7 +283,6 @@ function Surface({
   const screen = useWindowDimensions();
   const [selfSize, setSelfSize] = useState<VideoSize | null>(null);
   const onSelfSize = useVideoSize(setSelfSize);
-  const elapsed = useElapsed(state.connectedAt);
   const [nudge, setNudge] = useState(false);
   const canDraw = useFeature('draw');
   const [drawing, setDrawing] = useState(false);
@@ -326,13 +335,16 @@ function Surface({
       outgoing: 'Calling…',
       incoming: isVideo ? 'wants to video call' : 'is calling you',
       connecting: 'Connecting…',
-      connected: formatDuration(elapsed),
+      connected: '',
       reconnecting: 'Reconnecting…',
       ended: endedCopy(state, partner.display_name),
       idle: '',
     }[state.phase] ?? '';
 
+  const clock = state.phase === 'connected' ? state.connectedAt : null;
   const selfTrack = m.selfViewTrack;
+  // One stream per track: a new one each render would re-attach the self view's renderer.
+  const selfURL = useMemo(() => (selfTrack ? new MediaStream([selfTrack as never]).toURL() : null), [selfTrack]);
 
   return (
     <View className="flex-1 bg-plum-800" accessibilityViewIsModal>
@@ -368,7 +380,7 @@ function Surface({
         {remoteVideo ? (
           <View className="flex-1">
             <Display className="text-heading text-paper">{partner.display_name}</Display>
-            <Text className="text-small text-paper/70">{status}</Text>
+            <Status className="text-small text-paper/70" text={status} clock={clock} />
           </View>
         ) : (
           <View className="flex-1" />
@@ -395,16 +407,14 @@ function Surface({
           <Display light className="mt-10 text-hero text-paper">
             {partner.display_name}
           </Display>
-          <Text accessibilityLiveRegion="polite" className="mt-2 text-lead text-paper/70">
-            {status}
-          </Text>
+          <Status accessibilityLiveRegion="polite" className="mt-2 text-lead text-paper/70" text={status} clock={clock} />
           {state.error && <Text className="mt-4 max-w-xs text-center text-small text-gold-200">{state.error}</Text>}
         </View>
       ) : (
         <View className="flex-1" />
       )}
 
-      {live && state.local.camera && selfTrack && (
+      {live && state.local.camera && selfURL && (
         <View
           style={{ bottom: controlsHeight + 12, aspectRatio: selfViewAspect(selfSize) }}
           className={cn(
@@ -413,7 +423,7 @@ function Surface({
           )}
         >
           <RTCView
-            streamURL={new MediaStream([selfTrack as never]).toURL()}
+            streamURL={selfURL}
             objectFit="cover"
             mirror={state.facing === 'user'}
             onDimensionsChange={onSelfSize}
@@ -545,7 +555,7 @@ function Surface({
               </View>
               <View className="flex-1">
                 <Text className="font-sans-bold text-lead text-paper">{partner.display_name}</Text>
-                <Text className="text-micro text-plum-200">{`On a call · ${status}`}</Text>
+                <Status className="text-micro text-plum-200" prefix="On a call · " text={status} clock={clock} />
               </View>
               <IconButton label={state.local.mic ? 'Mute' : 'Unmute'} selected={!state.local.mic} tone={state.local.mic ? 'night' : 'nightOff'} onPress={() => m.toggleMic()}>
                 {state.local.mic ? <Mic size={19} color="#FCFAFB" /> : <MicOff size={19} color="#241933" />}

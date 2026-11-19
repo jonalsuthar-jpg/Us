@@ -14,7 +14,7 @@ import {
   type PartnerSlot,
   type Status,
 } from '@us/shared';
-import { useAccess, useCallManager, useCouple, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
+import { useAccess, useCallManager, useCouple, useCoupleLive, useCoupleData, useFeatures, useTyping } from '@us/shared/react';
 import { Camera, HeartPulse, MessageCircleHeart, Pencil, Phone, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -44,7 +44,8 @@ function greeting(now = new Date()) {
 
 /** The page the app opens on: the two of you, how you both are, and what's next. */
 export function Home() {
-  const { sb, couple, me, partner, mySlot, partnerSlot, partnerOnline, unread, channel } = useCouple();
+  const { sb, couple, me, partner, mySlot, partnerSlot, channel } = useCouple();
+  const { partnerOnline, unread } = useCoupleLive();
   const { partnerTyping } = useTyping();
   const calls = useCallManager();
   const has = useFeatures();

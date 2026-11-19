@@ -10,10 +10,6 @@ import { isForeground, onForegroundChange } from './use-foreground-tick';
 export interface CoupleValue extends CoupleContext {
   sb: UsClient;
   channel: CoupleChannel;
-  partnerOnline: boolean;
-  connection: ChannelStatus;
-  /** Messages from my partner that I haven't read yet. */
-  unread: number;
   refreshUnread: () => void;
   /** Profile photo URL for whoever owns that colour slot, or null. */
   photoOf: (slot: PartnerSlot) => string | null;
@@ -24,6 +20,24 @@ export interface CoupleValue extends CoupleContext {
 }
 
 const Ctx = createContext<CoupleValue | null>(null);
+
+/**
+ * What changes all the time (presence, the link, unread), kept apart from
+ * the rest so a partner coming online re-renders only what shows it, not
+ * every screen that reads the couple.
+ */
+export interface CoupleLive {
+  partnerOnline: boolean;
+  connection: ChannelStatus;
+  /** Messages from my partner that I haven't read yet. */
+  unread: number;
+}
+
+const LiveCtx = createContext<CoupleLive>({ partnerOnline: false, connection: 'connecting', unread: 0 });
+
+export function useCoupleLive(): CoupleLive {
+  return useContext(LiveCtx);
+}
 
 export function useCouple(): CoupleValue {
   const v = useContext(Ctx);
@@ -175,20 +189,20 @@ export function CoupleProvider({ sb, context, platform, onEnded, sleepInBackgrou
       ...context,
       sb,
       channel,
-      partnerOnline,
-      connection,
-      unread,
       refreshUnread,
       photoOf,
       myPhotoPath: photos[me.id]?.path ?? null,
       photosChanged,
     }),
-    [context, sb, channel, partnerOnline, connection, unread, refreshUnread, photoOf, photos, me.id, photosChanged],
+    [context, sb, channel, refreshUnread, photoOf, photos, me.id, photosChanged],
   );
+  const live = useMemo<CoupleLive>(() => ({ partnerOnline, connection, unread }), [partnerOnline, connection, unread]);
 
   return (
     <Ctx.Provider value={value}>
-      <ChatKeyProvider platform={platform}>{children}</ChatKeyProvider>
+      <LiveCtx.Provider value={live}>
+        <ChatKeyProvider platform={platform}>{children}</ChatKeyProvider>
+      </LiveCtx.Provider>
     </Ctx.Provider>
   );
 }

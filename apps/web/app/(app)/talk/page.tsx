@@ -27,6 +27,7 @@ import {
   useChatMedia,
   useCouple,
   useCoupleData,
+  useCoupleLive,
   useFeature,
   useMessages,
   useSnaps,
@@ -80,10 +81,10 @@ function Thread() {
     partner,
     mySlot,
     partnerSlot,
-    partnerOnline,
     photoOf,
     channel,
   } = useCouple();
+  const { partnerOnline } = useCoupleLive();
   const partnerPhoto = photoOf(partnerSlot);
   const active = usePageActive();
   const {

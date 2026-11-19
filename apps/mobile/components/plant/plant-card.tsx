@@ -3,7 +3,7 @@ import { CAN_COLORS, PLANT_STAGES, plantLine, plantScene, type PartnerSlot, type
 import { useCouple, usePlant } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { Check, Droplet } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { FadeOut, ZoomIn } from 'react-native-reanimated';
 import { cn } from '../ui/cn';
@@ -18,7 +18,8 @@ const WATERS = ['📸 A snap', '💗 Thinking of you', '💬 A message', '❓ To
  * Our little plant: grows on days we both show up for each other.
  * `animate` is off while the card can't be seen; moving it costs a redraw every frame.
  */
-export function PlantCard({ animate = true }: { animate?: boolean }) {
+// Memoised: Home re-renders on presence and typing, and the plant's SVG is the heaviest thing on it.
+export const PlantCard = memo(function PlantCard({ animate = true }: { animate?: boolean }) {
   const { couple, partner, mySlot, partnerSlot } = useCouple();
   const { state } = usePlant();
   const [open, setOpen] = useState(false);
@@ -102,7 +103,7 @@ export function PlantCard({ animate = true }: { animate?: boolean }) {
       </FormSheet>
     </>
   );
-}
+});
 
 function Can({ who, slot, watered }: { who: string; slot: PartnerSlot; watered: boolean }) {
   const c = usePalette();

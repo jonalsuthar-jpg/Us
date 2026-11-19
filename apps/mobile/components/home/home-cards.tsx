@@ -3,7 +3,8 @@ import { useCouple } from '@us/shared/react';
 import { router } from 'expo-router';
 import { ChevronRight, Mail, Star } from 'lucide-react-native';
 import { useState } from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Photo } from '../ui/photo';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useDaily } from '../connect/daily-question';
 import { DinnerArt, GradientView } from '../plan/art';
@@ -71,7 +72,7 @@ export function MemoryCard({ memory, photoUrl }: { memory: HomeData['memory']; p
       <View className="overflow-hidden rounded-[26px] border border-paper-edge bg-paper-raised">
         <View className="h-[150px] overflow-hidden" style={{ backgroundColor: '#EE9C82' }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
           {photoUrl ? (
-            <Image source={{ uri: photoUrl }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} resizeMode="cover" />
+            <Photo uri={photoUrl} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
           ) : width ? (
             <Svg width={width} height={150} viewBox="0 0 354 150" preserveAspectRatio="xMidYMid slice">
               <Circle cx={80} cy={104} r={56} fill="#FFE4A8" opacity={0.5} />

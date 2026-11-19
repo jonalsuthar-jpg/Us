@@ -19,10 +19,12 @@ import {
 } from '@us/shared';
 import { useBirthdayStoryMemories, useCouple, useCoupleData } from '@us/shared/react';
 import * as ImagePicker from '@/lib/image-picker';
+import { readyPicked } from '@/lib/photo';
 import { router } from 'expo-router';
 import { BookHeart, Heart, ImagePlus, Plane, Plus, Sparkles, Wine, X } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, View } from 'react-native';
+import { Photo as CachedPhoto } from '../ui/photo';
 import { EmptyNote, ErrorNote } from '../module-screen';
 import { Button, IconButton } from '../ui/button';
 import { GradientView } from '../plan/art';
@@ -47,8 +49,8 @@ function formatDay(key: string) {
 async function pickPhoto(): Promise<Picked | null> {
   const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, exif: false });
   const asset = res.canceled ? null : res.assets[0];
-  // Picker output is JPEG unless the source format survives (HEIC/PNG on iOS).
-  return asset ? { uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg' } : null;
+  // A camera-sized original would be several MB here and in every thumbnail.
+  return asset ? readyPicked(asset) : null;
 }
 
 export function MemoryTimeline() {
@@ -133,7 +135,7 @@ export function MemoryTimeline() {
           {resurfaced.map((m) => (
             <Pressable key={m.id} onPress={() => setViewing(m)} className="flex-row items-center gap-3 rounded-[18px] bg-white/70 p-2 dark:bg-paper-raised" accessibilityRole="button">
               {m.photo_path && urls[m.photo_path] ? (
-                <Image source={{ uri: urls[m.photo_path] }} style={{ width: 56, height: 56, borderRadius: 14 }} />
+                <CachedPhoto uri={urls[m.photo_path]!} cacheKey={m.photo_path} style={{ width: 56, height: 56, borderRadius: 14 }} />
               ) : (
                 <View className="h-14 w-14 items-center justify-center rounded-[14px] bg-gold-100">
                   <Sparkles size={22} color={c.onGold} />
@@ -278,7 +280,7 @@ function MemoryCard({ memory, index, url, rated, story, onOpen }: { memory: Memo
     >
       <View className="aspect-square overflow-hidden rounded-[6px] bg-paper-sunken">
         {memory.photo_path ? (
-          url ? <Image source={{ uri: url }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} resizeMode="cover" /> : null
+          url ? <CachedPhoto uri={url} cacheKey={memory.photo_path} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} /> : null
         ) : (
           <GradientView from={art.from} to={art.to} className="h-full w-full items-center justify-center">
             <art.Icon size={44} color={art.ink} />

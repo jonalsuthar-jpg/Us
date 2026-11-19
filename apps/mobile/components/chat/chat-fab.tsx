@@ -1,5 +1,5 @@
 import { TAB_FEATURES } from '@us/shared';
-import { useCouple, useFeatures } from '@us/shared/react';
+import { useCouple, useCoupleLive, useFeatures } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { MessageCircleHeart } from 'lucide-react-native';
@@ -16,7 +16,7 @@ export const ABOVE_CHAT_FAB = 153;
 /** Chat, a thumb away on every tab: bottom right, just above the tab bar. */
 export function ChatFab() {
   const has = useFeatures();
-  const { unread } = useCouple();
+  const { unread } = useCoupleLive();
   const c = usePalette();
   const insets = useSafeAreaInsets();
   if (!TAB_FEATURES.talk.some(has)) return null;

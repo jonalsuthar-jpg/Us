@@ -1,6 +1,7 @@
 import type { PartnerSlot } from '@us/shared';
 import { useOptionalCouple } from '@us/shared/react';
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
+import { Photo } from './photo';
 import Svg, { Circle } from 'react-native-svg';
 import { cn } from './cn';
 import { Text } from './text';
@@ -42,7 +43,7 @@ export function Avatar({
     >
       <View className={cn('items-center justify-center overflow-hidden rounded-full border-2', s.box, SLOT[slot])}>
         {photo ? (
-          <Image source={{ uri: photo }} className="h-full w-full" />
+          <Photo uri={photo} className="h-full w-full" />
         ) : (
           <Text className={cn('font-sans-semibold', s.text, INK[slot])}>{name.trim().charAt(0).toUpperCase() || '·'}</Text>
         )}

@@ -22,7 +22,7 @@ import { useForegroundTick } from './use-foreground-tick';
 import { DrawHub, HERE_EVERY_MS, HERE_TTL_MS, LIVE_CANVAS, type DrawSession, type DrawState, type PartnerCursor } from '../draw/session';
 import type { CoupleChannel } from '../realtime/couple-channel';
 import { useChatKey } from './chat-key-provider';
-import { useCouple } from './couple-provider';
+import { useCouple, useCoupleLive } from './couple-provider';
 
 const hubs = new WeakMap<CoupleChannel, DrawHub>();
 
@@ -55,7 +55,7 @@ export interface DrawSessionView {
  */
 export function useDrawSession(sid: string = LIVE_CANVAS, opts: { announce?: boolean } = {}): DrawSessionView {
   const hub = useDrawHub();
-  const { connection } = useCouple();
+  const { connection } = useCoupleLive();
   const session = useMemo(() => hub.session(sid), [hub, sid]);
   const announce = opts.announce !== false;
   const state = useSyncExternalStore(

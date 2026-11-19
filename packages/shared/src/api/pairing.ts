@@ -1,5 +1,6 @@
 import type { Couple, Invite, Profile } from '../database.types';
 import type { UsClient } from '../supabase';
+import { isForeground } from '../react/use-foreground-tick';
 import { removeMemoryPhoto, signedPhotoUrls, uploadMemoryPhoto } from './memory';
 import type { PartnerSlot } from '../tokens';
 
@@ -109,6 +110,11 @@ export function watchForPairing(
   let stopped = false;
   const tick = async () => {
     if (stopped) return;
+    // In the background, don't wake the radio every few seconds: look again once back in front.
+    if (!isForeground()) {
+      timer = setTimeout(tick, intervalMs);
+      return;
+    }
     try {
       const ctx = await getCoupleContext(sb, userId);
       if (ctx && !stopped) {

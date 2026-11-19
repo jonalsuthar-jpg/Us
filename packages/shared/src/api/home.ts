@@ -1,6 +1,6 @@
 import type { CalendarEvent, Countdown, Couple, Memory, Profile } from '../database.types';
 import type { UsClient } from '../supabase';
-import { listMemories, onThisDay, removeMemoryPhoto, signedPhotoUrls, uploadMemoryPhoto } from './memory';
+import { listHomeMemories, onThisDay, removeMemoryPhoto, signedPhotoUrls, uploadMemoryPhoto } from './memory';
 import { listEvents } from './plan';
 import { listCountdowns, partnerTaps } from './together';
 
@@ -105,7 +105,7 @@ export async function getHome(sb: UsClient, ids: { coupleId: string; meId: strin
     sb.from('couples').select('*').eq('id', ids.coupleId).single().then(unwrap<Couple>),
     sb.from('profiles').select('*').then(unwrap<Profile[]>),
     listEvents(sb, ids.coupleId, now, new Date(now.getTime() + 30 * 86_400_000)).catch(() => []),
-    listMemories(sb, ids.coupleId).catch(() => []),
+    listHomeMemories(sb, ids.coupleId, now).catch(() => []),
     listCountdowns(sb, ids.coupleId).catch(() => []),
   ]);
   const me = profiles.find((p) => p.id === ids.meId);

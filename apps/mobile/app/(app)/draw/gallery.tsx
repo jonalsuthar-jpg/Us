@@ -3,7 +3,8 @@ import { useCouple, useDrawings, useFeature } from '@us/shared/react';
 import { router } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Photo } from '@/components/ui/photo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { drawingTitle } from '@/components/draw/titles';
 import { FeatureOff } from '@/components/feature-off';
@@ -90,7 +91,7 @@ export default function Gallery() {
                   style={{ width: tile }}
                 >
                   <View className={cn('overflow-hidden rounded-[14px] border border-paper-edge', d.kind === 'doodle' ? 'bg-gold-100' : 'bg-white')} style={{ width: tile, height: (tile * 4) / 3 }}>
-                    {urls[d.png_path] ? <Image source={{ uri: urls[d.png_path] }} style={{ width: tile, height: (tile * 4) / 3 }} /> : null}
+                    {urls[d.png_path] ? <Photo uri={urls[d.png_path]!} cacheKey={d.png_path} style={{ width: tile, height: (tile * 4) / 3 }} /> : null}
                   </View>
                   <Text className="font-sans-semibold text-micro" numberOfLines={1}>
                     {drawingTitle(d, partner.id, partner.display_name)}

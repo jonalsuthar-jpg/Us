@@ -1,6 +1,7 @@
 import { clearMyPhoto, deleteAccount, friendlyError, setMyPhoto, unpair, updateMyProfile } from '@us/shared';
 import { COUPLE_ENDED_TOPIC, useCouple } from '@us/shared/react';
 import * as ImagePicker from '@/lib/image-picker';
+import { AVATAR_EDGE, readyPicked } from '@/lib/photo';
 import { router } from 'expo-router';
 import { Camera, ChevronLeft } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
@@ -57,8 +58,9 @@ export default function Settings() {
     setPhotoBusy(true);
     setPhotoError(null);
     try {
-      const bytes = await (await fetch(asset.uri)).arrayBuffer();
-      await setMyPhoto(sb, { id: me.id, avatar_url: myPhotoPath }, couple.id, bytes, asset.mimeType ?? 'image/jpeg');
+      const photo = await readyPicked(asset, AVATAR_EDGE);
+      const bytes = await (await fetch(photo.uri)).arrayBuffer();
+      await setMyPhoto(sb, { id: me.id, avatar_url: myPhotoPath }, couple.id, bytes, photo.mimeType);
       photosChanged();
     } catch (e) {
       setPhotoError(friendlyError(e));

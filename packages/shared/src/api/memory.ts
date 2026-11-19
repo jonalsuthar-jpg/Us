@@ -25,6 +25,24 @@ export async function listMemories(sb: UsClient, coupleId: string): Promise<Memo
   );
 }
 
+/**
+ * Just what Home needs to pick its memory (see featuredMemory): this date in
+ * earlier years, the latest with a photo, and the latest. Three tiny reads
+ * instead of the whole timeline.
+ */
+export async function listHomeMemories(sb: UsClient, coupleId: string, now = new Date()): Promise<Memory[]> {
+  const md = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const sameDay = Array.from({ length: 60 }, (_, i) => `${now.getFullYear() - 1 - i}-${md}`);
+  const base = () => sb.from('memories').select('*').eq('couple_id', coupleId);
+  const [onDay, withPhoto, latest] = await Promise.all([
+    base().in('happened_on', sameDay).then(unwrap<Memory[]>),
+    base().not('photo_path', 'is', null).order('happened_on', { ascending: false }).order('created_at', { ascending: false }).limit(1).then(unwrap<Memory[]>),
+    base().order('happened_on', { ascending: false }).order('created_at', { ascending: false }).limit(1).then(unwrap<Memory[]>),
+  ]);
+  const seen = new Set<string>();
+  return [...onDay, ...withPhoto, ...latest].filter((m) => !seen.has(m.id) && !!seen.add(m.id));
+}
+
 export async function createMemory(sb: UsClient, row: Insert<'memories'>): Promise<Memory> {
   return unwrap(await sb.from('memories').insert(row).select('*').single());
 }

@@ -1,7 +1,7 @@
 'use client';
 
-import { markDoodleSeen, type Drawing } from '@us/shared';
-import { useCouple, useDrawings, usePartnerDrawing, useUnseenDoodles } from '@us/shared/react';
+import { drawingUrls, markDoodleSeen, type Drawing } from '@us/shared';
+import { useCouple, usePartnerDrawing, useUnseenDoodles } from '@us/shared/react';
 import { PenLine } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -36,13 +36,22 @@ export function DrawingBanner() {
 export function DoodleNote() {
   const { sb, partner } = useCouple();
   const { doodles, reload } = useUnseenDoodles();
-  const { urls, reload: reloadUrls } = useDrawings();
+  // Just this doodle's link, not the whole gallery's (kept links make a repeat free).
+  const [urls, setUrls] = useState<Record<string, string>>({});
   const [open, setOpen] = useState<Drawing | null>(null);
   const [back, setBack] = useState(false);
   const doodle = doodles[0];
+  const path = doodle?.png_path;
   useEffect(() => {
-    if (doodle && !urls[doodle.png_path]) reloadUrls();
-  }, [doodle, urls, reloadUrls]);
+    if (!path) return;
+    let live = true;
+    void drawingUrls(sb, [path])
+      .then((links) => live && setUrls((prev) => ({ ...prev, ...links })))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [sb, path]);
 
   if (!doodle) return <DoodleDialog open={back} onOpenChange={setBack} />;
 

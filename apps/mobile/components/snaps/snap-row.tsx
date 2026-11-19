@@ -2,7 +2,8 @@ import { firstUnseen, type Snap } from '@us/shared';
 import { useCouple, useSnaps } from '@us/shared/react';
 import { Camera, Plus } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Photo } from '../ui/photo';
 import { IconButton } from '../ui/button';
 import { cn } from '../ui/cn';
 import { usePalette } from '../ui/palette';
@@ -92,7 +93,7 @@ function Ring({
         )}
       >
         {snap?.url ? (
-          <Image source={{ uri: snap.url }} className="h-full w-full rounded-full border-2 border-paper-raised" resizeMode="cover" />
+          <Photo uri={snap.url} cacheKey={snap.photo_path} className="h-full w-full rounded-full border-2 border-paper-raised" />
         ) : (
           <View className="h-full w-full items-center justify-center rounded-full bg-paper-sunken">
             {state === 'add' ? <Plus size={20} color={c.inkMuted} /> : null}
