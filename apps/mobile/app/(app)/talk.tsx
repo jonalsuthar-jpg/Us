@@ -260,10 +260,11 @@ function Thread() {
     ]);
   }
 
-  async function sendVoice(uri: string, durationMs: number) {
+  async function sendVoice(uri: string, durationMs: number, waveform: string) {
     const bytes = await (await fetch(uri)).arrayBuffer();
+    const meta = waveform ? { duration_ms: Math.round(durationMs), waveform } : { duration_ms: Math.round(durationMs) };
     sendWithReply('', {
-      media: { kind: 'audio', meta: { duration_ms: Math.round(durationMs) }, localUri: uri, upload: { body: bytes, contentType: 'audio/mp4' } },
+      media: { kind: 'audio', meta, localUri: uri, upload: { body: bytes, contentType: 'audio/mp4' } },
     });
   }
   const { partnerTyping, onComposerChange, onComposerSent } = useTyping();
@@ -565,7 +566,7 @@ function Thread() {
             writeCache(draftKey, '');
             sendWithReply(t);
           }}
-          onVoice={(uri, ms) => void sendVoice(uri, ms).catch(fail)}
+          onVoice={(uri, ms, wave) => void sendVoice(uri, ms, wave).catch(fail)}
           onSticker={() => setExpressions('sticker')}
           onAttach={() => setAttach(true)}
           onCamera={() => setCamera(true)}

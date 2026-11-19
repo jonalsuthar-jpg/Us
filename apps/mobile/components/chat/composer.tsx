@@ -1,4 +1,4 @@
-import { formatVoiceLength } from '@us/shared';
+import { dbToLevel, encodeWaveform, formatVoiceLength } from '@us/shared';
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { Camera, Mic, Paperclip, SendHorizontal, Square, Sticker, Trash2, X } from 'lucide-react-native';
@@ -11,6 +11,8 @@ import { Text } from '../ui/text';
 import type { ReplyQuote } from './bubble';
 
 const MAX_VOICE_MS = 5 * 60_000;
+/** High quality, with loudness readings for the waveform. */
+const RECORDING = { ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true };
 const ICON = { size: 22, strokeWidth: 1.8 };
 
 /**
@@ -45,7 +47,8 @@ export function Composer({
   editing?: { id: string; text: string } | null;
   onSaveEdit?: (text: string) => void;
   onCancelEdit?: () => void;
-  onVoice?: (uri: string, durationMs: number) => void;
+  /** A finished voice note, with its waveform (see encodeWaveform). */
+  onVoice?: (uri: string, durationMs: number, waveform: string) => void;
   /** Our stickers: send one, or make one from a photo. */
   onSticker?: () => void;
   /** The attach sheet: gallery, camera, draw, GIF, make a sticker. */
@@ -61,9 +64,14 @@ export function Composer({
   const c = usePalette();
   const canSend = text.trim().length > 0;
 
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const rec = useAudioRecorderState(recorder, 250);
+  const recorder = useAudioRecorder(RECORDING);
+  const rec = useAudioRecorderState(recorder, 100);
   const [recording, setRecording] = useState(false);
+  // Loudness while recording, for the note's waveform.
+  const levels = useRef<number[]>([]);
+  useEffect(() => {
+    if (recording) levels.current.push(dbToLevel(rec.metering));
+  }, [recording, rec.metering, rec.durationMillis]);
   // The field is swapped out while recording, so it's hooked up again when it's back.
   useRichContent(input, !recording, onRichContent);
 
@@ -98,6 +106,7 @@ export function Composer({
     try {
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
+      levels.current = [];
       recorder.record();
       setRecording(true);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -114,7 +123,7 @@ export function Composer({
     } finally {
       await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
     }
-    if (send && recorder.uri && ms > 600) onVoice?.(recorder.uri, ms);
+    if (send && recorder.uri && ms > 600) onVoice?.(recorder.uri, ms, encodeWaveform(levels.current));
   }
 
   return (

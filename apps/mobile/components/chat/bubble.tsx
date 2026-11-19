@@ -1,14 +1,15 @@
-import { describeCall, formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, linkParts, linkPreviewOf, messagePreview, type CallMedia, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
+import { describeCall, formatClock, formatVoiceLength, groupReactions, speedLabel, waveformBars, isGiphyUrl, isLinkedMedia, linkParts, linkPreviewOf, messagePreview, type CallMedia, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
 import { Image as AnimatedImage } from 'expo-image';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Ban, Headphones, Pause, Phone, PhoneMissed, Pin, Play, Tv, Video } from 'lucide-react-native';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, View } from 'react-native';
 import { cn } from '../ui/cn';
 import { Text } from '../ui/text';
 import { Ticks } from '../ui/ticks';
 import { usePalette } from '../ui/palette';
 import { Photo } from '../ui/photo';
+import { useVoiceSpeed } from '@/lib/voice-speed';
 
 // Mine: a light wash of my colour with dark text, so every word reads clearly.
 const MINE = { a: 'bg-rose-100', b: 'bg-teal-100' };
@@ -186,7 +187,7 @@ export const Bubble = memo(function Bubble({
             />
           ) : null}
 
-          {message.media_kind === 'audio' ? <VoiceNote url={url} durationMs={meta?.duration_ms} mine={mine} /> : null}
+          {message.media_kind === 'audio' ? <VoiceNote url={url} durationMs={meta?.duration_ms} waveform={meta?.waveform} mine={mine} /> : null}
 
           {message.media_kind === 'video' ? (
             <Pressable
@@ -273,20 +274,25 @@ const photoAspect = (meta: Message['media_meta']) => (meta?.width && meta?.heigh
  * A voice note. Nothing native is made until it's first played, so a thread
  * full of voice notes scrolls as lightly as text.
  */
-function VoiceNote({ url, durationMs, mine }: { url?: string; durationMs?: number; mine: boolean }) {
+function VoiceNote({ url, durationMs, waveform, mine }: { url?: string; durationMs?: number; waveform?: unknown; mine: boolean }) {
   const [on, setOn] = useState(false);
-  if (on && url) return <VoicePlayer url={url} durationMs={durationMs} mine={mine} />;
+  const bars = useMemo(() => waveformBars(waveform), [waveform]);
+  if (on && url) return <VoicePlayer url={url} durationMs={durationMs} bars={bars} mine={mine} />;
   return (
-    <VoiceRow mine={mine} playing={false} progress={0} disabled={!url} durationMs={durationMs} label={formatVoiceLength(durationMs)} onPress={() => setOn(true)} />
+    <VoiceRow mine={mine} playing={false} progress={0} bars={bars} disabled={!url} durationMs={durationMs} label={formatVoiceLength(durationMs)} onPress={() => setOn(true)} />
   );
 }
 
-/** Play / pause, progress and length, once the note has been played. */
-function VoicePlayer({ url, durationMs, mine }: { url: string; durationMs?: number; mine: boolean }) {
+/** Play / pause, progress, seeking and speed, once the note has been played. */
+function VoicePlayer({ url, durationMs, bars, mine }: { url: string; durationMs?: number; bars: number[]; mine: boolean }) {
   const player = useAudioPlayer({ uri: url });
   const status = useAudioPlayerStatus(player);
+  const [speed, stepSpeed] = useVoiceSpeed();
   const total = status.duration ? status.duration * 1000 : (durationMs ?? 0);
   const progress = total ? Math.min(1, (status.currentTime * 1000) / total) : 0;
+  useEffect(() => {
+    player.setPlaybackRate(speed, 'high');
+  }, [player, speed]);
   const play = () => {
     void setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
     player.play();
@@ -301,9 +307,13 @@ function VoicePlayer({ url, durationMs, mine }: { url: string; durationMs?: numb
       mine={mine}
       playing={status.playing}
       progress={progress}
+      bars={bars}
       durationMs={durationMs}
       label={formatVoiceLength(status.playing || status.currentTime ? status.currentTime * 1000 : durationMs)}
       onPress={() => (status.playing ? player.pause() : play())}
+      onSeek={total ? (at) => void player.seekTo((at * total) / 1000) : undefined}
+      speed={speed}
+      onSpeed={stepSpeed}
     />
   );
 }
@@ -312,19 +322,29 @@ function VoiceRow({
   mine,
   playing,
   progress,
+  bars,
   label,
   durationMs,
   disabled,
   onPress,
+  onSeek,
+  speed,
+  onSpeed,
 }: {
   mine: boolean;
   playing: boolean;
   progress: number;
+  bars: number[];
   label: string;
   durationMs?: number;
   disabled?: boolean;
   onPress: () => void;
+  /** Jump to a point, 0–1 through the note. */
+  onSeek?: (at: number) => void;
+  speed?: number;
+  onSpeed?: () => void;
 }) {
+  const [width, setWidth] = useState(0);
   const c = usePalette();
   const fg = mine ? '#fff' : c.ink;
   return (
@@ -339,10 +359,37 @@ function VoiceRow({
         {playing ? <Pause size={16} color={fg} fill={fg} /> : <Play size={16} color={fg} fill={fg} />}
       </Pressable>
       <View className="flex-1 gap-1">
-        <View className="h-1 overflow-hidden rounded-full bg-plum-100">
-          <View style={{ width: `${progress * 100}%` }} className="h-1 rounded-full bg-rose-500" />
+        <Pressable
+          accessibilityRole="adjustable"
+          accessibilityLabel="Voice note position"
+          accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}
+          disabled={!onSeek}
+          onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+          onPress={(e) => width && onSeek?.(Math.min(1, Math.max(0, e.nativeEvent.locationX / width)))}
+          className="h-7 flex-row items-center justify-between"
+        >
+          {bars.map((h, i) => (
+            <View
+              key={i}
+              style={{ height: `${Math.round(h * 100)}%`, width: 2.5, borderRadius: 2 }}
+              className={(i + 0.5) / bars.length <= progress ? 'bg-rose-500' : 'bg-plum-200 dark:bg-plum-500'}
+            />
+          ))}
+        </Pressable>
+        <View className="flex-row items-center justify-between">
+          <Text className="text-micro text-ink-muted">{label}</Text>
+          {onSpeed && speed ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Playback speed ${speedLabel(speed)}. Change speed`}
+              hitSlop={8}
+              onPress={onSpeed}
+              className="rounded-full bg-paper-sunken px-2 py-0.5"
+            >
+              <Text className="font-sans-semibold text-micro text-ink">{speedLabel(speed)}</Text>
+            </Pressable>
+          ) : null}
         </View>
-        <Text className="text-micro text-ink-muted">{label}</Text>
       </View>
     </View>
   );

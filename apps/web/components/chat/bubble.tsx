@@ -1,6 +1,7 @@
-import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, isOurStickerPath, linkParts, linkPreviewOf, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
-import { Ban, Copy, Download, MoreHorizontal, Pencil, Pin, PinOff, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { formatClock, formatVoiceLength, groupReactions, speedLabel, waveformBars, isGiphyUrl, isLinkedMedia, isOurStickerPath, linkParts, linkPreviewOf, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
+import { Ban, Copy, Download, MoreHorizontal, Pause, Pencil, Pin, PinOff, Play, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useVoiceSpeed } from '@/lib/voice';
 import { Ticks } from '@/components/ui/ticks';
 import { cn } from '@/lib/cn';
 
@@ -245,12 +246,12 @@ export function Bubble({
           }}
           onClick={(e) => {
             // Taps on links, media controls and quotes do their own thing.
-            if ((e.target as HTMLElement).closest('a,button,audio')) return;
+            if ((e.target as HTMLElement).closest('a,button,audio,[role=slider]')) return;
             onToggleActive?.();
           }}
           onDoubleClick={(e) => {
             // Double-tap toggles a heart.
-            if (!settled || (e.target as HTMLElement).closest('a,button,audio')) return;
+            if (!settled || (e.target as HTMLElement).closest('a,button,audio,[role=slider]')) return;
             window.getSelection()?.removeAllRanges();
             onReact?.(myReaction === '❤️' ? null : '❤️');
           }}
@@ -336,11 +337,10 @@ export function Bubble({
           {message.media_kind === 'audio' ? (
             <span className="flex min-w-[220px] flex-col gap-1 py-0.5">
               {url ? (
-                <audio controls preload="metadata" src={url} className="h-9 w-full" aria-label={`Voice note, ${formatVoiceLength(message.media_meta?.duration_ms)}`} />
+                <VoicePlayer url={url} durationMs={message.media_meta?.duration_ms} waveform={message.media_meta?.waveform} />
               ) : (
                 <span className="h-9 animate-pulse rounded-full bg-black/10" />
               )}
-              <span className="text-micro text-ink-muted">🎤 {formatVoiceLength(message.media_meta?.duration_ms)}</span>
             </span>
           ) : null}
 
@@ -416,6 +416,94 @@ export function Bubble({
         </button>
       )}
     </li>
+  );
+}
+
+/** Play / pause, a waveform that fills as it plays (click to jump), time and speed. */
+function VoicePlayer({ url, durationMs, waveform }: { url: string; durationMs?: number; waveform?: unknown }) {
+  const audio = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [at, setAt] = useState(0);
+  const [total, setTotal] = useState((durationMs ?? 0) / 1000);
+  const [speed, stepSpeed] = useVoiceSpeed();
+  const bars = useMemo(() => waveformBars(waveform), [waveform]);
+  useEffect(() => {
+    if (audio.current) audio.current.playbackRate = speed;
+  }, [speed, playing]);
+  const progress = total ? Math.min(1, at / total) : 0;
+  const seek = (fraction: number) => {
+    const a = audio.current;
+    if (!a || !total) return;
+    a.currentTime = fraction * total;
+    setAt(a.currentTime);
+  };
+  return (
+    <span className="flex items-center gap-2.5">
+      <audio
+        ref={audio}
+        src={url}
+        preload="metadata"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          setAt(0);
+        }}
+        onTimeUpdate={(e) => setAt(e.currentTarget.currentTime)}
+        // WebM from MediaRecorder often reports Infinity until it has played: keep the length we recorded.
+        onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setTotal(e.currentTarget.duration)}
+      />
+      <button
+        type="button"
+        aria-label={playing ? 'Pause voice note' : `Play voice note, ${formatVoiceLength(durationMs)}`}
+        onClick={() => (playing ? audio.current?.pause() : void audio.current?.play())}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+      >
+        {playing ? <Pause className="h-4 w-4 fill-current" /> : <Play className="ml-0.5 h-4 w-4 fill-current" />}
+      </button>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span
+          role="slider"
+          tabIndex={0}
+          aria-label="Voice note position"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(total)}
+          aria-valuenow={Math.round(at)}
+          aria-valuetext={`${formatVoiceLength(at * 1000)} of ${formatVoiceLength(total * 1000)}`}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            seek((e.clientX - r.left) / r.width);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+              e.preventDefault();
+              seek(Math.min(1, Math.max(0, progress + (e.key === 'ArrowRight' ? 0.05 : -0.05))));
+            }
+          }}
+          className="flex h-7 cursor-pointer items-center justify-between gap-[2px] rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+        >
+          {bars.map((h, i) => (
+            <span
+              key={i}
+              aria-hidden
+              style={{ height: `${Math.round(h * 100)}%` }}
+              className={cn('w-[3px] shrink-0 rounded-full', (i + 0.5) / bars.length <= progress ? 'bg-teal-600' : 'bg-ink/20')}
+            />
+          ))}
+        </span>
+        <span className="flex items-center justify-between text-micro text-ink-muted">
+          <span>{formatVoiceLength((playing || at ? at : total) * 1000)}</span>
+          <button
+            type="button"
+            aria-label={`Playback speed ${speedLabel(speed)}. Change speed`}
+            onClick={stepSpeed}
+            className="rounded-full bg-black/5 px-2 py-0.5 font-semibold text-ink hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+          >
+            {speedLabel(speed)}
+          </button>
+        </span>
+      </span>
+    </span>
   );
 }
 

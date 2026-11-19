@@ -55,6 +55,7 @@ import { Button, Spinner } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { PrivacyBadge } from "@/components/ui/privacy";
 import { useOpenedOnce, usePageActive } from "@/lib/hooks";
+import { waveformOf } from "@/lib/voice";
 import dynamic from "next/dynamic";
 
 // Drawing, sticker cut-out and GIF search are big and rarely open: each loads the first time it's opened.
@@ -308,11 +309,12 @@ function Thread() {
     setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
 
-  function sendVoice(blob: Blob, durationMs: number) {
+  async function sendVoice(blob: Blob, durationMs: number) {
+    const waveform = await waveformOf(blob);
     sendWithReply("", {
       media: {
         kind: "audio",
-        meta: { duration_ms: Math.round(durationMs) },
+        meta: waveform ? { duration_ms: Math.round(durationMs), waveform } : { duration_ms: Math.round(durationMs) },
         localUri: URL.createObjectURL(blob),
         upload: { body: blob, contentType: blob.type },
       },
@@ -710,7 +712,7 @@ function Thread() {
               sendWithReply(t);
             }}
             onPhoto={(f, caption) => void sendPhoto(f, caption).catch(fail)}
-            onVoice={sendVoice}
+            onVoice={(blob, ms) => void sendVoice(blob, ms).catch(fail)}
             onGif={() => setExpressions("gif")}
             onDoodle={draw ? () => setDoodle(true) : undefined}
             onSticker={() => setExpressions("sticker")}
