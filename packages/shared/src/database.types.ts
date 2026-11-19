@@ -306,6 +306,12 @@ export type Database = {
         Update: { title?: string; body?: string | null; happened_on?: string; photo_path?: string | null; kind?: MemoryKind };
         Relationships: [];
       };
+      notification_prefs: {
+        Row: { user_id: string; off: string[]; quiet_start: number | null; quiet_end: number | null; hide_preview: boolean; updated_at: string };
+        Insert: { user_id: string; off?: string[]; quiet_start?: number | null; quiet_end?: number | null; hide_preview?: boolean; updated_at?: string };
+        Update: { off?: string[]; quiet_start?: number | null; quiet_end?: number | null; hide_preview?: boolean; updated_at?: string };
+        Relationships: [];
+      };
       memory_ratings: {
         Row: { memory_id: string; owner_id: string; rating: number | null; note: string | null };
         Insert: { memory_id: string; owner_id: string; rating?: number | null; note?: string | null };

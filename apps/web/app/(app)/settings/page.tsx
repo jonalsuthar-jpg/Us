@@ -15,6 +15,7 @@ import { Segmented } from '@/components/ui/segmented';
 import { Sheet } from '@/components/ui/sheet';
 import { env } from '@/lib/env';
 import { logoutPush, pushPermission, requestPushPermission } from '@/lib/push';
+import { NotificationPrefsForm } from '@/components/settings/notification-prefs';
 import { playChime } from '@/lib/sounds';
 import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme';
 
@@ -256,6 +257,7 @@ export default function SettingsPage() {
             </button>
           </p>
         )}
+        <NotificationPrefsForm />
       </section>
 
       <section aria-labelledby="leaving" className="space-y-4">

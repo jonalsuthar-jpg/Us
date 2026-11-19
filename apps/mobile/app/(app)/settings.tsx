@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppLockSettings } from '@/components/app-lock-settings';
+import { NotificationPrefsForm } from '@/components/settings/notification-prefs';
 import { ChatSecurity } from '@/components/chat/chat-key';
 import { Avatar } from '@/components/ui/avatar';
 import { Button, IconButton } from '@/components/ui/button';
@@ -226,6 +227,7 @@ export default function Settings() {
         <Button variant="quiet" className="self-start px-0" onPress={() => void playChime()}>
           Hear the chime
         </Button>
+        <NotificationPrefsForm />
       </View>
 
       <View className="gap-3">

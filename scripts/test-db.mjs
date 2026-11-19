@@ -1072,6 +1072,20 @@ await test('revoking a chat device: mine only, and its sealed key goes', async (
   await rejects(as(alice, () => q(`insert into public.chat_key_wraps (couple_id, key_version, device_id, wrapped_key, wrapped_by) values ($1, 1, $2, 'x', $3)`, [couple.id, bobDevice, aliceDevice])), /row-level security/, 'sealed to a revoked device');
 });
 
+console.log('\nNotifications');
+
+await test('notification settings: mine alone, with sane quiet hours', async () => {
+  await as(alice, () => q(`insert into public.notification_prefs (user_id, off, quiet_start, quiet_end, hide_preview) values ($1, '{messages}', 1320, 420, true)`, [alice]));
+  assert.equal((await as(bob, () => q(`select * from public.notification_prefs where user_id = $1`, [alice]))).length, 0, 'partner can’t read mine');
+  await rejects(as(bob, () => q(`insert into public.notification_prefs (user_id) values ($1)`, [carol])), /row-level security/, 'someone else’s');
+  await rejects(as(bob, () => q(`insert into public.notification_prefs (user_id, quiet_start) values ($1, 60)`, [bob])), /quiet_pair/, 'half a window');
+  await rejects(as(bob, () => q(`insert into public.notification_prefs (user_id, quiet_start, quiet_end) values ($1, 2000, 60)`, [bob])), /check/, 'past midnight');
+  const mine = await as(alice, () => one(`update public.notification_prefs set off = '{}' where user_id = $1 returning off`, [alice]));
+  assert.deepEqual(mine.off, []);
+  await as(bob, () => q(`update public.notification_prefs set off = '{snaps}'`));
+  assert.deepEqual((await one(`select off from public.notification_prefs where user_id = $1`, [alice])).off, [], 'bob’s update touched nothing of mine');
+});
+
 console.log('\nCatch-up');
 
 await test('topic changes: stamped by either of us, read by the couple only, caught up from a cursor', async () => {

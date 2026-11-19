@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ackMessages } from '../api/messages';
 import { PROFILE_TOPIC, profilePhotos, type CoupleContext } from '../api/pairing';
+import { setMyTimezone } from '../api/plant';
 import { CoupleChannel, type ChannelStatus } from '../realtime/couple-channel';
 import type { UsClient } from '../supabase';
 import type { PartnerSlot } from '../tokens';
@@ -101,6 +102,11 @@ export function CoupleProvider({ sb, context, platform, onEnded, sleepInBackgrou
     },
     [sb, couple.id, me.id],
   );
+
+  // My time zone, for things timed to my day: quiet hours, reminders, "on this day".
+  useEffect(() => {
+    void setMyTimezone(sb, me).catch(() => {});
+  }, [sb, me]);
 
   // Both profile photos, refreshed when either of us changes theirs.
   const [photos, setPhotos] = useState<Record<string, { path: string | null; url: string | null }>>({});

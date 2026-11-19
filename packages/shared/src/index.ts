@@ -22,6 +22,7 @@ export * from './crypto';
 export * from './api/gifs';
 export * from './api/calls';
 export * from './api/push';
+export * from './api/notification-prefs';
 export * from './api/plan';
 export * from './api/plan-activity';
 export * from './api/memory';

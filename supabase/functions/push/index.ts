@@ -19,6 +19,8 @@
  */
 import { cors, json, hasFeature, requireCaller } from '../_shared/auth.ts';
 import { presign } from '../_shared/r2.ts';
+import { hiddenContent } from '../_shared/notify-rules.ts';
+import { deliveryFor, quietFields } from '../_shared/prefs.ts';
 
 type Category =
   | 'incoming_call'
@@ -342,9 +344,20 @@ Deno.serve(async (req) => {
     return json({ error: 'unknown_category' }, 400);
   }
 
+  // My partner's settings: a group they've turned off, their quiet hours, a private lock screen.
+  const delivery = await deliveryFor(admin, partnerId, category);
+  if (!delivery.deliver) return json({ skipped: 'turned_off' });
+  const quiet = delivery.quiet ? quietFields() : null;
+  if (delivery.quiet && !quiet) return json({ skipped: 'quiet_hours' });
+  if (delivery.hide) {
+    heading = 'Us';
+    content = hiddenContent(category);
+  }
+
   const style = CATEGORIES[category];
   const androidChannel = style.androidChannelEnv ? Deno.env.get(style.androidChannelEnv) : undefined;
   const appUrl = Deno.env.get('APP_URL');
+  const icon = delivery.hide ? null : avatar;
 
   const payload: Record<string, unknown> = {
     app_id: appId,
@@ -362,10 +375,11 @@ Deno.serve(async (req) => {
     ...(style.ttl ? { ttl: style.ttl } : {}),
     ...(collapseId ? { collapse_id: collapseId } : {}),
     ...(buttons ? { buttons, web_buttons: buttons.map((b) => ({ id: b.id, text: b.text })) } : {}),
-    ...(avatar ? { large_icon: avatar, chrome_web_icon: avatar, ios_attachments: { avatar } } : {}),
+    ...(icon ? { large_icon: icon, chrome_web_icon: icon, ios_attachments: { avatar: icon } } : {}),
     ...(appUrl ? { web_url: `${appUrl}${data.url}` } : {}),
     // The app's screens for Draw together live at /draw… (the web's at /connect/draw…).
     app_url: `us://${String(data.url).replace(/^\/connect\/draw/, '/draw').replace(/^\//, '')}`,
+    ...(quiet ?? {}),
   };
 
   const res = await fetch('https://api.onesignal.com/notifications', {
