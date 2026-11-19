@@ -33,8 +33,8 @@ const STYLE: Record<ListName, { tone: Tone; Icon: LucideIcon; ring: string; tile
 /** Shared lists: groceries, a bucket list, things to watch and read. Either of you ticks things off. */
 export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
   const { sb, couple, me, partner, mySlot, partnerSlot } = useCouple();
-  const items = useCoupleData('plan:lists', () => listItems(sb, couple.id), [sb, couple.id]);
-  const options = useCoupleData('plan:decisions', () => (onPick ? listDecisionOptions(sb, couple.id) : Promise.resolve([])), [sb, couple.id]);
+  const items = useCoupleData('plan:lists', () => listItems(sb, couple.id), [sb, couple.id, true]);
+  const options = useCoupleData('plan:decisions', () => (onPick ? listDecisionOptions(sb, couple.id) : Promise.resolve([])), [sb, couple.id, !!onPick]);
   const [list, setList] = useState<ListName>('groceries');
   const [text, setText] = useState('');
   const [showDone, setShowDone] = useState(false);

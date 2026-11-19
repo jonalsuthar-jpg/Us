@@ -111,7 +111,7 @@ export function useUnseenDoodles(enabled = true): { doodles: Drawing[]; reload: 
   useEffect(() => {
     reload();
     const off = channel.changes.on((e) => e.topic === DRAW_TOPIC && reload());
-    const offStatus = channel.status.on((s) => s === 'live' && reload());
+    const offStatus = channel.resync.on((r) => (r === 'all' || r.topics.has(DRAW_TOPIC)) && reload());
     return () => {
       off();
       offStatus();

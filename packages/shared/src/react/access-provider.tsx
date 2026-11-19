@@ -2,6 +2,10 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { getMyAccess, watchMyAccess, type MyAccess } from '../api/access';
 import type { FeatureKey } from '../features';
 import type { UsClient } from '../supabase';
+import { isForeground, onForegroundChange } from './use-foreground-tick';
+
+/** Same as the couple channel: a short trip to another app keeps the watch. */
+const SLEEP_AFTER_MS = 30_000;
 
 const Ctx = createContext<MyAccess | null>(null);
 
@@ -12,6 +16,12 @@ interface Props {
   initial: MyAccess;
   /** An admin suspended me (or took my approval back) while the app was open. */
   onBlocked?: (access: MyAccess) => void;
+  /**
+   * Phones: stop watching a while after the app goes to the background, so
+   * this channel doesn't keep the realtime socket (and the radio) awake once
+   * the couple channel has slept, and read my access again on return.
+   */
+  sleepInBackground?: boolean;
   children: ReactNode;
 }
 
@@ -20,7 +30,7 @@ interface Props {
  * features, or a feature switched off for everyone, shows up without a reload.
  * The database enforces all of this; the provider only keeps the UI honest.
  */
-export function AccessProvider({ sb, userId, initial, onBlocked, children }: Props) {
+export function AccessProvider({ sb, userId, initial, onBlocked, sleepInBackground, children }: Props) {
   const [access, setAccess] = useState(initial);
   const blocked = useRef(onBlocked);
   blocked.current = onBlocked;
@@ -41,12 +51,36 @@ export function AccessProvider({ sb, userId, initial, onBlocked, children }: Pro
         );
       }, 300);
     };
-    const stop = watchMyAccess(sb, userId, reload);
-    return () => {
-      clearTimeout(timer);
-      stop();
+    let stop: (() => void) | null = watchMyAccess(sb, userId, reload);
+    if (!sleepInBackground) {
+      return () => {
+        clearTimeout(timer);
+        stop?.();
+      };
+    }
+    let sleepTimer: ReturnType<typeof setTimeout> | undefined;
+    const onChange = (active: boolean) => {
+      clearTimeout(sleepTimer);
+      if (active) {
+        if (stop) return;
+        stop = watchMyAccess(sb, userId, reload);
+        reload(); // whatever changed while we weren't watching
+      } else if (stop) {
+        sleepTimer = setTimeout(() => {
+          stop?.();
+          stop = null;
+        }, SLEEP_AFTER_MS);
+      }
     };
-  }, [sb, userId]);
+    if (!isForeground()) onChange(false);
+    const off = onForegroundChange(onChange);
+    return () => {
+      off();
+      clearTimeout(timer);
+      clearTimeout(sleepTimer);
+      stop?.();
+    };
+  }, [sb, userId, sleepInBackground]);
 
   return <Ctx.Provider value={access}>{children}</Ctx.Provider>;
 }

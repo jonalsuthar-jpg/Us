@@ -623,6 +623,8 @@ export type Database = {
       create_invite: { Args: Record<PropertyKey, never>; Returns: Database['public']['Tables']['invites']['Row'] };
       redeem_invite: { Args: { invite_code: string }; Returns: Database['public']['Tables']['couples']['Row'] };
       ack_messages: { Args: { p_status: MessageStatus; p_ids?: string[] | null }; Returns: number };
+      touch_topic: { Args: { p_topic: string }; Returns: undefined };
+      changed_topics: { Args: { p_since: string | null }; Returns: { cursor: string; topics: string[] } };
       set_call_status: {
         Args: { p_call_id: string; p_status: CallStatus };
         Returns: Database['public']['Tables']['calls']['Row'];

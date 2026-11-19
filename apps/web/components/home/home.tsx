@@ -60,6 +60,8 @@ export function Home() {
   // Home summarises every area, so any change my partner makes anywhere refreshes it.
   const { reload } = home;
   useEffect(() => channel.changes.on((e) => e.from !== me.id && void reload()), [channel, me.id, reload]);
+  // Back after a gap: anything at all that moved meanwhile.
+  useEffect(() => channel.resync.on((r) => (r === 'all' || r.topics.size > 0) && void reload()), [channel, reload]);
   useEffect(() => setHello(greeting()), []);
 
   // "Thinking of you": send one, and show a heart when theirs arrives while Home is open.

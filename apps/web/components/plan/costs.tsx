@@ -41,7 +41,7 @@ type Row = Parameters<typeof addExpense>[1];
 export function PlanCosts({ adding, onAdded }: { adding?: boolean; onAdded?: () => void }) {
   const ctx = useCouple();
   const { sb, couple, me, partner, mySlot, partnerSlot } = ctx;
-  const expenses = useCoupleData('plan:costs', () => listExpenses(sb, couple.id), [sb, couple.id]);
+  const expenses = useCoupleData('plan:costs', () => listExpenses(sb, couple.id), [sb, couple.id, true]);
   const list = expenses.data ?? [];
   const balances = settleUp(list, couple).filter((b) => b.debtor);
   const [sheet, setSheet] = useState<'add' | 'settle' | null>(null);

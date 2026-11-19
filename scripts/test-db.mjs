@@ -1053,6 +1053,29 @@ await test('revoking a chat device: mine only, and its sealed key goes', async (
   await rejects(as(alice, () => q(`insert into public.chat_key_wraps (couple_id, key_version, device_id, wrapped_key, wrapped_by) values ($1, 1, $2, 'x', $3)`, [couple.id, bobDevice, aliceDevice])), /row-level security/, 'sealed to a revoked device');
 });
 
+console.log('\nCatch-up');
+
+await test('topic changes: stamped by either of us, read by the couple only, caught up from a cursor', async () => {
+  const start = (await as(alice, () => one(`select public.changed_topics(null) as r`))).r;
+  assert.deepEqual(start.topics, [], 'no cursor yet: nothing to catch up');
+  const since = new Date(Date.now() - 30_000).toISOString();
+  await as(bob, () => q(`select public.touch_topic('plan:lists')`));
+  await as(bob, () => q(`select public.touch_topic('plan:lists')`));
+  const r = (await as(alice, () => one(`select public.changed_topics($1) as r`, [since]))).r;
+  assert.ok(r.topics.includes('plan:lists'), 'list changed');
+  assert.ok(r.cursor, 'next cursor');
+  const later = (await as(alice, () => one(`select public.changed_topics(now() + interval '1 second') as r`))).r;
+  assert.deepEqual(later.topics, [], 'nothing after now');
+  assert.equal((await as(carol, () => q(`select * from public.topic_changes where couple_id = $1`, [couple.id]))).length, 0, 'outsider sees none');
+  const theirs = (await as(carol, () => one(`select public.changed_topics($1) as r`, [since]))).r;
+  assert.deepEqual(theirs.topics, [], "outsider's catch-up is empty");
+  await rejects(as(alice, () => q(`insert into public.topic_changes (couple_id, topic) values ($1, 'x')`, [couple.id])), /permission denied/, 'insert');
+  await rejects(as(alice, () => q(`update public.topic_changes set changed_at = now()`)), /permission denied/, 'update');
+  await as(dave, () => q(`select public.touch_topic('home')`)); // another couple (carol and dave)
+  const ours = (await as(alice, () => one(`select public.changed_topics($1) as r`, [since]))).r;
+  assert.ok(!ours.topics.includes('home'), "another couple's change never reaches us");
+});
+
 console.log('\nLeaving');
 
 await test('unpair: removes everything we shared, frees both of us', async () => {

@@ -35,7 +35,7 @@ const upright = (i: number, n: number) => {
 /** A wheel for the small decisions. The server picks (weighted, fair), the wheel shows it. */
 export function PlanDecide({ initialCategory }: { initialCategory?: string }) {
   const { sb, couple } = useCouple();
-  const options = useCoupleData('plan:decisions', () => listDecisionOptions(sb, couple.id), [sb, couple.id]);
+  const options = useCoupleData('plan:decisions', () => listDecisionOptions(sb, couple.id), [sb, couple.id, true]);
   const all = options.data ?? [];
   const categories = decisionCategories(all);
   const [category, setCategory] = useState<string | null>(initialCategory ?? null);

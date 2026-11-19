@@ -69,6 +69,8 @@ export function HomeScreen() {
 
   // Home summarises every area, so any change my partner makes anywhere refreshes it.
   useEffect(() => channel.changes.on((e) => e.from !== me.id && void home.reload()), [channel, me.id, home.reload]);
+  // Back after a gap: anything at all that moved meanwhile.
+  useEffect(() => channel.resync.on((r) => (r === 'all' || r.topics.size > 0) && void home.reload()), [channel, home.reload]);
   const [focused, setFocused] = useState(false);
   useFocusEffect(
     useCallback(() => {

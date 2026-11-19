@@ -38,8 +38,8 @@ const CARD = { shadowColor: '#3F2C66', shadowOpacity: 0.1, shadowRadius: 14, sha
 export function PlanLists({ onPick }: { onPick?: (category: string) => void }) {
   const { sb, couple, me, partner, mySlot, partnerSlot } = useCouple();
   const c = usePalette();
-  const items = useCoupleData('plan:lists', () => listItems(sb, couple.id), [sb, couple.id]);
-  const options = useCoupleData('plan:decisions', () => (onPick ? listDecisionOptions(sb, couple.id) : Promise.resolve([])), [sb, couple.id]);
+  const items = useCoupleData('plan:lists', () => listItems(sb, couple.id), [sb, couple.id, true]);
+  const options = useCoupleData('plan:decisions', () => (onPick ? listDecisionOptions(sb, couple.id) : Promise.resolve([])), [sb, couple.id, !!onPick]);
   const [list, setList] = useState<ListName>('groceries');
   const [text, setText] = useState('');
   const [showDone, setShowDone] = useState(false);

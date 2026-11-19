@@ -119,10 +119,15 @@ export function CallProvider({ rtc, forceRelay, keepCallWhenClosed, onClosedCall
     manager.rebind(signaling, backend);
     mounted = manager;
     // A call may already be ringing (opened from a push, or invite sent before we joined).
-    const check = () =>
+    // Coming to the front and the link waking land a moment apart: one look covers both.
+    let lastCheck = 0;
+    const check = () => {
+      if (Date.now() - lastCheck < 3_000) return;
+      lastCheck = Date.now();
       void findRingingCallFor(sb, me.id)
         .then((call) => call && manager.presentIncoming(call))
         .catch(() => {});
+    };
     check();
     const offStatus = channel.status.on((s) => {
       if (s !== 'live') return;

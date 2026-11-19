@@ -55,10 +55,10 @@ export function PlanHub({ sections, onOpen }: { sections: PlanSection[]; onOpen:
 
   // Same topics (and slices) as the sections, so caches and live updates are shared.
   const upcoming = useCoupleData('plan:calendar', () => (on('calendar') ? listUpcoming(sb, couple.id, new Date(new Date().setHours(0, 0, 0, 0)), 12) : Promise.resolve([])), [sb, couple.id, 'upcoming', today, on('calendar')]);
-  const items = useCoupleData('plan:lists', () => (on('lists') ? listItems(sb, couple.id) : Promise.resolve([])), [sb, couple.id]);
-  const expenses = useCoupleData('plan:costs', () => (on('costs') ? listExpenses(sb, couple.id) : Promise.resolve([])), [sb, couple.id]);
-  const options = useCoupleData('plan:decisions', () => (on('decide') ? listDecisionOptions(sb, couple.id) : Promise.resolve([])), [sb, couple.id]);
-  const labor = useCoupleData('plan:labour', () => (on('labour') ? listLabor(sb, couple.id, since) : Promise.resolve([])), [sb, couple.id, since]);
+  const items = useCoupleData('plan:lists', () => (on('lists') ? listItems(sb, couple.id) : Promise.resolve([])), [sb, couple.id, on('lists')]);
+  const expenses = useCoupleData('plan:costs', () => (on('costs') ? listExpenses(sb, couple.id) : Promise.resolve([])), [sb, couple.id, on('costs')]);
+  const options = useCoupleData('plan:decisions', () => (on('decide') ? listDecisionOptions(sb, couple.id) : Promise.resolve([])), [sb, couple.id, on('decide')]);
+  const labor = useCoupleData('plan:labour', () => (on('labour') ? listLabor(sb, couple.id, since) : Promise.resolve([])), [sb, couple.id, since, on('labour')]);
 
   const events = upcoming.data ?? [];
   const next = events[0];

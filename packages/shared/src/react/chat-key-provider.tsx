@@ -202,7 +202,7 @@ export function ChatKeyProvider({ platform, children }: { platform: string; chil
   useEffect(() => {
     void load();
     const offChanges = channel.changes.on((e) => e.topic === CHAT_KEYS_TOPIC && e.from !== me.id && void load());
-    const offStatus = channel.status.on((s) => s === 'live' && void load());
+    const offStatus = channel.resync.on((r) => (r === 'all' || r.topics.has(CHAT_KEYS_TOPIC)) && void load());
     return () => {
       offChanges();
       offStatus();

@@ -3,6 +3,27 @@ import { friendlyError } from '../errors';
 import { useCouple } from './couple-provider';
 import { cacheKey, readCache, writeCache } from './data-cache';
 
+/** Loads on their way, by cache key: two screens showing the same slice share one request. */
+const inflight = new Map<string, Promise<unknown>>();
+/** When each key last loaded, so a screen mounting right after another doesn't load it again. */
+const loadedAt = new Map<string, number>();
+const FRESH_MS = 10_000;
+
+function shared<T>(key: string, load: () => Promise<T>, join: boolean): Promise<T> {
+  const running = inflight.get(key) as Promise<T> | undefined;
+  if (join && running) return running;
+  const p = load().then((v) => {
+    loadedAt.set(key, Date.now());
+    return v;
+  });
+  inflight.set(key, p);
+  const clear = () => {
+    if (inflight.get(key) === p) inflight.delete(key);
+  };
+  p.then(clear, clear);
+  return p;
+}
+
 export interface CoupleData<T> {
   data: T | undefined;
   loading: boolean;
@@ -16,8 +37,9 @@ export interface CoupleData<T> {
 }
 
 /**
- * Load a slice of the couple's shared data and keep it fresh: refetches on
- * reconnect and whenever my partner writes to the same `topic`.
+ * Load a slice of the couple's shared data and keep it fresh: refetches
+ * whenever my partner writes to the same `topic`, and after a reconnect if
+ * the topic changed while we were away (see CoupleChannel.resync).
  *
  * Private data uses this too (with a topic nobody else pings), so it still
  * reloads after my own writes.
@@ -48,10 +70,11 @@ export function useCoupleData<T>(
   loadRef.current = load;
   const seq = useRef(0);
 
-  const reload = useCallback(async () => {
+  // `fresh`: after my own write, never reuse a load that started before it.
+  const load_ = useCallback(async (fresh: boolean) => {
     const mine = ++seq.current;
     try {
-      const next = await loadRef.current();
+      const next = await shared(keyRef.current, () => loadRef.current(), !fresh);
       if (mine !== seq.current) return; // a newer load superseded this one
       setData(next);
       writeCache(keyRef.current, next, keep === 'persist');
@@ -62,35 +85,41 @@ export function useCoupleData<T>(
       if (mine === seq.current) setLoading(false);
     }
   }, deps);
+  const reload = useCallback(() => load_(false), [load_]);
 
   useEffect(() => {
-    // With data already on screen, refresh quietly rather than as a visible load.
-    if (!hasData.current) setLoading(true);
-    void reload();
+    // Another screen just loaded this very slice: what's cached is current.
+    const recent = hasData.current && Date.now() - (loadedAt.get(keyRef.current) ?? 0) < FRESH_MS;
+    if (recent) setLoading(false);
+    else {
+      // With data already on screen, refresh quietly rather than as a visible load.
+      if (!hasData.current) setLoading(true);
+      void load_(false);
+    }
     const offChanges = channel.changes.on((e) => {
-      if (e.topic === topic && e.from !== me.id) void reload();
+      if (e.topic === topic && e.from !== me.id) void load_(true);
     });
-    const offStatus = channel.status.on((s) => {
-      if (s === 'live') void reload();
+    const offResync = channel.resync.on((r) => {
+      if (r === 'all' || r.topics.has(topic)) void load_(true);
     });
     return () => {
       offChanges();
-      offStatus();
+      offResync();
     };
-  }, [channel, me.id, topic, reload]);
+  }, [channel, me.id, topic, load_]);
 
   const mutate = useCallback(
     async <R,>(write: () => Promise<R>): Promise<R> => {
       try {
         const result = await write();
         channel.sendChanged(topic);
-        await reload();
+        await load_(true);
         return result;
       } catch (e) {
         throw new Error(friendlyError(e));
       }
     },
-    [channel, topic, reload],
+    [channel, topic, load_],
   );
 
   return { data, loading, error, reload, mutate };

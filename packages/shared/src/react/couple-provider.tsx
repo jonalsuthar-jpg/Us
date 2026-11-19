@@ -92,14 +92,15 @@ export function CoupleProvider({ sb, context, platform, onEnded, sleepInBackgrou
   const [photos, setPhotos] = useState<Record<string, { path: string | null; url: string | null }>>({});
   const loadPhotos = useCallback(() => {
     void profilePhotos(sb, [me.id, partner.id])
-      .then(setPhotos)
+      // Same photos and links: keep the old object, so nothing re-renders for it.
+      .then((next) => setPhotos((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next)))
       .catch(() => {});
   }, [sb, me.id, partner.id]);
   useEffect(() => {
     loadPhotos();
     const offChanges = channel.changes.on((e) => e.topic === PROFILE_TOPIC && loadPhotos());
-    // Signed URLs last an hour; a reconnect is a good moment to renew them.
-    const offStatus = channel.status.on((s) => s === 'live' && loadPhotos());
+    // Back after a gap: a new photo, or links that have run out (a long gap or a new day).
+    const offStatus = channel.resync.on((r) => (r === 'all' || r.topics.has(PROFILE_TOPIC)) && loadPhotos());
     return () => {
       offChanges();
       offStatus();
@@ -149,7 +150,8 @@ export function CoupleProvider({ sb, context, platform, onEnded, sleepInBackgrou
         if (type === 'INSERT' && row.sender_id === partner.id && row.status === 'sent') {
           void ackMessages(sb, 'delivered', [row.id]).catch(() => {});
         }
-        refreshUnread();
+        // Only my partner's messages count as unread; receipts and reactions on mine don't move it.
+        if (row.sender_id === partner.id) refreshUnread();
       }),
     ];
     void channel.join();

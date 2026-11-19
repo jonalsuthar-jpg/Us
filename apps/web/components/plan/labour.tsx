@@ -23,7 +23,7 @@ export function PlanLabour({ adding, onAdded }: { adding?: boolean; onAdded?: ()
   const ctx = useCouple();
   const { sb, couple, me, partner, mySlot, partnerSlot } = ctx;
   const since = toDateKey(addDays(new Date(), -WINDOW_DAYS));
-  const entries = useCoupleData('plan:labour', () => listLabor(sb, couple.id, since), [sb, couple.id, since]);
+  const entries = useCoupleData('plan:labour', () => listLabor(sb, couple.id, since), [sb, couple.id, since, true]);
   const [days, setDays] = useState<'7' | '30'>('30');
   const [sheet, setSheet] = useState(false);
   const [error, setError] = useState<string | null>(null);

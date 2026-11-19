@@ -59,6 +59,16 @@ export interface ChangedEvent {
 }
 
 /**
+ * Back after a gap (the link slept, or the network dropped): these topics
+ * changed meanwhile, or 'all' when we can't tell (first connection after a
+ * long gap, a new day, or the catch-up query failed).
+ */
+export type Resync = { topics: ReadonlySet<string> } | 'all';
+
+/** Only a gap shorter than this is caught up topic by topic. */
+const CATCH_UP_MAX_MS = 12 * 3600_000;
+
+/**
  * The couple's realtime link. Two Supabase channels:
  *
  *  - `couple:<id>` (private broadcast + presence) — typing, online presence,
@@ -76,6 +86,8 @@ export class CoupleChannel {
   readonly presence = new Emitter<Set<string>>();
   readonly status = new Emitter<ChannelStatus>();
   readonly changes = new Emitter<ChangedEvent>();
+  /** After every reconnect (not the first join): what to reload. See Resync. */
+  readonly resync = new Emitter<Resync>();
   /** Draw together: strokes, cursors and Draw & Guess moves (see draw/session.ts). */
   readonly draw = new Emitter<DrawEvent>();
   /** Talk cards on a call: which card is up (see games/cards.ts). */
@@ -91,6 +103,11 @@ export class CoupleChannel {
   private background = false;
   private sleeping = false;
   private sleepTimer?: ReturnType<typeof setTimeout>;
+  /** Server-side cursor for changed_topics, and when (and on which day) we were last live. */
+  private cursor: string | null = null;
+  private wasLive = false;
+  private lastLiveAt = 0;
+  private lastLiveDay = '';
 
   constructor(
     private readonly sb: UsClient,
@@ -194,6 +211,7 @@ export class CoupleChannel {
         if (status === 'SUBSCRIBED') {
           if (presence) await this.live?.track({ platform: this.platform, at: new Date().toISOString() });
           this.setStatus('live');
+          void this.catchUp();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           this.setStatus('offline');
         }
@@ -229,6 +247,38 @@ export class CoupleChannel {
   /** Tell my partner's open clients that `topic` changed. Carries no data. */
   sendChanged(topic: string) {
     void this.live?.send({ type: 'broadcast', event: 'changed', payload: { from: this.userId, topic } });
+    // Also stamped on the server, for clients whose link is asleep right now (see catchUp).
+    void Promise.resolve(this.sb.rpc('touch_topic', { p_topic: topic })).catch(() => {});
+  }
+
+  /**
+   * Just joined. The first time, only note where we are; screens load on
+   * mount. After a gap, ask once which topics changed and tell the screens.
+   */
+  private async catchUp() {
+    const now = Date.now();
+    const day = new Date(now).toDateString();
+    const first = !this.wasLive;
+    const since = this.cursor;
+    const longGap = now - this.lastLiveAt > CATCH_UP_MAX_MS || day !== this.lastLiveDay;
+    this.wasLive = true;
+    this.lastLiveAt = now;
+    this.lastLiveDay = day;
+    try {
+      const { data, error } = await this.sb.rpc('changed_topics', { p_since: first ? null : since });
+      if (error) throw error;
+      const res = data as { cursor: string; topics: string[] };
+      this.cursor = res.cursor;
+      if (first) return;
+      this.resync.emit(longGap || !since ? 'all' : { topics: new Set(res.topics) });
+    } catch {
+      if (!first) this.resync.emit('all');
+    }
+  }
+
+  /** Keep `lastLiveAt` honest while we stay connected, so a gap is measured from when it began. */
+  private noteLive() {
+    if (this._status === 'live') this.lastLiveAt = Date.now();
   }
 
   /** A drawing event for my partner's open canvas. Best effort, like typing. */
@@ -249,6 +299,7 @@ export class CoupleChannel {
   }
 
   private setStatus(s: ChannelStatus) {
+    this.noteLive();
     if (s === this._status) return;
     this._status = s;
     this.status.emit(s);

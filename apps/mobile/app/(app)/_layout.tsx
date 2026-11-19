@@ -141,6 +141,7 @@ export default function AppLayout() {
       sb={supabase}
       userId={ctx.me.id}
       initial={access}
+      sleepInBackground
       onBlocked={(a) => {
         saveAccess(ctx.me.id, a);
         router.replace('/waiting');
