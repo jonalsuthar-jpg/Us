@@ -15,6 +15,11 @@ import {
   PLAN_IDEAS,
   toDateKey,
   updateEvent,
+  deviceTimeZone,
+  REMINDERS,
+  REPEATS,
+  skipOccurrence,
+  type PlanEvent,
   whenLabel,
   type CalendarEvent,
   type EventKind,
@@ -34,13 +39,30 @@ import { Display, Text } from '../ui/text';
 import { AddPill, GroupLabel, Pick } from './bits';
 import { KIND_STYLE, SLOT_FILL, TONE, toneIcon } from './tones';
 
-type Draft = { id?: string; title: string; date: string; allDay: boolean; start: string; end: string; notes: string; kind: EventKind };
+type Draft = {
+  id?: string;
+  title: string;
+  date: string;
+  allDay: boolean;
+  start: string;
+  end: string;
+  notes: string;
+  kind: EventKind;
+  repeat: CalendarEvent['repeat'];
+  remind: number | null;
+  /** Opened from one occurrence of a repeating plan: "Just this one" can take it out. */
+  occurrence?: Pick<PlanEvent, 'series_id' | 'occurrence' | 'skip_dates'>;
+};
 
-function draftFor(dateKey: string, e?: CalendarEvent, title = ''): Draft {
-  if (!e) return { title, date: dateKey, allDay: false, start: '19:00', end: '', notes: '', kind: 'date' };
+function draftFor(dateKey: string, e?: CalendarEvent | PlanEvent, title = ''): Draft {
+  if (!e) return { title, date: dateKey, allDay: false, start: '19:00', end: '', notes: '', kind: 'date', repeat: 'none', remind: null };
   const hm = (iso: string) => new Date(iso).toTimeString().slice(0, 5);
+  const occ = 'series_id' in e && e.repeat !== 'none' ? { series_id: e.series_id, occurrence: e.occurrence, skip_dates: e.skip_dates } : undefined;
   return {
     id: e.id,
+    repeat: e.repeat ?? 'none',
+    remind: e.remind_before ?? null,
+    occurrence: occ,
     title: e.title,
     date: toDateKey(new Date(e.starts_at)),
     allDay: e.all_day,
@@ -96,7 +118,18 @@ export function PlanCalendar({ adding, onAdded }: { adding?: boolean; onAdded?: 
     const starts = d.allDay ? day : at(d.start);
     let ends = d.allDay || !d.end ? null : at(d.end);
     if (ends && ends < starts) ends = addDays(ends, 1);
-    const row = { title: d.title.trim(), starts_at: starts.toISOString(), ends_at: ends?.toISOString() ?? null, all_day: d.allDay, notes: d.notes.trim() || null, kind: d.kind };
+    const row = {
+      title: d.title.trim(),
+      starts_at: starts.toISOString(),
+      ends_at: ends?.toISOString() ?? null,
+      all_day: d.allDay,
+      notes: d.notes.trim() || null,
+      kind: d.kind,
+      repeat: d.repeat,
+      // Repeats land on this calendar (see recurrence.ts).
+      repeat_tz: deviceTimeZone(),
+      remind_before: d.remind,
+    };
     await events.mutate(() => (d.id ? updateEvent(sb, d.id, row) : createEvent(sb, { ...row, couple_id: couple.id, created_by: me.id })));
     void upcoming.reload();
     setSelected(d.date);
@@ -271,8 +304,8 @@ export function PlanCalendar({ adding, onAdded }: { adding?: boolean; onAdded?: 
             key={draft.id ?? draft.date + draft.title}
             initial={draft}
             onSave={save}
-            onDelete={async (id) => {
-              await events.mutate(() => deleteEvent(sb, id));
+            onDelete={async (id, justThis) => {
+              await events.mutate(() => (justThis && draft.occurrence ? skipOccurrence(sb, draft.occurrence) : deleteEvent(sb, id)));
               void upcoming.reload();
               setDraft(null);
             }}
@@ -312,7 +345,7 @@ export function PlanCalendar({ adding, onAdded }: { adding?: boolean; onAdded?: 
   }
 }
 
-function EventForm({ initial, onSave, onDelete }: { initial: Draft; onSave: (d: Draft) => Promise<void>; onDelete: (id: string) => Promise<void> }) {
+function EventForm({ initial, onSave, onDelete }: { initial: Draft; onSave: (d: Draft) => Promise<void>; onDelete: (id: string, justThis: boolean) => Promise<void> }) {
   const c = usePalette();
   const [d, setD] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -360,14 +393,40 @@ function EventForm({ initial, onSave, onDelete }: { initial: Draft; onSave: (d: 
           <Field className="flex-1" label="Until (optional)" value={d.end} onChangeText={(end) => set({ end })} placeholder="21:00" keyboardType="numbers-and-punctuation" error={end === null ? 'Like 21:00' : null} />
         </View>
       )}
+      <View className="gap-1.5">
+        <Text className="font-sans-medium text-small">Repeats</Text>
+        <View className="flex-row flex-wrap gap-2">
+          {REPEATS.map((r) => (
+            <Pick key={r.value} selected={d.repeat === r.value} onPress={() => set({ repeat: r.value })}>
+              {r.label}
+            </Pick>
+          ))}
+        </View>
+        {initial.occurrence ? <Text className="text-micro text-ink-muted">Changes apply to every time it repeats.</Text> : null}
+      </View>
+      <View className="gap-1.5">
+        <Text className="font-sans-medium text-small">Remind us</Text>
+        <View className="flex-row flex-wrap gap-2">
+          {REMINDERS.filter((r) => !d.allDay || r.value === null || r.value === 1440 || r.value === 0).map((r) => (
+            <Pick key={String(r.value)} selected={d.remind === r.value} onPress={() => set({ remind: r.value })}>
+              {d.allDay && r.value === 0 ? 'That morning' : r.label}
+            </Pick>
+          ))}
+        </View>
+      </View>
       <Field label="Notes (optional)" value={d.notes} onChangeText={(notes) => set({ notes })} multiline inputClassName="h-24 py-3" maxLength={2000} />
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       <Button loading={busy} disabled={!valid} onPress={() => run(() => onSave({ ...d, start: start ?? d.start, end: end || '' }))}>
         {initial.id ? 'Save' : 'Add to calendar'}
       </Button>
+      {initial.id && initial.occurrence ? (
+        <Button variant="quiet" disabled={busy} onPress={() => run(() => onDelete(initial.id!, true))}>
+          Delete this one
+        </Button>
+      ) : null}
       {initial.id ? (
-        <Button variant="quiet" disabled={busy} onPress={() => run(() => onDelete(initial.id!))}>
-          Delete
+        <Button variant="quiet" disabled={busy} onPress={() => run(() => onDelete(initial.id!, false))}>
+          {initial.occurrence ? 'Delete all' : 'Delete'}
         </Button>
       ) : null}
     </>

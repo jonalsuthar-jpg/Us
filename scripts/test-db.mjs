@@ -1072,6 +1072,21 @@ await test('revoking a chat device: mine only, and its sealed key goes', async (
   await rejects(as(alice, () => q(`insert into public.chat_key_wraps (couple_id, key_version, device_id, wrapped_key, wrapped_by) values ($1, 1, $2, 'x', $3)`, [couple.id, bobDevice, aliceDevice])), /row-level security/, 'sealed to a revoked device');
 });
 
+console.log('\nPlan: repeats and reminders');
+
+await test('repeating plans and reminders: sane values, and the sent-log is server only', async () => {
+  const e = await as(alice, () => one(`insert into public.calendar_events (couple_id, created_by, title, starts_at, repeat, repeat_tz, remind_before) values ($1, $2, 'Date night', now(), 'weekly', 'Asia/Kolkata', 60) returning id, repeat, skip_dates`, [couple.id, alice]));
+  assert.equal(e.repeat, 'weekly');
+  await rejects(as(alice, () => q(`insert into public.calendar_events (couple_id, created_by, title, starts_at, repeat) values ($1, $2, 'x', now(), 'daily')`, [couple.id, alice])), /check/, 'unknown repeat');
+  await rejects(as(alice, () => q(`insert into public.calendar_events (couple_id, created_by, title, starts_at, remind_before) values ($1, $2, 'x', now(), 7)`, [couple.id, alice])), /check/, 'odd reminder');
+  await rejects(as(alice, () => q(`insert into public.calendar_events (couple_id, created_by, title, starts_at, repeat_tz) values ($1, $2, 'x', now(), 'Mars/Olympus')`, [couple.id, alice])), /check/, 'unknown zone');
+  const skipped = await as(bob, () => one(`update public.calendar_events set skip_dates = skip_dates || '2026-12-04'::date where id = $1 returning skip_dates`, [e.id]));
+  assert.equal(skipped.skip_dates.length, 1, 'either of us takes one out');
+  await rejects(as(alice, () => q(`select * from public.push_sent`)), /permission denied/, 'read sent-log');
+  await rejects(as(alice, () => q(`insert into public.push_sent (key) values ('x')`)), /permission denied/, 'write sent-log');
+  await q(`delete from public.calendar_events where id = $1`, [e.id]);
+});
+
 console.log('\nPlan: our own lists, receipts');
 
 await test('own lists: ours alone, items stay inside them, at most twenty', async () => {

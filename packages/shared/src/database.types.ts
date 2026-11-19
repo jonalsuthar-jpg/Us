@@ -185,6 +185,13 @@ export type Database = {
           all_day: boolean;
           notes: string | null;
           kind: EventKind | null;
+          /** none | weekly | monthly | yearly, on the calendar of repeat_tz. */
+          repeat: 'none' | 'weekly' | 'monthly' | 'yearly';
+          repeat_tz: string | null;
+          /** Occurrences taken out, as local dates. */
+          skip_dates: string[];
+          /** Remind us this many minutes before (0, 15, 60, 1440), or not. */
+          remind_before: number | null;
           created_at: string;
         };
         Insert: {
@@ -193,6 +200,10 @@ export type Database = {
           created_by: string;
           title: string;
           starts_at: string;
+          repeat?: 'none' | 'weekly' | 'monthly' | 'yearly';
+          repeat_tz?: string | null;
+          skip_dates?: string[];
+          remind_before?: number | null;
           ends_at?: string | null;
           all_day?: boolean;
           notes?: string | null;
@@ -205,6 +216,10 @@ export type Database = {
           all_day?: boolean;
           notes?: string | null;
           kind?: EventKind | null;
+          repeat?: 'none' | 'weekly' | 'monthly' | 'yearly';
+          repeat_tz?: string | null;
+          skip_dates?: string[];
+          remind_before?: number | null;
         };
         Relationships: [];
       };

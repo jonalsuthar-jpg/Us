@@ -3,6 +3,7 @@ export * from './supabase';
 export * from './errors';
 export * from './format';
 export * from './voice';
+export * from './recurrence';
 export * from './uuid';
 export * as tokens from './tokens.js';
 export type { PartnerSlot } from './tokens.js';

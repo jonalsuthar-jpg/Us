@@ -145,6 +145,10 @@ describe('calendar helpers', () => {
       all_day: false,
       notes: null,
       kind: null,
+      repeat: 'none',
+      repeat_tz: null,
+      skip_dates: [],
+      remind_before: null,
       created_at: '',
     });
     const map = eventsByDay([ev('late', new Date(2026, 9, 2, 20)), ev('early', new Date(2026, 9, 2, 8)), ev('next', new Date(2026, 9, 3, 9))]);

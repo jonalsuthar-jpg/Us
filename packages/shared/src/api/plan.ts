@@ -5,6 +5,7 @@ import { uuid } from '../uuid';
 import { removeFiles, uploadFile } from './media';
 import { MEMORY_BUCKET } from './memory';
 import { signedUrls } from './signed-urls';
+import { expandEvents, seriesId, type Occurrence } from '../recurrence';
 
 type Insert<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert'];
 type Update<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update'];
@@ -80,30 +81,77 @@ export function formatEventTime(e: Pick<CalendarEvent, 'starts_at' | 'ends_at' |
 
 // -------------------------------------------------------------- calendar ---
 
-/** Events starting in [from, to). */
-export async function listEvents(sb: UsClient, coupleId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
-  return unwrap(
-    await sb
-      .from('calendar_events')
-      .select('*')
-      .eq('couple_id', coupleId)
-      .gte('starts_at', from.toISOString())
-      .lt('starts_at', to.toISOString())
-      .order('starts_at'),
-  );
+/** A plan as the calendar shows it: one occurrence, with its series (see recurrence.ts). */
+export type PlanEvent = Occurrence<CalendarEvent>;
+
+/** Plans that repeat and began before `to`: they may have occurrences in any later range. */
+async function repeating(sb: UsClient, coupleId: string, to: Date): Promise<CalendarEvent[]> {
+  return unwrap(await sb.from('calendar_events').select('*').eq('couple_id', coupleId).neq('repeat', 'none').lt('starts_at', to.toISOString()));
 }
 
-/** The next `limit` events from `from` on, however far ahead. */
-export async function listUpcoming(sb: UsClient, coupleId: string, from: Date, limit = 6): Promise<CalendarEvent[]> {
-  return unwrap(
-    await sb
+/** Events (and repeats) starting in [from, to). */
+export async function listEvents(sb: UsClient, coupleId: string, from: Date, to: Date): Promise<PlanEvent[]> {
+  const [once, repeats] = await Promise.all([
+    sb
       .from('calendar_events')
       .select('*')
       .eq('couple_id', coupleId)
+      .eq('repeat', 'none')
+      .gte('starts_at', from.toISOString())
+      .lt('starts_at', to.toISOString())
+      .order('starts_at')
+      .then(unwrap<CalendarEvent[]>),
+    repeating(sb, coupleId, to),
+  ]);
+  return expandEvents([...once, ...repeats], from, to);
+}
+
+/** The next `limit` events from `from` on (repeats within the next year), however far ahead. */
+export async function listUpcoming(sb: UsClient, coupleId: string, from: Date, limit = 6): Promise<PlanEvent[]> {
+  const yearOn = new Date(from.getTime() + 366 * 86_400_000);
+  const [once, repeats] = await Promise.all([
+    sb
+      .from('calendar_events')
+      .select('*')
+      .eq('couple_id', coupleId)
+      .eq('repeat', 'none')
       .gte('starts_at', from.toISOString())
       .order('starts_at')
-      .limit(limit),
-  );
+      .limit(limit)
+      .then(unwrap<CalendarEvent[]>),
+    repeating(sb, coupleId, yearOn),
+  ]);
+  const onceOut = expandEvents(once, from, new Date(8.64e15));
+  return [...onceOut, ...expandEvents(repeats, from, yearOn)].sort((a, b) => a.starts_at.localeCompare(b.starts_at)).slice(0, limit);
+}
+
+/** Take one occurrence out of a repeating plan ("Just this one"). */
+export async function skipOccurrence(sb: UsClient, e: Pick<PlanEvent, 'series_id' | 'occurrence' | 'skip_dates'>): Promise<void> {
+  unwrap(await sb.from('calendar_events').update({ skip_dates: [...(e.skip_dates ?? []), e.occurrence] }).eq('id', e.series_id));
+}
+
+export const REPEATS: { value: CalendarEvent['repeat']; label: string }[] = [
+  { value: 'none', label: 'Never' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'yearly', label: 'Yearly' },
+];
+
+export const REMINDERS: { value: number | null; label: string }[] = [
+  { value: null, label: 'No' },
+  { value: 0, label: 'At the time' },
+  { value: 15, label: '15 min before' },
+  { value: 60, label: '1 hour before' },
+  { value: 1440, label: '1 day before' },
+];
+
+/** This device's time zone, for a new repeating plan. */
+export function deviceTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
 }
 
 export const EVENT_KINDS: Record<EventKind, { label: string }> = {
@@ -122,12 +170,14 @@ export async function createEvent(sb: UsClient, row: Insert<'calendar_events'>):
   return unwrap(await sb.from('calendar_events').insert(row).select('*').single());
 }
 
+/** Change a plan (all of a repeating one); takes an occurrence id too. */
 export async function updateEvent(sb: UsClient, id: string, patch: Update<'calendar_events'>): Promise<CalendarEvent> {
-  return unwrap(await sb.from('calendar_events').update(patch).eq('id', id).select('*').single());
+  return unwrap(await sb.from('calendar_events').update(patch).eq('id', seriesId(id)).select('*').single());
 }
 
+/** Delete a plan (all of a repeating one); takes an occurrence id too. */
 export async function deleteEvent(sb: UsClient, id: string): Promise<void> {
-  unwrap(await sb.from('calendar_events').delete().eq('id', id));
+  unwrap(await sb.from('calendar_events').delete().eq('id', seriesId(id)));
 }
 
 // ------------------------------------------------------- decision picker ---
