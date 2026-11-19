@@ -208,7 +208,7 @@ export const Bubble = memo(function Bubble({
               {meta?.duration_ms ? (
                 <View className="absolute bottom-2 left-2 flex-row items-center gap-1 rounded-full bg-black/45 px-2 py-0.5">
                   <Video size={12} color="#fff" />
-                  <Text className="text-micro text-white">{formatVoiceLength(meta.duration_ms)}</Text>
+                  <Text className="text-micro text-white">{meta.hd ? `HD · ${formatVoiceLength(meta.duration_ms)}` : formatVoiceLength(meta.duration_ms)}</Text>
                 </View>
               ) : null}
             </Pressable>

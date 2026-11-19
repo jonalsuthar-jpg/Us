@@ -318,6 +318,9 @@ export function Bubble({
             )
           ) : null}
 
+          {message.media_kind === 'video' && message.media_meta?.hd ? (
+            <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/55 px-1.5 text-[11px] font-bold text-white">HD</span>
+          ) : null}
           {message.media_kind === 'video' ? (
             url ? (
               <video
@@ -328,7 +331,7 @@ export function Bubble({
                 poster={videoPoster(message.media_meta) ?? undefined}
                 className="block max-h-96 w-72 max-w-full rounded-[14px] bg-black"
                 style={message.media_meta?.width && message.media_meta?.height ? { aspectRatio: `${message.media_meta.width} / ${message.media_meta.height}` } : undefined}
-                aria-label={`Video, ${formatVoiceLength(message.media_meta?.duration_ms)}`}
+                aria-label={`${message.media_meta?.hd ? 'HD video' : 'Video'}, ${formatVoiceLength(message.media_meta?.duration_ms)}`}
               />
             ) : (
               <span className="block h-48 w-64 animate-pulse rounded-[14px] bg-black/20" aria-label="Video loading" />

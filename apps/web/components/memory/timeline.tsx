@@ -11,7 +11,7 @@ import {
   myRatings,
   offerRecap,
   recapCounts,
-  VIDEO_MAX_BYTES,
+  MEMORY_VIDEO_MAX_BYTES,
   VIDEO_MAX_MS,
   yearRecap,
   onThisDay,
@@ -542,7 +542,7 @@ function MemoryForm({
                   const f = e.target.files?.[0];
                   e.target.value = '';
                   if (!f) return;
-                  if (f.size > VIDEO_MAX_BYTES) return setError(`Videos can be up to ${Math.round(VIDEO_MAX_BYTES / 1_000_000)} MB. Trim it first.`);
+                  if (f.size > MEMORY_VIDEO_MAX_BYTES) return setError(`Videos can be up to ${Math.round(MEMORY_VIDEO_MAX_BYTES / 1_000_000)} MB. Trim it first.`);
                   const info = await videoInfo(f);
                   if (info?.duration_ms && info.duration_ms > VIDEO_MAX_MS + 1000) return setError('Videos can be up to a minute long. Trim it first.');
                   setError(null);

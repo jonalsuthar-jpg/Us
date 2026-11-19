@@ -66,7 +66,7 @@ async function pickPhotos(limit: number): Promise<Picked[]> {
 
 type PickedVideo = { uri: string; mimeType: string; meta: { width?: number; height?: number; duration_ms: number } };
 
-/** One video, up to a minute, made smaller on the phone if it's over the size limit. */
+/** One video, up to a minute, in high quality (see VIDEO_PROFILES.memory). */
 async function pickVideo(): Promise<PickedVideo | null> {
   const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], videoMaxDuration: VIDEO_MAX_MS / 1000, quality: 1 });
   const a = res.canceled ? null : res.assets[0];
@@ -81,7 +81,8 @@ async function pickVideo(): Promise<PickedVideo | null> {
       // unknown: fitVideo decides
     }
   }
-  const ready = await fitVideo({ uri: a.uri, width: a.width, height: a.height, durationMs }, size);
+  // Memories keep close to the original: 1080p at about 8 Mbps, or the file itself when it's already that efficient.
+  const ready = await fitVideo({ uri: a.uri, width: a.width, height: a.height, durationMs }, size, 'memory');
   return { uri: ready.uri, // Re-encoded videos are always mp4.
     mimeType: ready.uri === a.uri ? (a.mimeType ?? 'video/mp4') : 'video/mp4', meta: { width: ready.width, height: ready.height, duration_ms: ready.durationMs } };
 }

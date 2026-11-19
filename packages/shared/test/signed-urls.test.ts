@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isVideoPath, VIDEO_MAX_BYTES, VIDEO_TARGET, videoPlan } from '../src/api/chat-video';
+import { estimateVideoBytes, isVideoPath, VIDEO_MAX_BYTES, VIDEO_PROFILES, VIDEO_TARGET, videoPlan } from '../src/api/chat-video';
 import { forgetSignedUrl, signedUrls } from '../src/api/signed-urls';
 import { clearDataCache } from '../src/react/data-cache';
 import type { UsClient } from '../src/supabase';
@@ -70,22 +70,51 @@ describe('isVideoPath', () => {
 
 describe('videoPlan', () => {
   const MB = 1024 * 1024;
-  it('sends what already fits', () => {
-    expect(videoPlan(10 * MB, 30_000)).toEqual({ action: 'send' });
+  const size = (p: ReturnType<typeof videoPlan>, secs: number) => (p.action === 'compress' ? ((p.videoBitrate + p.audioBitrate) * secs) / 8 : 0);
+
+  it('keeps a clip that is already efficient', () => {
+    // 30 s at about 1.4 Mbps.
+    expect(videoPlan(5 * MB, 30_000)).toEqual({ action: 'send' });
+    expect(videoPlan(5 * MB, 30_000, 'hd')).toEqual({ action: 'send' });
   });
-  it('compresses a big minute to a bitrate that lands under the limit', () => {
-    const plan = videoPlan(80 * MB, 60_000);
-    expect(plan.action).toBe('compress');
-    if (plan.action !== 'compress') return;
-    expect(((plan.videoBitrate + plan.audioBitrate) * 60) / 8).toBeLessThan(VIDEO_MAX_BYTES);
-    expect(plan.maxHeight).toBe(720);
+
+  it('re-encodes a camera file even when it would fit, like WhatsApp', () => {
+    // 20 s straight off the camera: 20 MB, about 8 Mbps.
+    expect(videoPlan(20 * MB, 20_000)).toMatchObject({ action: 'compress', videoBitrate: VIDEO_PROFILES.standard.videoBitrate, maxHeight: 720 });
+    const hd = videoPlan(20 * MB, 20_000, 'hd');
+    expect(hd).toMatchObject({ action: 'compress', videoBitrate: VIDEO_PROFILES.hd.videoBitrate, maxHeight: 1080 });
+    expect(size(hd, 20)).toBeLessThan(12 * MB);
   });
-  it('caps the bitrate for short clips', () => {
-    const plan = videoPlan(40 * MB, 10_000);
-    expect(plan).toMatchObject({ action: 'compress', videoBitrate: VIDEO_TARGET.maxVideoBitrate, maxHeight: 720 });
+
+  it('scales a 4K clip down even if its bitrate looks fine', () => {
+    expect(videoPlan(10 * MB, 30_000, 'hd', 2160)).toMatchObject({ action: 'compress', maxHeight: 1080 });
+    expect(videoPlan(10 * MB, 30_000, 'hd', 1080)).toEqual({ action: 'send' });
   });
-  it('drops to 480p, then refuses, as the clip gets longer', () => {
+
+  it('stays under each limit for a full minute', () => {
+    for (const q of ['standard', 'hd', 'memory'] as const) {
+      const plan = videoPlan(400 * MB, 60_000, q);
+      expect(plan.action).toBe('compress');
+      expect(size(plan, 60)).toBeLessThan(VIDEO_PROFILES[q].maxBytes);
+    }
+    expect(VIDEO_MAX_BYTES).toBe(VIDEO_PROFILES.hd.maxBytes);
+  });
+
+  it('keeps memories close to the original', () => {
+    expect(videoPlan(80 * MB, 60_000, 'memory')).toMatchObject({ action: 'compress', videoBitrate: VIDEO_PROFILES.memory.videoBitrate, maxHeight: 1080 });
+    // An efficient 1080p file (about 9 Mbps) is kept as it is.
+    expect(videoPlan(65 * MB, 60_000, 'memory', 1080)).toEqual({ action: 'send' });
+  });
+
+  it('drops a step, then refuses, as the clip gets longer', () => {
     expect(videoPlan(200 * MB, 180_000)).toMatchObject({ action: 'compress', maxHeight: 480 });
     expect(videoPlan(500 * MB, 600_000)).toEqual({ action: 'too_large' });
+    expect(VIDEO_TARGET.minVideoBitrate).toBeGreaterThan(0);
+  });
+
+  it('estimates the size for the chooser', () => {
+    expect(estimateVideoBytes(5 * MB, 30_000, 'standard')).toBe(5 * MB);
+    expect(estimateVideoBytes(20 * MB, 20_000, 'hd')).toBeLessThan(estimateVideoBytes(20 * MB, 20_000, 'memory')!);
+    expect(estimateVideoBytes(500 * MB, 600_000, 'standard')).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { VIDEO_MAX_BYTES, VideoTooBigError, videoPlan } from '@us/shared';
+import { VIDEO_PROFILES, VideoTooBigError, videoPlan, type VideoQuality } from '@us/shared';
 import { requireOptionalNativeModule, type EventSubscription } from 'expo-modules-core';
 
 interface Compressed {
@@ -28,18 +28,22 @@ export interface FitVideo {
 }
 
 /**
- * The video as it can be sent: unchanged when it already fits under
- * VIDEO_MAX_BYTES, otherwise re-encoded smaller on the phone. Throws
- * VideoTooBigError when it can't be brought under the limit.
+ * The video as it's kept at `quality` (see VIDEO_PROFILES): unchanged when
+ * it's already efficient and small enough, otherwise re-encoded on the phone.
+ * Throws VideoTooBigError when it can't be brought under the limit. Without
+ * the encoder (an older build), a file that fits is sent as it is.
  */
-export async function fitVideo(video: FitVideo, sizeBytes: number, onProgress?: (p: number) => void): Promise<FitVideo> {
-  const plan = videoPlan(sizeBytes, video.durationMs);
+export async function fitVideo(video: FitVideo, sizeBytes: number, quality: VideoQuality = 'standard', onProgress?: (p: number) => void): Promise<FitVideo> {
+  const limit = VIDEO_PROFILES[quality].maxBytes;
+  const short = video.width && video.height ? Math.min(video.width, video.height) : undefined;
+  const plan = videoPlan(sizeBytes, video.durationMs, quality, short);
   if (plan.action === 'send') return video;
-  if (plan.action === 'too_large' || !native) throw new VideoTooBigError();
+  if (!native && sizeBytes > 0 && sizeBytes <= limit) return video;
+  if (plan.action === 'too_large' || !native) throw new VideoTooBigError(false, limit);
   const sub = onProgress ? native.addListener('onProgress', (e) => onProgress(e.progress)) : null;
   try {
     const out = await native.compress(video.uri, plan.maxHeight, plan.videoBitrate);
-    if (out.size > VIDEO_MAX_BYTES) throw new VideoTooBigError(true);
+    if (out.size > limit) throw new VideoTooBigError(true, limit);
     return { uri: out.uri, width: out.width || video.width, height: out.height || video.height, durationMs: out.durationMs || video.durationMs };
   } finally {
     sub?.remove();

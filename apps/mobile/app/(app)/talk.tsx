@@ -1,4 +1,4 @@
-import { canEdit, clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, stickerPath, uuid, STICKERS_TOPIC, VIDEO_MAX_BYTES, VIDEO_MAX_MS, VideoTooBigError, VideoTooLongError, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
+import { canEdit, clusters, formatDay, groupByDay, isLinkedMedia, isOurStickerPath, hiddenFor, isStickerMime, keepSticker, listPinned, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, searchMessages, snapReplyQuote, stickerPath, uuid, STICKERS_TOPIC, VIDEO_MAX_MS, VIDEO_PROFILES, VideoTooBigError, VideoTooLongError, type VideoQuality, type CallMedia, type Message, type PartnerSlot, type Sticker as OurSticker } from '@us/shared';
 import { cacheKey, readCache, useCallManager, useChatKey, useChatMedia, useCouple, useCoupleLive, useCoupleData, useFeature, useMessages, useSnaps, useTyping, writeCache } from '@us/shared/react';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -26,6 +26,7 @@ import { KeyboardMediaSheet, type KeyboardSendAs } from '@/components/chat/keybo
 import type { RichContent } from '@/modules/us-rich-input';
 import { clearMessageNotifications } from '@/modules/us-call';
 import { videoPosterOf } from '@/lib/video-poster';
+import { VideoQualitySheet } from '@/components/chat/video-quality-sheet';
 import { preparePhoto, type ReadyPhoto } from '@/lib/photo';
 import { TypingBubble } from '@/components/chat/typing-bubble';
 import { Avatar } from '@/components/ui/avatar';
@@ -181,44 +182,53 @@ function Thread() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], videoMaxDuration: VIDEO_MAX_MS / 1000, quality: 1 });
     if (res.canceled || !res.assets[0]) return;
     const a = res.assets[0];
-    await sendClip({ uri: a.uri, durationMs: Math.round(a.duration ?? 0), width: a.width, height: a.height, fileSize: a.fileSize, mimeType: a.mimeType }, '');
+    await askQuality({ uri: a.uri, durationMs: Math.round(a.duration ?? 0), width: a.width, height: a.height, fileSize: a.fileSize, mimeType: a.mimeType }, '');
+  }
+
+  /** Standard or HD: asked before a picked or recorded video goes. */
+  const [asking, setAsking] = useState<{ clip: CameraClip; caption: string; size: number } | null>(null);
+  async function askQuality(clip: CameraClip, caption: string) {
+    if (clip.durationMs > VIDEO_MAX_MS + 1000) throw new VideoTooLongError();
+    setAsking({ clip, caption, size: sizeOf(clip) });
+  }
+  function sizeOf(clip: CameraClip): number {
+    if (clip.fileSize) return clip.fileSize;
+    try {
+      return new DeviceFile(clip.uri).size ?? 0;
+    } catch {
+      return 0;
+    }
   }
 
   /**
-   * Recorded or picked: made smaller on the phone if it's over the limit,
-   * then encrypted and sent to R2 like any other file.
+   * Recorded or picked: re-encoded on the phone to the chosen quality (see
+   * VIDEO_PROFILES; an already efficient clip is kept as it is), then
+   * encrypted and sent to R2 like any other file.
    */
-  async function sendClip(clip: CameraClip, caption: string) {
+  async function sendClip(clip: CameraClip, caption: string, quality: VideoQuality = 'standard') {
     if (shrinking !== null) throw new Error('Wait for the last video to finish first.');
     if (clip.durationMs > VIDEO_MAX_MS + 1000) throw new VideoTooLongError();
-    let size = clip.fileSize ?? 0;
-    if (!size) {
-      try {
-        size = new DeviceFile(clip.uri).size ?? 0;
-      } catch {
-        // Unknown: read it below and check then.
-      }
-    }
-    let ready = clip;
-    if (size > VIDEO_MAX_BYTES) {
-      setShrinking(0);
-      try {
-        ready = await fitVideo(clip, size, setShrinking);
-      } finally {
-        setShrinking(null);
-      }
+    const size = sizeOf(clip);
+    const limit = VIDEO_PROFILES[quality].maxBytes;
+    let ready: CameraClip = clip;
+    setShrinking(0);
+    try {
+      const fit = await fitVideo(clip, size, quality, setShrinking);
+      if (fit.uri !== clip.uri) ready = { ...fit, fileSize: undefined, mimeType: 'video/mp4' };
+    } finally {
+      setShrinking(null);
     }
     const bytes = await (await fetch(ready.uri)).arrayBuffer();
-    if (bytes.byteLength > VIDEO_MAX_BYTES) throw new VideoTooBigError(ready !== clip);
+    if (bytes.byteLength > limit) throw new VideoTooBigError(ready !== clip, limit);
     const poster = await videoPosterOf(ready.uri);
-    const info = { width: ready.width, height: ready.height, duration_ms: Math.round(ready.durationMs) };
+    const info = { width: ready.width, height: ready.height, duration_ms: Math.round(ready.durationMs), ...(quality === 'hd' ? { hd: 1 } : {}) };
     sendWithReply(caption, {
       media: {
         kind: 'video',
         meta: poster ? { ...info, poster } : info,
         localUri: ready.uri,
         // Re-encoded videos are always mp4.
-        upload: { body: bytes, contentType: ready === clip ? (clip.mimeType ?? 'video/mp4') : 'video/mp4' },
+        upload: { body: bytes, contentType: ready.mimeType ?? 'video/mp4' },
       },
     });
   }
@@ -592,7 +602,16 @@ function Thread() {
         open={camera}
         onClose={() => setCamera(false)}
         onSend={(p, caption) => void sendImage(p, caption).catch(fail)}
-        onSendVideo={(clip, caption) => void sendClip(clip, caption).catch(fail)}
+        onSendVideo={(clip, caption) => void askQuality(clip, caption).catch(fail)}
+      />
+      <VideoQualitySheet
+        video={asking ? { durationMs: asking.clip.durationMs, sizeBytes: asking.size, width: asking.clip.width, height: asking.clip.height } : null}
+        onClose={() => setAsking(null)}
+        onPick={(q) => {
+          const a = asking;
+          setAsking(null);
+          if (a) void sendClip(a.clip, a.caption, q).catch(fail);
+        }}
       />
       <MessageActions
         message={acting}
