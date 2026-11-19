@@ -1,13 +1,14 @@
-import { describeCall, formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, messagePreview, type CallMedia, type Message, type PartnerSlot } from '@us/shared';
+import { describeCall, formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, linkParts, linkPreviewOf, messagePreview, type CallMedia, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
 import { Image as AnimatedImage } from 'expo-image';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Ban, Headphones, Pause, Phone, PhoneMissed, Pin, Play, Tv, Video } from 'lucide-react-native';
 import { memo, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, View } from 'react-native';
 import { cn } from '../ui/cn';
 import { Text } from '../ui/text';
 import { Ticks } from '../ui/ticks';
 import { usePalette } from '../ui/palette';
+import { Photo } from '../ui/photo';
 
 // Mine: a light wash of my colour with dark text, so every word reads clearly.
 const MINE = { a: 'bg-rose-100', b: 'bg-teal-100' };
@@ -215,7 +216,20 @@ export const Bubble = memo(function Bubble({
               <Text className="italic text-ink-soft">{mine ? 'You deleted this message' : 'This message was deleted'}</Text>
             </View>
           ) : null}
-          {hasText ? <Text className={cn('text-ink', photo && url && 'px-2.5 pt-1.5')}>{message.body}</Text> : null}
+          {hasText ? (
+            <Text className={cn('text-ink', photo && url && 'px-2.5 pt-1.5')}>
+              {linkParts(message.body ?? '').map((p, i) =>
+                p.href ? (
+                  <Text key={i} accessibilityRole="link" onPress={() => void Linking.openURL(p.href!)} className="text-teal-800 underline dark:text-teal-200">
+                    {p.text}
+                  </Text>
+                ) : (
+                  p.text
+                ),
+              )}
+            </Text>
+          ) : null}
+          {!deleted && !message.media_kind && linkPreviewOf(message.media_meta) ? <LinkCard preview={linkPreviewOf(message.media_meta)!} /> : null}
           {/* Encrypted, and this phone can't open it (yet). */}
           {message.e2ee === 'locked' || message.e2ee === 'failed' ? <Text className="italic text-ink-soft">{messagePreview(message)}</Text> : null}
           {/* The key is still on its way (a moment at most): a quiet bar, not a lock. */}
@@ -365,3 +379,29 @@ export const CallEntry = memo(function CallEntry({ message, myId, onCallBack }: 
     </View>
   );
 });
+
+function LinkCard({ preview }: { preview: LinkPreview }) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`${preview.title}, ${preview.host}`}
+      onPress={() => void Linking.openURL(preview.url)}
+      className="mt-1.5 flex-row gap-2.5 rounded-[12px] bg-black/5 p-2 active:bg-black/10"
+    >
+      {preview.image ? <Photo uri={preview.image} style={{ width: 56, height: 56, borderRadius: 8 }} /> : null}
+      <View className="flex-1 gap-0.5">
+        <Text className="font-sans-semibold text-small text-ink" numberOfLines={2}>
+          {preview.title}
+        </Text>
+        {preview.description ? (
+          <Text className="text-micro text-ink-soft" numberOfLines={2}>
+            {preview.description}
+          </Text>
+        ) : null}
+        <Text className="text-micro text-ink-muted" numberOfLines={1}>
+          {preview.host}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}

@@ -45,6 +45,9 @@ verify_jwt = true
 [functions.giphy]
 verify_jwt = true
 
+[functions.link-preview]
+verify_jwt = true
+
 [functions.fight-translator]
 verify_jwt = true
 

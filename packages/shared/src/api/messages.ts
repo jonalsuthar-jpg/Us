@@ -6,6 +6,7 @@ import { isVideoPath, removeChatVideo, uploadChatVideo, videoUrls } from './chat
 import { signedUrls } from './signed-urls';
 import { removeFiles, uploadFile } from './media';
 import { isOurStickerPath } from './stickers';
+import { fetchLinkPreview, firstLink, previewMeta } from './links';
 
 const SELECT = '*, call:calls(*)';
 
@@ -86,6 +87,17 @@ export function draftMessage(coupleId: string, senderId: string, body: string | 
   };
 }
 
+/** Details for a plain text: its link's preview (kept on the draft, so a retry doesn't fetch again). */
+async function textMeta(sb: UsClient, draft: Message, body: string): Promise<MediaMeta | null> {
+  if (draft.media_meta?.link_url) return draft.media_meta;
+  const url = firstLink(body);
+  if (!url) return null;
+  const preview = await fetchLinkPreview(sb, url);
+  if (!preview) return null;
+  draft.media_meta = previewMeta(preview);
+  return draft.media_meta;
+}
+
 /**
  * Insert a message (uploading its photo / voice note first, if any). The
  * client-generated id makes retries idempotent, and the upload path is
@@ -110,7 +122,9 @@ export async function sendMessage(sb: UsClient, draft: Message, cipher?: ChatCip
   }
   const linked = isLinkedMedia(draft.media_kind);
   const body = draft.body?.trim() ? draft.body : null;
-  const meta = mediaPath || linked ? draft.media_meta : null;
+  let meta = mediaPath || linked ? draft.media_meta : null;
+  // A plain text with a link carries a preview card, inside the encryption only.
+  if (cipher && !mediaPath && !linked && body) meta = await textMeta(sb, draft, body);
   const ciphertext = cipher ? cipher.encryptMessage(draft, { body, meta, mime: draft.upload ? baseMime(draft.upload.contentType) : null }) : null;
   const { data, error } = await sb
     .from('messages')
@@ -359,13 +373,15 @@ export async function searchMessages(
 
 type Opened = { body: string | null; meta: MediaMeta | null; mime: string | null } | null;
 
-// A message's ciphertext never changes once set, so each is opened once per key.
+// Each ciphertext is opened once per key. Keyed by id and ciphertext, so an
+// edited message (new ciphertext, same id) is opened again.
 const opened = new WeakMap<ChatCipher, Map<string, Opened>>();
 
 function openPayload(m: Message, cipher: ChatCipher): Opened {
   let cache = opened.get(cipher);
   if (!cache) opened.set(cipher, (cache = new Map()));
-  const hit = cache.get(m.id);
+  const key = `${m.id}:${m.ciphertext}`;
+  const hit = cache.get(key);
   if (hit !== undefined) return hit;
   let out: Opened = null;
   try {
@@ -379,7 +395,7 @@ function openPayload(m: Message, cipher: ChatCipher): Opened {
     out = null;
   }
   if (cache.size > 5000) cache.clear();
-  cache.set(m.id, out);
+  cache.set(key, out);
   return out;
 }
 

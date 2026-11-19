@@ -1,4 +1,4 @@
-import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, isOurStickerPath, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type Message, type PartnerSlot } from '@us/shared';
+import { formatClock, formatVoiceLength, groupReactions, isGiphyUrl, isLinkedMedia, isOurStickerPath, linkParts, linkPreviewOf, messagePreview, MORE_REACTIONS, QUICK_REACTIONS, type LinkPreview, type Message, type PartnerSlot } from '@us/shared';
 import { Ban, Copy, Download, MoreHorizontal, Pin, PinOff, Plus, Reply, Sticker, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Ticks } from '@/components/ui/ticks';
@@ -89,6 +89,7 @@ export function Bubble({
   const waiting = isLinkedMedia(message.media_kind) && !linked && !!message.media_path;
   const still = giphy ? (message.localUri ?? (typeof message.media_meta?.still === 'string' ? message.media_meta.still : undefined)) : undefined;
   const hasMedia = !deleted && !!message.media_kind && message.media_kind !== 'audio';
+  const preview = linkPreviewOf(message.media_meta);
   const [more, setMore] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -343,9 +344,18 @@ export function Bubble({
           ) : null}
           {hasText ? (
             <span className={cn('whitespace-pre-wrap break-words [overflow-wrap:anywhere]', url && message.media_kind === 'image' && 'block px-2.5 pb-1 pt-1.5')}>
-              {message.body}
+              {linkParts(message.body ?? '').map((p, i) =>
+                p.href ? (
+                  <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" className="text-teal-800 underline decoration-teal-800/40 underline-offset-2 hover:decoration-teal-800 dark:text-teal-200 dark:decoration-teal-200/50">
+                    {p.text}
+                  </a>
+                ) : (
+                  p.text
+                ),
+              )}
             </span>
           ) : null}
+          {!deleted && !message.media_kind && preview ? <LinkCard preview={preview} /> : null}
           {/* Encrypted, and this browser can't open it (yet). */}
           {message.e2ee === 'locked' || message.e2ee === 'failed' ? <span className="italic text-ink-muted">{messagePreview(message)}</span> : null}
           {/* The key is still on its way (a moment at most): a quiet bar, not a lock. */}
@@ -397,6 +407,26 @@ export function Bubble({
         </button>
       )}
     </li>
+  );
+}
+
+function LinkCard({ preview }: { preview: LinkPreview }) {
+  return (
+    <a
+      href={preview.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mb-1 mt-1.5 flex max-w-sm gap-2.5 rounded-[12px] bg-black/5 p-2 no-underline hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+    >
+      {preview.image ? (
+        <img src={preview.image} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-14 w-14 shrink-0 rounded-[8px] bg-paper-sunken object-cover" />
+      ) : null}
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="line-clamp-2 text-small font-semibold text-ink">{preview.title}</span>
+        {preview.description ? <span className="line-clamp-2 text-micro text-ink-soft">{preview.description}</span> : null}
+        <span className="truncate text-micro text-ink-muted">{preview.host}</span>
+      </span>
+    </a>
   );
 }
 
