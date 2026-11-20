@@ -11,11 +11,12 @@ export default function ConnectPage() {
   const daily = useFeature('daily_question');
   const draw = useFeature('draw');
   const quizzes = useFeature('quizzes');
+  const house = useFeature('house');
 
   return (
     <div className="min-h-full bg-paper">
       <div className="mx-auto max-w-3xl px-4 py-7 sm:px-8 sm:py-12">
-        {daily || draw || quizzes ? <ConnectCorner settings={<MobileSettingsLink className="h-10 w-10" />} /> : <FeatureOff />}
+        {daily || draw || quizzes || house ? <ConnectCorner settings={<MobileSettingsLink className="h-10 w-10" />} /> : <FeatureOff />}
       </div>
     </div>
   );

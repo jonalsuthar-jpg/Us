@@ -3,6 +3,7 @@ import type { Call, MessageRow } from '../database.types';
 import type { UsClient } from '../supabase';
 import type { DrawEvent } from '../draw/session';
 import type { CardEvent } from '../games/cards';
+import type { HouseEvent } from '../house/presence';
 import type { SignalEvent } from '../webrtc/signals';
 
 type Listener<T> = (value: T) => void;
@@ -92,6 +93,8 @@ export class CoupleChannel {
   readonly draw = new Emitter<DrawEvent>();
   /** Talk cards on a call: which card is up (see games/cards.ts). */
   readonly cards = new Emitter<CardEvent>();
+  /** Our House: where each of us is standing (see house/presence.ts). */
+  readonly house = new Emitter<HouseEvent>();
 
   private live?: RealtimeChannel;
   private db?: RealtimeChannel;
@@ -202,6 +205,7 @@ export class CoupleChannel {
       .on('broadcast', { event: 'changed' }, ({ payload }) => this.changes.emit(payload as ChangedEvent))
       .on('broadcast', { event: 'draw' }, ({ payload }) => this.draw.emit(payload as DrawEvent))
       .on('broadcast', { event: 'cards' }, ({ payload }) => this.cards.emit(payload as CardEvent))
+      .on('broadcast', { event: 'house' }, ({ payload }) => this.house.emit(payload as HouseEvent))
       .on('presence', { event: 'sync' }, () => {
         const state = this.live?.presenceState() ?? {};
         this.online = new Set(Object.keys(state));
@@ -284,6 +288,11 @@ export class CoupleChannel {
   /** A drawing event for my partner's open canvas. Best effort, like typing. */
   sendDraw(event: DrawEvent) {
     void this.live?.send({ type: 'broadcast', event: 'draw', payload: event });
+  }
+
+  /** Where I am in Our House, for my partner's open house. Best effort, like typing. */
+  sendHouse(event: HouseEvent) {
+    void this.live?.send({ type: 'broadcast', event: 'house', payload: event });
   }
 
   /** Show a talk card (or put them away) on my partner's call screen too. */

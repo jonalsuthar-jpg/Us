@@ -1,8 +1,8 @@
 'use client';
 
 import { dailyState, QUIZ_INFO, quizState, quizVerdict, rateGap, roundScore, type QuizKind, type QuizRound } from '@us/shared';
-import { useCouple, useCoupleLive, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, useQuizzes } from '@us/shared/react';
-import { Check, Lock, Play, Plus } from 'lucide-react';
+import { useCouple, useCoupleLive, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, usePartnerInHouse, useQuizzes } from '@us/shared/react';
+import { Check, House, Lock, Play, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { Initial } from '@/components/plan/bits';
@@ -31,6 +31,7 @@ const HOVER = 'transition hover:-translate-y-0.5 focus-visible:outline-none focu
 export function ConnectCorner({ settings }: { settings?: ReactNode }) {
   const draw = useFeature('draw');
   const quizzesOn = useFeature('quizzes');
+  const houseOn = useFeature('house');
   const dailyOn = useFeature('daily_question');
   const quizzes = useQuizzes(quizzesOn);
   const daily = useDaily();
@@ -61,6 +62,12 @@ export function ConnectCorner({ settings }: { settings?: ReactNode }) {
         </div>
         {settings}
       </header>
+
+      {houseOn ? (
+        <Section title="Our house" bar="bg-[#2F7FA8]">
+          <HouseCard />
+        </Section>
+      ) : null}
 
       {draw ? (
         <Section title="Draw" bar="bg-rose-400">
@@ -108,6 +115,28 @@ function Section({ title, bar, right, children }: { title: string; bar: string; 
 }
 
 const pill = 'mt-1.5 inline-flex self-start rounded-full px-3.5 py-[7px] text-[13px] font-bold';
+
+/** In through the front door: a home with a garden and a pool, where we both walk around. */
+function HouseCard() {
+  const { partner } = useCouple();
+  const inside = usePartnerInHouse();
+  const line = inside ? `${partner.display_name} is in the house now` : 'Two floors, a garden and a pool. Walk around together';
+  return (
+    <Link
+      href="/house"
+      className={cn('flex min-h-[132px] items-center gap-4 rounded-[26px] bg-gradient-to-br from-[#7CC6E8] to-[#2F7FA8] p-4 text-white shadow-[0_14px_26px_-16px_rgba(47,127,168,0.8)]', HOVER)}
+    >
+      <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[22px] bg-white/20">
+        <House size={44} strokeWidth={1.7} />
+      </span>
+      <span className="flex flex-1 flex-col gap-1">
+        <span className="text-[18px] font-bold">Our house</span>
+        <span className="line-clamp-2 text-[13px] text-white/90">{line}</span>
+        <span className={cn(pill, 'bg-white text-[#2F7FA8]')}>{inside ? 'Join' : 'Go in'}</span>
+      </span>
+    </Link>
+  );
+}
 
 function DrawTogetherCard() {
   const { partner } = useCouple();

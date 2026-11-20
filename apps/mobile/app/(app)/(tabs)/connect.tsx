@@ -18,6 +18,7 @@ export default function Connect() {
   const on = useFeature('daily_question');
   const draw = useFeature('draw');
   const quizzes = useFeature('quizzes');
+  const house = useFeature('house');
 
   return (
     <ScrollView
@@ -27,7 +28,7 @@ export default function Connect() {
       contentContainerClassName="px-4"
       refreshControl={<RefreshControl refreshing={daily.loading && !!daily.data} onRefresh={() => void daily.reload()} />}
     >
-      {on || draw || quizzes ? (
+      {on || draw || quizzes || house ? (
         <ConnectCorner
           daily={daily}
           settings={

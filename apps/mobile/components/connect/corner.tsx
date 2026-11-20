@@ -1,8 +1,8 @@
 import { dailyState, QUIZ_INFO, quizState, quizVerdict, rateGap, roundScore, type QuizKind, type QuizRound } from '@us/shared';
-import { useCouple, useCoupleLive, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, useQuizzes } from '@us/shared/react';
+import { useCouple, useCoupleLive, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, usePartnerInHouse, useQuizzes } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { Check, Lock, Play, Plus } from 'lucide-react-native';
+import { Check, House, Lock, Play, Plus } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { Pressable, View, type ViewStyle } from 'react-native';
 import { Photo } from '../ui/photo';
@@ -38,6 +38,7 @@ const tap = (go: () => void) => () => {
 export function ConnectCorner({ daily, settings }: { daily: ReturnType<typeof useDaily>; settings?: ReactNode }) {
   const draw = useFeature('draw');
   const quizzesOn = useFeature('quizzes');
+  const houseOn = useFeature('house');
   const dailyOn = useFeature('daily_question');
   const quizzes = useQuizzes(quizzesOn);
   const { partner } = useCouple();
@@ -70,6 +71,12 @@ export function ConnectCorner({ daily, settings }: { daily: ReturnType<typeof us
         </View>
         {settings}
       </View>
+
+      {houseOn ? (
+        <Section title="Our house" bar="bg-[#2F7FA8]">
+          <HouseCard />
+        </Section>
+      ) : null}
 
       {draw ? (
         <Section title="Draw" bar="bg-rose-400">
@@ -124,6 +131,34 @@ function Pill({ label, className, textClass }: { label: string; className: strin
     <View className={cn('mt-1.5 self-start rounded-full px-3.5 py-[7px]', className)}>
       <Text className={cn('font-sans-bold text-[13px]', textClass)}>{label}</Text>
     </View>
+  );
+}
+
+/** In through the front door: a home with a garden and a pool, where we both walk around. */
+function HouseCard() {
+  const { partner } = useCouple();
+  const inside = usePartnerInHouse();
+  const line = inside ? `${partner.display_name} is in the house now` : 'Two floors, a garden and a pool. Walk around together';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Our house. ${line}`}
+      onPress={tap(() => router.push('/house'))}
+      style={({ pressed }) => [{ borderRadius: 26, backgroundColor: '#2F7FA8' }, lift('#2F7FA8', 0.35), pressed && { transform: [{ scale: 0.98 }] }]}
+    >
+      <GradientView from="#7CC6E8" to="#2F7FA8" radius={26} className="min-h-[132px] flex-row items-center gap-4 p-4">
+        <View className="h-20 w-20 items-center justify-center rounded-[22px] bg-white/20">
+          <House size={44} color="#fff" strokeWidth={1.7} />
+        </View>
+        <View className="flex-1 gap-1">
+          <Text className="font-sans-bold text-[18px] text-white">Our house</Text>
+          <Text className="text-[13px] text-white/90" numberOfLines={2}>
+            {line}
+          </Text>
+          <Pill label={inside ? 'Join' : 'Go in'} className="bg-white" textClass="text-[#2F7FA8]" />
+        </View>
+      </GradientView>
+    </Pressable>
   );
 }
 
