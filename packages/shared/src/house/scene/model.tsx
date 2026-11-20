@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { FLOOR_H, HOUSE, POOL, STAIRS, WALL_T } from '../layout';
 import type { Materials } from './materials';
@@ -232,6 +232,31 @@ export interface HouseGroups {
   upper: THREE.Group | null;
   roof: THREE.Group | null;
   ground: THREE.Group | null;
+}
+
+/**
+ * The house as plain boxes, never drawn: what the camera bumps into. Testing
+ * against the real house would mean every triangle of its big meshes, every
+ * frame; these are a few hundred boxes.
+ */
+export function HouseColliders({ mats, into }: { mats: Materials; into: (g: THREE.Group | null) => void }) {
+  const box = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
+  useEffect(() => () => box.dispose(), [box]);
+  const kit = useMemo(() => ({ mats, box }), [mats, box]);
+  return (
+    <KitContext.Provider value={kit}>
+      <group ref={into} visible={false}>
+        <B a={[HOUSE.x0, -0.15, HOUSE.z0]} b={[HOUSE.x1, 0, HOUSE.z1]} m="wood" />
+        <Floor y={0} upper={false} />
+        <Stairs />
+        <B a={[HOUSE.x0, FLOOR_H - 0.15, -2.7]} b={[HOUSE.x1, FLOOR_H, HOUSE.z1]} m="wood" />
+        <B a={[HOUSE.x0, FLOOR_H - 0.15, HOUSE.z0]} b={[STAIRS.x0, FLOOR_H, -2.7]} m="wood" />
+        <B a={[STAIRS.x1, FLOOR_H - 0.15, HOUSE.z0]} b={[HOUSE.x1, FLOOR_H, -2.7]} m="wood" />
+        <Floor y={FLOOR_H} upper />
+        <Roof />
+      </group>
+    </KitContext.Provider>
+  );
 }
 
 /**

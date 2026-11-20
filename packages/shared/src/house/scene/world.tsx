@@ -29,7 +29,7 @@ import { Avatar, bodyAct, DANCE_S, HEART_S, newMotion, WAVE_S, type AvatarRig } 
 import { RealAvatar } from './avatar-real';
 import { Items, type HousePhoto } from './items';
 import { makeMaterials, type Quality } from './materials';
-import { HouseModel, type HouseGroups } from './model';
+import { HouseColliders, HouseModel, type HouseGroups } from './model';
 import { Optional, RealHouse } from './real-house';
 import { Sky, Water } from './sky';
 
@@ -177,6 +177,12 @@ export function HouseWorld(props: WorldProps) {
   const mats = useMemo(() => makeMaterials(quality), [quality]);
   useEffect(() => () => mats.dispose(), [mats]);
   const groups = useRef<HouseGroups>({ ground: null, upper: null, roof: null }).current;
+  const colliders = useRef<THREE.Group | null>(null);
+  const setColliders = useCallback((g: THREE.Group | null) => void (colliders.current = g), []);
+  // Sharpness that follows the frame rate (the web): lower to keep near 60 fps, back up when there's room.
+  const setDpr = useThree((s) => s.setDpr);
+  const maxDpr = useRef(0);
+  const pace = useRef({ frames: 0, time: 0, dpr: 0 });
   // The realistic house, once it has loaded into the groups.
   const [real, setReal] = useState(false);
   const onRealReady = useCallback(() => setReal(true), []);
@@ -736,8 +742,8 @@ export function HouseWorld(props: WorldProps) {
     if (close) {
       ray.set(target, tmp.dir);
       ray.far = dist + 0.3;
-      const roots = [groups.ground, groups.upper, groups.roof].filter((g): g is THREE.Group => !!g && g.visible);
-      const wall = ray.intersectObjects(roots, true).find((h) => shown(h.object) && solid(h.object) && !hitItem(h.object));
+      // Against the plain boxes (HouseColliders), not the real house's thousands of triangles.
+      const wall = colliders.current ? ray.intersectObjects([colliders.current], true).find((h) => solid(h.object)) : undefined;
       if (wall) dist = Math.max(0.5, wall.distance - 0.25);
       ray.far = Infinity;
     }
@@ -762,6 +768,18 @@ export function HouseWorld(props: WorldProps) {
       onHud?.(state);
     }
 
+    const pc = pace.current;
+    pc.frames++;
+    pc.time += rawDt;
+    if (pc.time >= 2 && typeof document !== 'undefined') {
+      const rate = pc.frames / pc.time;
+      const now = gl.getPixelRatio();
+      if (!maxDpr.current) maxDpr.current = now;
+      const next = rate < 50 ? Math.max(0.6, now - 0.25) : rate > 58 && now < maxDpr.current ? Math.min(maxDpr.current, now + 0.125) : now;
+      if (next !== now) setDpr(next);
+      pc.frames = 0;
+      pc.time = 0;
+    }
     const f = fps.current;
     f.frames++;
     f.time += rawDt;
@@ -924,6 +942,7 @@ export function HouseWorld(props: WorldProps) {
           </Suspense>
         </Optional>
       ) : null}
+      <HouseColliders mats={mats} into={setColliders} />
       <HouseModel
         mats={mats}
         groups={groups}
