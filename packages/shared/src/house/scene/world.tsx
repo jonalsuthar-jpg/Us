@@ -30,6 +30,7 @@ import { hoursNow, isNight, skyAt, weatherFor, type Weather } from '../sky';
 import { MUSIC_S, nearness, stepSound, type HouseSound } from '../sound';
 import type { HouseStore } from '../store';
 import { Avatar, bodyAct, DANCE_S, HEART_S, newMotion, WAVE_S, type AvatarRig } from './avatar';
+import { useFun, useUnlocked, withMailbox, type FunCmd, type FunHud, type HouseLetters } from './fun';
 import { RealAvatar } from './avatar-real';
 import { Items, type HousePhoto } from './items';
 import { makeMaterials, type Quality } from './materials';
@@ -51,7 +52,9 @@ export type HouseCmd =
   | { t: 'invite'; kind: Together }
   | { t: 'answer'; yes: boolean }
   /** Take a photo of what's on screen (into Memories). */
-  | { t: 'photo' };
+  | { t: 'photo' }
+  /** Things to do together (scene/fun.tsx): the menu, a pick in its card. */
+  | FunCmd;
 
 /**
  * What the screen around the canvas feeds in: the joystick, drags to look
@@ -131,6 +134,8 @@ export interface HudState {
   asking: Together | null;
   /** At the fridge: a note of theirs to read, or room to leave mine. */
   note: 'read' | 'write' | null;
+  /** Things to do together: a card, a line across the top, the screen dark, our moods. */
+  fun: FunHud;
 }
 
 export interface WorldProps {
@@ -169,6 +174,14 @@ export interface WorldProps {
   onReady?: () => void;
   /** Where the realistic house is (ground.glb, …). Without it, or until it loads, the box house stands in. */
   houseUrl?: string;
+  /** When we paired: what the house has unlocked. */
+  pairedAt?: string;
+  /** Today's birthday or anniversary ("Ana’s birthday"), for a party. */
+  celebrate?: string | null;
+  /** Letters for each other (the mailbox). */
+  letters?: HouseLetters | null;
+  /** Tell my partner, with a push, when they're not here. */
+  notify?: (event: 'gift' | 'turn' | 'in' | 'letter') => void;
 }
 
 /**
@@ -224,7 +237,7 @@ interface Me {
 
 /** The house, the two of us, the things in it and the camera. Goes inside a Canvas. */
 export function HouseWorld(props: WorldProps) {
-  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl, coupleId, sound, talking, capture } = props;
+  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl, coupleId, sound, talking, capture, pairedAt, celebrate, letters, notify } = props;
   const { gl, scene, camera, invalidate } = useThree();
   const mats = useMemo(() => makeMaterials(quality), [quality]);
   useEffect(() => () => mats.dispose(), [mats]);
@@ -240,15 +253,18 @@ export function HouseWorld(props: WorldProps) {
   const onRealReady = useCallback(() => setReal(true), []);
   const opened = useRef({ frames: 0, told: false });
   const objects = useRef(new Map<string, THREE.Object3D>()).current;
-  const placed = useMemo(() => placeItems(items), [items]);
-  const placedRef = useRef(placed);
-  placedRef.current = placed;
   // The clock decides day and night (and the moon button, for a few hours); checked every half minute.
   const [minute, setMinute] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setMinute(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
+  // What our days together have unlocked, and what today's dates put out.
+  const unlocked = useUnlocked(store, pairedAt, celebrate, minute);
+  const lettersWaiting = !!letters?.waiting;
+  const placed = useMemo(() => withMailbox(placeItems(items, unlocked), lettersWaiting), [items, unlocked, lettersWaiting]);
+  const placedRef = useRef(placed);
+  placedRef.current = placed;
   const night = isNight(items.get(SKY_KEY), new Date(minute));
   const weather: Weather = coupleId ? weatherFor(coupleId, today(new Date(minute))) : 'clear';
   const note = items.get(NOTE_KEY);
@@ -474,13 +490,40 @@ export function HouseWorld(props: WorldProps) {
 
   const myFloorY = () => floorY(me.at, me.pos.x);
 
+  const fun = useFun({
+    me,
+    them,
+    meId,
+    partnerId,
+    partnerName,
+    store,
+    sound,
+    photos,
+    night,
+    pairedAt,
+    celebrate,
+    letters,
+    unlocked,
+    now: () => clock.elapsedTime,
+    say: (text) => onMoment?.(text),
+    moment,
+    notify,
+    emote: (e) => controls.emotes.push(e),
+    walkTo: (x, y, z, useKey) => controls.cmds.push({ t: 'walkTo', x, y, z, use: useKey }),
+    sit: (key) => {
+      const it = placedRef.current.find((i) => i.key === key);
+      if (it) use(it);
+    },
+    standUp: () => standUp(),
+  });
+
   /** Things within reach that do something, nearest first. */
   const inReach = (all: PlacedItem[]) => {
     const fy = myFloorY();
     const out: { item: PlacedItem; d: number }[] = [];
     for (const it of all) {
       if (controls.decorate) break;
-      if (me.hold?.key === it.key || them.pose?.hk === it.key) continue;
+      if (me.hold?.key === it.key || them.pose?.hk === it.key || fun.flying(it.key)) continue;
       const rel = it.y - fy;
       if (rel < -0.4 || rel > 2.3) continue;
       const r = Math.min(Math.max(it.hw, it.hd), 0.9);
@@ -492,6 +535,9 @@ export function HouseWorld(props: WorldProps) {
 
   /** What the action button does right now. */
   const focusFor = (all: PlacedItem[]): { label: string; run: () => void } | null => {
+    if (fun.playing()) return null;
+    const ours = fun.focus();
+    if (ours) return ours;
     const p = them.pose;
     if (me.seat) return { label: 'Stand up', run: () => standUp() };
     const day = today();
@@ -589,6 +635,8 @@ export function HouseWorld(props: WorldProps) {
         return;
       case 'plant':
         return;
+      case 'fun':
+        return fun.use(item);
       case 'furniture': {
         if (!item.seats?.length) return;
         const taken = them.pose?.a;
@@ -634,6 +682,7 @@ export function HouseWorld(props: WorldProps) {
     while (controls.taps.length) {
       const [x, y] = controls.taps.shift()!;
       ray.setFromCamera(tmp.ndc.set(x, y), camera);
+      if (fun.tap(ray)) continue;
       const roots = [groups.ground, groups.upper, groups.roof].filter((g): g is THREE.Group => !!g && g.visible);
       const hit = ray.intersectObjects(roots, true).find((h) => shown(h.object) && !h.object.userData.noHit);
       if (!hit) continue;
@@ -690,6 +739,7 @@ export function HouseWorld(props: WorldProps) {
       if (mag > 0.08) moveSelected(wx / Math.max(mag, 1e-6), wz / Math.max(mag, 1e-6), mag, dt);
       else commitDraft();
     } else if (mag > 0.08) {
+      fun.moved();
       if (me.seat) standUp();
       me.path = [];
       me.pending = null;
@@ -761,7 +811,8 @@ export function HouseWorld(props: WorldProps) {
 
     // What I'm busy with ends on its own.
     if (me.doing && now >= me.doing.until) {
-      if (me.doing.act === 'cook') {
+      if (me.doing.key === 'dinner') fun.cooked();
+      else if (me.doing.act === 'cook') {
         if (!dish) save(DISH_KEY, { on: true });
         if (them.pose?.a === 'cook') moment(`cook:${Math.floor(now / 30)}`, 'You cooked together');
         else onMoment?.('Dinner’s on the table');
@@ -883,6 +934,8 @@ export function HouseWorld(props: WorldProps) {
         const rig = mineHeld ? me.rig : them.rig;
         if (rig) rig.hand(o.position);
         o.rotation.y = mineHeld ? me.heading : them.heading;
+      } else if (fun.place(it.key, o)) {
+        // Flying: the ball's in the air.
       } else if (decor.key === it.key && decor.draft) {
         o.position.set(decor.draft.x, it.y, decor.draft.z);
         o.rotation.y = decor.draft.ry;
@@ -1013,8 +1066,10 @@ export function HouseWorld(props: WorldProps) {
       marker.current.scale.setScalar(0.6 + (0.9 - markerLife.current) * 0.6);
     }
 
+    // Things to do: at the table or the telescope, the camera looks where they need it to.
+    const special = !controls.decorate && fun.camera(camera, dt);
     // Through my own eyes: the camera is my head, looking where I drag; I'm not drawn, so I don't see inside myself.
-    const firstPerson = controls.view === 'first' && !controls.decorate;
+    const firstPerson = controls.view === 'first' && !controls.decorate && !special;
     if (me.rig) me.rig.root.visible = !firstPerson;
     if (firstPerson) {
       const eye = me.seat?.lie ? 0.55 : me.seat ? 1.15 : me.at === 'pool' ? 0.75 : 1.62;
@@ -1030,11 +1085,11 @@ export function HouseWorld(props: WorldProps) {
     // The camera: behind my shoulder (close or far), pulled in front of any wall behind me.
     const close = !above;
     const lift = close ? (me.seat?.lie ? 0.7 : me.seat ? 1.0 : 1.45) : 1.1;
-    if (!firstPerson) target.lerp(tmp.look.set(me.pos.x, me.pos.y + lift, me.pos.z), Math.min(1, dt * (close ? 10 : 6)));
+    if (!firstPerson && !special) target.lerp(tmp.look.set(me.pos.x, me.pos.y + lift, me.pos.z), Math.min(1, dt * (close ? 10 : 6)));
     const cp = Math.cos(controls.pitch);
     if (!firstPerson) tmp.dir.set(Math.sin(controls.yaw) * cp, Math.sin(controls.pitch), Math.cos(controls.yaw) * cp);
     let dist = controls.dist;
-    if (close && !firstPerson) {
+    if (close && !firstPerson && !special) {
       ray.set(target, tmp.dir);
       ray.far = dist + 0.3;
       // Against the plain boxes (HouseColliders), not the real house's thousands of triangles.
@@ -1042,11 +1097,13 @@ export function HouseWorld(props: WorldProps) {
       if (wall) dist = Math.max(0.5, wall.distance - 0.25);
       ray.far = Infinity;
     }
-    if (!firstPerson) {
+    if (!firstPerson && !special) {
       tmp.cam.copy(target).addScaledVector(tmp.dir, dist);
       camera.position.lerp(tmp.cam, close ? Math.min(1, dt * 14) : 1);
       camera.lookAt(target);
     }
+
+    fun.frame(dt);
 
     // The buttons round the canvas: told only when something changed.
     const focus = focusFor(all);
@@ -1066,6 +1123,7 @@ export function HouseWorld(props: WorldProps) {
         if (!fridge || controls.decorate || floorOf(me.pos.y) !== 0 || Math.hypot(fridge.x - me.pos.x, fridge.z - me.pos.z) > 1.8) return null;
         return note?.text && note.by && note.by !== meId ? 'read' : 'write';
       })(),
+      fun: fun.hud(),
     };
     const sig = JSON.stringify(state);
     if (sig !== hud.current.last) {
@@ -1130,11 +1188,16 @@ export function HouseWorld(props: WorldProps) {
   const focusRun = useRef<(() => void) | null>(null);
 
   /** Everything as the store has it this moment: a command can follow another in the next frame, before React re-renders. */
-  const fresh = () => (store ? placeItems(store.items()) : placedRef.current);
+  const fresh = () => (store ? fun.fresh() : placedRef.current);
 
   function runCmd(cmd: HouseCmd) {
     const sel = decor.key ? fresh().find((i) => i.key === decor.key) : undefined;
     switch (cmd.t) {
+      case 'fun':
+      case 'pick':
+      case 'closePanel':
+        fun.cmd(cmd);
+        return;
       case 'use':
         focusRun.current?.();
         return;
@@ -1308,6 +1371,7 @@ export function HouseWorld(props: WorldProps) {
       />
       <Person look={mine} quality={quality} rigRef={setMine} ringColor="#FFFFFF" base={houseUrl} />
       <Person look={theirs} quality={quality} rigRef={setTheirs} ringColor="#FF8FB0" base={houseUrl} />
+      {fun.scene}
       <mesh ref={marker} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
         <ringGeometry args={[0.18, 0.26, 32]} />
         <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} />

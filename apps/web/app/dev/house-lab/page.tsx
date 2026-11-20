@@ -119,6 +119,7 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
           }}
           onFps={(f) => setFps(Math.round(f))}
           houseUrl={houseUrl}
+          pairedAt={PAIRED}
         />
       </Canvas>
       <div data-hud={who} className="pointer-events-none absolute left-3 top-3 rounded bg-black/50 px-2 py-1 font-mono text-[12px] text-white">
@@ -126,10 +127,15 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
         {hud?.holding ? ` · holding ${hud.holding}` : ''}
         {hud?.selected ? ` · picked ${hud.selected.label}` : ''}
         {moment ? ` · ★ ${moment}` : ''}
+        {hud?.fun.banner ? ` · ▸ ${hud.fun.banner}` : ''}
+        {hud?.fun.panel ? ` · [${hud.fun.panel.title}: ${hud.fun.panel.text ?? ''}]` : ''}
       </div>
     </div>
   );
 }
+
+/** Together long enough that the house has everything. */
+const PAIRED = new Date(Date.now() - 400 * 86_400_000).toISOString();
 
 export default function HouseLab() {
   if (process.env.NODE_ENV === 'production') notFound();
@@ -224,6 +230,75 @@ export default function HouseLab() {
         [500, () => setView(cb, 'far')],
         [600, () => sa.set(SKY_KEY, { on: false, at: new Date().toISOString() })],
         [1500, () => (ca.yaw = Math.PI * 0.75)],
+      ]);
+    if (scene === 'chess')
+      run([
+        [800, () => ca.cmds.push({ t: 'pick', id: 'chess' })],
+        [1200, () => cb.cmds.push({ t: 'walkTo', x: 4.6, y: 0, z: 1.95, use: 'chair_3' })],
+        [16000, () => ca.cmds.push({ t: 'pick', id: 'board' })],
+        [17000, () => {
+          const g = sa.get('game') as { s: { fen: string } } | null;
+          if (g) sa.set('game', { ...g, s: { ...g.s, fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3', last: ['b8', 'c6'] } });
+        }],
+        [19000, () => ca.taps.push([0.05, -0.3])],
+      ]);
+    if (scene === 'ludo')
+      run([
+        [800, () => ca.cmds.push({ t: 'pick', id: 'ludo' })],
+        [1200, () => cb.cmds.push({ t: 'walkTo', x: 4.6, y: 0, z: 1.95, use: 'chair_3' })],
+        [16000, () => ca.cmds.push({ t: 'pick', id: 'board' })],
+        [17000, () => {
+          const g = sa.get('game') as { s: Record<string, unknown> } | null;
+          if (g) sa.set('game', { ...g, s: { ...g.s, pos: [[5, 30], [-1, 12]], dice: null, turn: 0 } });
+        }],
+        [18000, () => ca.cmds.push({ t: 'pick', id: 'roll' })],
+      ]);
+    if (scene === 'gifts')
+      run([
+        [800, () => cb.cmds.push({ t: 'pick', id: 'leave:flowers' })],
+        [900, () => cb.cmds.push({ t: 'pick', id: 'leave:heart' })],
+        [1000, () => cb.cmds.push({ t: 'pick', id: 'leave:box' })],
+        [1100, () => cb.cmds.push({ t: 'pick', id: 'send', text: 'For the best weekend ever 💛' })],
+        [1500, () => ca.cmds.push({ t: 'walkTo', x: -3.2, y: 0, z: 2.3 })],
+        [1600, () => cb.cmds.push({ t: 'walkTo', x: -3.0, y: 0, z: 7.5 })],
+        [9000, () => ((ca.yaw = 0), (ca.pitch = 0.4))],
+        [11000, () => ca.cmds.push({ t: 'use' })],
+      ]);
+    if (scene === 'dinner')
+      run([
+        [700, () => sa.set(SKY_KEY, { on: true, at: new Date().toISOString() })],
+        [800, () => sa.set('dinner', { recipe: 'pasta', step: 4, first: 'a', second: 'b', done: true, at: new Date().toISOString() })],
+        [850, () => sa.set('dish', { on: true })],
+        [1000, () => ca.cmds.push({ t: 'walkTo', x: 1.6, y: 0, z: 1.25, use: 'chair_1' })],
+        [1200, () => cb.cmds.push({ t: 'walkTo', x: 4.6, y: 0, z: 1.95, use: 'chair_4' })],
+        [12000, () => ((ca.yaw = -Math.PI / 2 - 0.4), (ca.pitch = 0.35), (cb.yaw = Math.PI / 2 + 0.5))],
+      ]);
+    if (scene === 'garden')
+      run([
+        [700, () => sa.set(SKY_KEY, { on: true, at: new Date().toISOString() })],
+        [800, () => sa.set('garden_bed_1', { crop: 'tomato', days: ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04'] })],
+        [800, () => sa.set('garden_bed_2', { crop: 'sunflower', days: ['2026-11-01', '2026-11-02', '2026-11-03'] })],
+        [800, () => sa.set('garden_bed_3', { crop: 'tulip', days: ['2026-11-01'] })],
+        [900, () => sa.set('fire_pit', { on: true })],
+        [1000, () => ca.cmds.push({ t: 'walkTo', x: -6.3, y: 0, z: 14, use: 'log_bench' })],
+        [1200, () => cb.cmds.push({ t: 'walkTo', x: -10.4, y: 0, z: 11 })],
+        [12000, () => ((ca.yaw = Math.PI + 0.3), (ca.pitch = 0.35), (cb.yaw = -Math.PI / 2 - 0.3), (cb.pitch = 0.4))],
+      ]);
+    if (scene === 'tub')
+      run([
+        [700, () => sa.set(SKY_KEY, { on: true, at: new Date().toISOString() })],
+        [1000, () => ca.cmds.push({ t: 'walkTo', x: 9.2, y: 0, z: 9, use: 'hot_tub' })],
+        [1200, () => cb.cmds.push({ t: 'walkTo', x: 9.2, y: 0, z: 9.6, use: 'hot_tub' })],
+        [14000, () => ((ca.yaw = -Math.PI / 2 - 0.5), (ca.pitch = 0.45), (cb.yaw = Math.PI * 0.75), (cb.pitch = 0.3))],
+      ]);
+    if (scene === 'ball')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: -5, y: 0, z: 9.5, use: 'ball' })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: -9, y: 0, z: 12 })],
+        [16000, () => ca.cmds.push({ t: 'use' })],
+        [16450, () => cb.cmds.push({ t: 'use' })],
+        [19000, () => cb.cmds.push({ t: 'use' })],
+        [19500, () => ca.cmds.push({ t: 'use' })],
       ]);
     if (scene === 'pool')
       run([

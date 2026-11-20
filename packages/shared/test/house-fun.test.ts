@@ -26,6 +26,8 @@ import {
   unlocked,
   warmth,
   waterBed,
+  type Bed,
+  type Dinner,
   type Ludo,
 } from '../src/house/fun';
 
@@ -113,7 +115,7 @@ describe('gifts, the garden, unlocks, dinner', () => {
     expect(giftsWaiting(g, 'a', now).map((x) => x.kind)).toEqual(['box']);
   });
   it('grows a bed a step a watered day', () => {
-    let b = { crop: 'carrot' as const, days: [] as string[] };
+    let b: Bed = { crop: 'carrot', days: [] };
     for (const d of ['2026-11-20', '2026-11-20', '2026-11-21', '2026-11-22']) b = waterBed(b, d);
     expect(b.days).toHaveLength(3);
     expect(bedReady(b)).toBe(true);
@@ -125,7 +127,7 @@ describe('gifts, the garden, unlocks, dinner', () => {
     expect(nextUnlock(paired, now)).toEqual({ label: 'A telescope on the balcony', inDays: 65 });
   });
   it('takes dinner steps in turn', () => {
-    let d = { recipe: 'pasta' as const, step: 0, first: 'a', second: 'b' };
+    let d: Dinner = { recipe: 'pasta', step: 0, first: 'a', second: 'b' };
     expect(dinnerStep(d, 'b')).toBeNull();
     for (const who of ['a', 'b', 'a', 'b']) d = dinnerStep(d, who)!;
     expect(dinnerDone(d)).toBe(true);

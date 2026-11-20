@@ -49,7 +49,10 @@ describe('house: things in it', () => {
     expect(placed.find((i) => i.key === 'sofa')).toMatchObject({ x: 1, z: 2, y: 0, state: { color: '#4E6E8E' } });
     expect(placed.find((i) => i.key === 'add:plantpot:abcd1234')).toMatchObject({ model: 'plantPot', x: 3, z: 1, movable: true });
     expect(placed.some((i) => i.key.startsWith('add:nonsense'))).toBe(false);
-    expect(placed.length).toBe(ITEMS.length + 1);
+    // Things that come with our days together (or a date) wait until they're unlocked.
+    expect(placed.length).toBe(ITEMS.filter((i) => !i.unlock).length + 1);
+    expect(placed.some((i) => i.key === 'hot_tub')).toBe(false);
+    expect(placeItems(new Map(), new Set(['hot_tub'])).some((i) => i.key === 'hot_tub')).toBe(true);
   });
 
   it('keeps every key acceptable to the database', () => {

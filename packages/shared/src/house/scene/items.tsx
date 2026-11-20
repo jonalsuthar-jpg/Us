@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { isOn, isOpen, type ItemModel, type PlacedItem } from '../items';
 import type { Materials, Quality } from './materials';
+import { funModel } from './fun-models';
 import { REAL_MODELS, type RealModel } from './furniture';
 import { B, KitContext, useKit, type MatKey } from './model';
 import { Optional, plainGlass } from './real-house';
@@ -23,6 +24,8 @@ interface Look {
   open: boolean;
   night: boolean;
   photos: HousePhoto[];
+  /** Things that glow may light the room (not on low). */
+  lights: boolean;
 }
 
 export interface HousePhoto {
@@ -415,7 +418,7 @@ function Model({ look }: { look: Look }): ReactNode {
         </>
       );
   }
-  return null;
+  return funModel(item, on, look.night, look.lights);
 }
 
 /** The TV itself, on its stand or on the real cabinet: our photos when it's on. */
@@ -557,7 +560,7 @@ export function Items({ items, mats, quality, night, photos, objects, selected, 
             else if (objects.get(it.key)?.userData.itemKey === it.key) objects.delete(it.key);
           }}
         >
-          <Drawn it={it} assets={assets} look={{ item: it, paint: paintFor(it.state.color), on: isOn(it), open: isOpen(it), night, photos }} />
+          <Drawn it={it} assets={assets} look={{ item: it, paint: paintFor(it.state.color), on: isOn(it), open: isOpen(it), night, photos, lights: quality !== 'low' }} />
           {quality !== 'low' && ROOM_LIGHTS[it.key] && !carried.has(it.key) ? (
             <pointLight position={ROOM_LIGHTS[it.key]} intensity={isOn(it) ? (night ? 3.2 : 1.1) : 0} distance={7} decay={2} color="#FFD9A0" />
           ) : null}

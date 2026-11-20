@@ -1,10 +1,10 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
-import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
+import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
 import type * as THREE from 'three';
 import { webHouseSound } from '@/lib/house-sound';
-import { Aperture, Check, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, StickyNote, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react';
+import { Aperture, Check, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { housePackBase } from '@us/shared/house/light';
 import { useCouple } from '@us/shared/react';
 import { useRouter } from 'next/navigation';
@@ -148,6 +148,8 @@ export function HouseView() {
     return () => document.removeEventListener('visibilitychange', on);
   }, []);
 
+  const cardOpen = useRef(false);
+  cardOpen.current = !!hud.fun.panel;
   const nextViewRef = useRef(nextView);
   nextViewRef.current = nextView;
   // The keyboard: held keys make the stick.
@@ -168,9 +170,11 @@ export function HouseView() {
     const down = (e: KeyboardEvent) => {
       if (typing(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
+      if (k === 'escape' && cardOpen.current) return actions.closePanel();
       if (k === 'escape' && !document.fullscreenElement) return router.back();
       if (k === 'e' || k === 'enter') return actions.use();
       if (k === 'c') return nextViewRef.current();
+      if (k === 't') return actions.fun();
       if (k === '1') return actions.emote('wave');
       if (k === '2') return actions.emote('heart');
       if (k === '3') return actions.emote('dance');
@@ -257,6 +261,9 @@ export function HouseView() {
       </div>
 
       <div className="pointer-events-none absolute left-4 top-[72px] flex flex-col gap-2">
+        <HudButton label="Things to do together (T)" onClick={game.actions.fun} on={!!hud.fun.panel && !hud.fun.panel.side}>
+          <Sparkles size={18} />
+        </HudButton>
         <HudButton label={game.inCall ? 'Stop talking' : `Talk to ${game.partnerName}`} onClick={game.toggleTalk} on={game.inCall}>
           {game.inCall ? <PhoneOff size={18} /> : <Phone size={18} />}
         </HudButton>
@@ -271,8 +278,9 @@ export function HouseView() {
       <div className="pointer-events-none absolute inset-x-0 top-4 flex flex-col items-center gap-2">
         <Chip>
           <span className={game.partnerPlace ? 'h-2 w-2 rounded-full bg-sage-400' : 'h-2 w-2 rounded-full bg-white/50'} />
-          {game.partnerPlace ? `${game.partnerName} · ${game.partnerPlace}` : `${game.partnerName} isn’t in the house`}
+          {game.partnerPlace ? `${game.partnerName} · ${game.partnerPlace}${hud.fun.partnerMood ? ` · ${hud.fun.partnerMood}` : ''}` : `${game.partnerName} isn’t in the house`}
         </Chip>
+        {hud.fun.banner ? <span className="rounded-full bg-gold-500/90 px-4 py-2 text-small font-bold text-white">{hud.fun.banner}</span> : null}
         {game.decorate ? <Chip>{hud.selected ? 'Use WASD to slide it' : 'Click something to move it'}</Chip> : null}
         {game.moment ? <span className="rounded-full bg-rose-600/90 px-4 py-2 text-small font-bold text-white">{game.moment}</span> : null}
       </div>
@@ -381,6 +389,13 @@ export function HouseView() {
         </div>
       ) : null}
       {panel === 'note' ? <NotePanel game={game} onClose={() => setPanel(null)} /> : null}
+
+      {hud.fun.panel ? <FunCard key={hud.fun.panel.id} card={hud.fun.panel} game={game} /> : null}
+
+      {/* Hide and seek: the seeker counts with their eyes shut. */}
+      {hud.fun.cover ? (
+        <div className="absolute inset-0 flex items-center justify-center whitespace-pre-line bg-black/95 text-center text-[28px] font-bold leading-[40px] text-white">{hud.fun.cover}</div>
+      ) : null}
       {panel === 'look' ? <LookPanel game={game} onClose={() => setPanel(null)} /> : null}
       {panel === 'add' && game.decorate ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center">
@@ -622,6 +637,54 @@ function useHousePackUrl(): string | undefined {
 
 function Chip({ children }: { children: ReactNode }) {
   return <span className="flex items-center gap-2 rounded-full bg-black/35 px-3.5 py-2 text-small font-medium text-white">{children}</span>;
+}
+
+/** A card from the things to do: words, maybe a photo, buttons, maybe a box to type in. At the side while playing at the table. */
+function FunCard({ card, game }: { card: FunPanel; game: HouseGame }) {
+  const [text, setText] = useState('');
+  const side = !!card.side;
+  return (
+    <div className={side ? 'absolute right-4 top-[72px] w-64' : 'absolute inset-0 flex items-center justify-center p-4'} onPointerDown={(e) => e.stopPropagation()}>
+      <div className={side ? 'flex flex-col gap-2.5 rounded-3xl bg-black/70 p-4 text-white' : 'flex max-h-[88%] w-[520px] max-w-full flex-col gap-3 overflow-y-auto rounded-3xl bg-paper-raised p-5 text-ink shadow-xl'}>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className={side ? 'text-body font-bold' : 'text-lead font-bold'}>{card.title}</h2>
+          {!side ? (
+            <button type="button" aria-label="Close" onClick={game.actions.closePanel} className="rounded-full bg-black/5 p-1.5 hover:bg-black/10">
+              <X size={18} />
+            </button>
+          ) : null}
+        </div>
+        {card.image ? <img src={card.image} alt="" className="max-h-[300px] w-full rounded-2xl object-contain" /> : null}
+        {card.text ? <p className={side ? 'whitespace-pre-line text-small text-white/90' : 'whitespace-pre-line text-body text-ink-soft'}>{card.text}</p> : null}
+        {card.input ? (
+          <form
+            className="flex flex-col gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (text.trim()) game.actions.pick('send', text);
+            }}
+          >
+            <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, card.input!.max))} placeholder={card.input.placeholder} autoFocus rows={3} className="rounded-2xl bg-paper-sunken p-3 text-body text-ink outline-none focus:ring-2 focus:ring-gold-400" />
+            <button type="submit" disabled={!text.trim()} className="self-end rounded-full bg-rose-600 px-5 py-2.5 text-small font-bold text-white disabled:opacity-40">
+              {card.input.send}
+            </button>
+          </form>
+        ) : null}
+        <div className={side ? 'flex flex-col gap-2' : 'flex flex-wrap gap-2'}>
+          {card.options.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => game.actions.pick(o.id)}
+              className={side ? 'rounded-full bg-white/15 px-3.5 py-2 text-left text-small font-medium hover:bg-white/25' : 'rounded-full bg-paper-sunken px-3.5 py-2.5 text-small font-medium hover:bg-rose-50'}
+            >
+              {o.emoji ? `${o.emoji}  ${o.label}` : o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function HudButton({ label, onClick, big, on, children }: { label: string; onClick: () => void; big?: boolean; on?: boolean; children: ReactNode }) {

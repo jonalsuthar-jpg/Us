@@ -70,6 +70,11 @@ export class HouseStore {
     return this.cache.items;
   }
 
+  /** Every saved thing's key. */
+  keys(): string[] {
+    return [...this.rows.keys()];
+  }
+
   get(key: string): Record<string, unknown> | null {
     return this.rows.get(key)?.state ?? null;
   }

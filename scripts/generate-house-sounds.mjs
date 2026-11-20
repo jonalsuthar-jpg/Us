@@ -168,3 +168,26 @@ wav('rain', seamless(mix(gain(lowpass(noise(6.4), 1800), 0.5), Array.from({ leng
   wav('music', x);
 }
 wav('chime', mix(...[880, 1108.7, 1318.5].map((f, n) => pad(env(Array.from({ length: len(1.2) }, (_, i) => Math.sin((2 * Math.PI * f * i) / RATE)), 0.005, 0.45), n * 0.09))).map((v) => v * 0.4));
+
+// Things to do together.
+// Dice: a few quick wooden knocks.
+wav('dice', mix(...[0, 0.07, 0.15, 0.21, 0.3].map((t, k) => pad(gain(env(lowpass(noise(0.06), 2400), 0.0005, 0.012), 0.9 - k * 0.12), t))));
+// A party popper: a sharp pop, then a little sparkle.
+wav('pop', mix(gain(env(lowpass(noise(0.12), 3500), 0.0005, 0.02), 1.1), pad(gain(env(highpass(noise(0.5), 5000), 0.01, 0.15), 0.25), 0.05)));
+// A throw: air rushing past.
+wav('swish', gain(env(highpass(lowpass(noise(0.35), 3000), 500), 0.08, 0.09), 0.7));
+// A catch: a soft slap.
+wav('catch', mix(gain(env(lowpass(noise(0.1), 1200), 0.0005, 0.018), 1), gain(env(Array.from({ length: len(0.1) }, (_, i) => Math.sin((2 * Math.PI * 180 * i) / RATE)), 0.0005, 0.02), 0.4)));
+// The fire: a low roar with crackles.
+wav('fire', seamless(mix(gain(lowpass(noise(5), 500), 0.35), Array.from({ length: len(5) }, () => (rand() > 0.9975 ? rand() * 0.9 : 0)).map((v, i, a) => v - (a[i - 1] ?? 0) * 0.5))));
+// The hot tub: bubbling water.
+{
+  const x = new Array(len(4)).fill(0);
+  for (let k = 0; k < 90; k++) {
+    const s = len(Math.abs(rand()) * 3.9);
+    const f = 300 + Math.abs(rand()) * 700;
+    const d = len(0.03 + Math.abs(rand()) * 0.03);
+    for (let i = 0; i < d && s + i < x.length; i++) x[s + i] += Math.sin((2 * Math.PI * f * (1 + i / d) * i) / RATE) * Math.sin((Math.PI * i) / d) * 0.15;
+  }
+  wav('bubbles', seamless(mix(x, gain(lowpass(noise(4), 700), 0.12))));
+}

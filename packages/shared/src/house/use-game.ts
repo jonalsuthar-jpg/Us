@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CAPSULE_TOPIC, capsuleProblem, capsulesWaiting, sealCapsule } from '../api/capsules';
+import { notifyPartner } from '../api/push';
+import { listCountdowns, upcoming } from '../api/together';
 import { useCallManager, useCallState } from '../react/call-provider';
+import { useChatKey } from '../react/chat-key-provider';
 import { minimiseCallScreen } from '../react/call-ui';
 import { useCouple } from '../react/couple-provider';
 import { avatarKey, MUSIC_KEY, NOTE_KEY, SKY_KEY, type ItemModel, type LookState } from './items';
 import { isNight } from './sky';
 import type { Emote, Together } from './presence';
 import { LOOKS } from './scene/avatar';
+import type { HouseLetters } from './scene/fun';
 import { createControls, nextCameraView, setView, type CameraView, type HouseControls, type HudState, type WorldProps } from './scene/world';
 import { useHouse, useHouseItems, useHousePhotos } from './use-house';
 
-const NO_HUD: HudState = { action: null, seated: false, holding: null, selected: null, nearPartner: false, invite: null, asking: null, note: null };
+const NO_HUD: HudState = { action: null, seated: false, holding: null, selected: null, nearPartner: false, invite: null, asking: null, note: null, fun: { panel: null, banner: null, cover: null, myMood: null, partnerMood: null } };
 
 /**
  * Everything the house screen needs, the same on the phone and the web: the
@@ -17,7 +22,8 @@ const NO_HUD: HudState = { action: null, seated: false, holding: null, selected:
  * draw the buttons and feed in the joystick and taps.
  */
 export function useHouseGame() {
-  const { me, partner, mySlot, couple } = useCouple();
+  const { me, partner, mySlot, couple, sb, channel } = useCouple();
+  const { sealer } = useChatKey();
   const call = useCallState();
   const calls = useCallManager();
   const { presence, store, partnerHere } = useHouse();
@@ -63,6 +69,9 @@ export function useHouseGame() {
       invite: (kind: Together) => cmd.push({ t: 'invite', kind }),
       answer: (yes: boolean) => cmd.push({ t: 'answer', yes }),
       photo: () => cmd.push({ t: 'photo' }),
+      fun: () => cmd.push({ t: 'fun' }),
+      pick: (id: string, text?: string) => cmd.push({ t: 'pick', id, text }),
+      closePanel: () => cmd.push({ t: 'closePanel' }),
     }),
     [cmd, controls],
   );
@@ -102,6 +111,59 @@ export function useHouseGame() {
     if (note?.text && note.by !== me.id && !note.read) store?.set(NOTE_KEY, { ...note, read: true });
   }, [store, note, me.id]);
 
+  // A push for my partner when they're not in: a gift, their turn, a letter. At most one of each every ten minutes.
+  const pushed = useRef(new Map<string, number>());
+  const notify = useCallback(
+    (event: 'gift' | 'turn' | 'in' | 'letter') => {
+      const last = pushed.current.get(event) ?? 0;
+      if (Date.now() - last < (event === 'in' ? 6 * 3600_000 : 10 * 60_000)) return;
+      pushed.current.set(event, Date.now());
+      void notifyPartner(sb, { category: 'house', event });
+    },
+    [sb],
+  );
+  // Coming in while my partner's out: they hear, once in a while, after I've been in a little.
+  const hereRef = useRef(partnerHere);
+  hereRef.current = partnerHere;
+  useEffect(() => {
+    const t = setTimeout(() => !hereRef.current && notify('in'), 45_000);
+    return () => clearTimeout(t);
+  }, [notify]);
+
+  // Today's birthday, anniversary or milestone: the house throws a party.
+  const [celebrate, setCelebrate] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void listCountdowns(sb, couple.id)
+      .then((cds) => {
+        const today = upcoming(cds, couple.paired_at, new Date(), 12).find((u) => u.daysLeft === 0);
+        if (live) setCelebrate(today ? `${today.title} ${today.emoji}` : null);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [sb, couple.id, couple.paired_at]);
+
+  // Letters: sealed time capsules, delivered into the chat on their day.
+  const [waiting, setWaiting] = useState<{ waiting: number; nextAt: string | null }>({ waiting: 0, nextAt: null });
+  const loadWaiting = useCallback(() => void capsulesWaiting(sb).then(setWaiting).catch(() => {}), [sb]);
+  useEffect(loadWaiting, [loadWaiting]);
+  const letters: HouseLetters = useMemo(
+    () => ({
+      ...waiting,
+      seal: async (text: string, at: Date) => {
+        const problem = capsuleProblem(at);
+        if (problem) throw new Error(problem);
+        const cipher = await sealer();
+        if (!cipher) throw new Error('Letters need encrypted chat. It turns on once you both have the new app.');
+        await sealCapsule(sb, { coupleId: couple.id, me: me.id }, text, at, cipher);
+        channel.sendChanged(CAPSULE_TOPIC);
+      },
+    }),
+    [waiting, sealer, sb, couple.id, me.id, channel],
+  );
+
   const setLook = useCallback((patch: Partial<LookState>) => store?.set(myKey, { ...mine, ...patch }), [store, myKey, mine]);
   // No look of mine saved yet, once we know: the house invites me to make one.
   const needsLook = !!store?.loaded && !store.look(myKey);
@@ -124,6 +186,10 @@ export function useHouseGame() {
     onMoment,
     coupleId: couple.id,
     talking,
+    pairedAt: couple.paired_at,
+    celebrate,
+    letters,
+    notify,
   };
 
   return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };

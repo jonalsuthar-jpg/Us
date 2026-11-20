@@ -1,14 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Canvas, events as touchEvents } from '@react-three/fiber/native';
-import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
+import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
 import { useCouple } from '@us/shared/react';
 import { GLView } from 'expo-gl';
 import { phoneHouseSound } from '@/lib/house-sound';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { Aperture, Check, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, StickyNote, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react-native';
+import { Aperture, Check, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react-native';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AppState, PixelRatio, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { AppState, Image, PixelRatio, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeOut, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { GradientView } from '../plan/art';
@@ -198,6 +198,9 @@ export function HouseView() {
 
       {/* Left, under it: talk, the speaker, the sound. */}
       <View className="absolute gap-2" style={{ left: pad.left, top: pad.top + 56 }} pointerEvents="box-none">
+        <Round label="Things to do together" onPress={game.actions.fun} size={44} on={!!hud.fun.panel && !hud.fun.panel.side}>
+          <Sparkles size={19} color="#fff" />
+        </Round>
         <Round label={game.inCall ? 'Stop talking' : `Talk to ${game.partnerName}`} onPress={game.toggleTalk} size={44} on={game.inCall}>
           {game.inCall ? <PhoneOff size={18} color="#fff" /> : <Phone size={18} color="#fff" />}
         </Round>
@@ -213,8 +216,13 @@ export function HouseView() {
       <View className="absolute left-0 right-0 items-center gap-2" style={{ top: pad.top }} pointerEvents="none">
         <View className="flex-row items-center gap-2 rounded-full bg-black/35 px-3.5 py-2">
           <View className={game.partnerPlace ? 'h-2 w-2 rounded-full bg-sage-400' : 'h-2 w-2 rounded-full bg-white/50'} />
-          <Text className="text-small text-white">{game.partnerPlace ? `${game.partnerName} · ${game.partnerPlace}` : `${game.partnerName} isn’t in the house`}</Text>
+          <Text className="text-small text-white">{game.partnerPlace ? `${game.partnerName} · ${game.partnerPlace}${hud.fun.partnerMood ? ` · ${hud.fun.partnerMood}` : ''}` : `${game.partnerName} isn’t in the house`}</Text>
         </View>
+        {hud.fun.banner ? (
+          <View className="rounded-full bg-gold-500/90 px-4 py-2">
+            <Text className="font-sans-bold text-small text-white">{hud.fun.banner}</Text>
+          </View>
+        ) : null}
         {game.decorate ? <Chip text={hud.selected ? 'Use the stick to slide it' : 'Tap something to move it'} /> : null}
         {game.moment ? (
           <View className="rounded-full bg-rose-600/90 px-4 py-2">
@@ -319,6 +327,15 @@ export function HouseView() {
 
       {panel === 'note' ? <NotePanel game={game} onClose={() => setPanel(null)} /> : null}
 
+      {hud.fun.panel ? <FunCard key={hud.fun.panel.id} card={hud.fun.panel} game={game} pad={pad} /> : null}
+
+      {/* Hide and seek: the seeker counts with their eyes shut. */}
+      {hud.fun.cover ? (
+        <View className="absolute inset-0 items-center justify-center bg-black/95">
+          <Text className="text-center font-sans-bold text-[28px] leading-[40px] text-white">{hud.fun.cover}</Text>
+        </View>
+      ) : null}
+
       {!ready ? <Opening progress={loading} partner={game.partnerName} partnerIn={!!game.partnerPlace} /> : null}
 
       {problem ? <Problem error={problem} /> : null}
@@ -339,6 +356,65 @@ export function HouseView() {
           <Text className="text-[11px] text-white">{`${fps} fps`}</Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** A card from the things to do: words, maybe a photo, buttons, maybe a box to type in. At the side while playing at the table. */
+function FunCard({ card, game, pad }: { card: FunPanel; game: HouseGame; pad: { left: number; right: number; top: number; bottom: number } }) {
+  const [text, setText] = useState('');
+  const side = !!card.side;
+  return (
+    <View className={side ? 'absolute' : 'absolute inset-0 items-center justify-center'} style={side ? { right: pad.right, top: pad.top + 56, width: 230 } : undefined} pointerEvents="box-none">
+      <View className={side ? 'gap-2.5 rounded-3xl bg-black/70 p-4' : 'max-h-[88%] w-[520px] max-w-[92%] gap-3 rounded-3xl bg-paper-raised p-5'}>
+        <View className="flex-row items-center justify-between gap-2">
+          <Text className={side ? 'flex-1 font-sans-bold text-body text-white' : 'flex-1 font-sans-bold text-lead text-ink'}>{card.title}</Text>
+          {!side ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={game.actions.closePanel} hitSlop={8} className="rounded-full bg-black/5 p-1.5">
+              <X size={18} color="#555" />
+            </Pressable>
+          ) : null}
+        </View>
+        <ScrollView style={{ flexGrow: 0 }} contentContainerClassName="gap-3">
+          {card.image ? <Image source={{ uri: card.image }} resizeMode="contain" style={{ width: '100%', height: 180, borderRadius: 16 }} /> : null}
+          {card.text ? <Text className={side ? 'text-small text-white/90' : 'text-body text-ink-soft'}>{card.text}</Text> : null}
+          {card.input ? (
+            <View className="gap-2">
+              <TextInput
+                value={text}
+                onChangeText={(t) => setText(t.slice(0, card.input!.max))}
+                placeholder={card.input.placeholder}
+                multiline
+                autoFocus
+                className="min-h-[80px] rounded-2xl bg-paper-sunken p-3 font-sans text-body text-ink"
+              />
+              <Pressable
+                accessibilityRole="button"
+                disabled={!text.trim()}
+                onPress={() => game.actions.pick('send', text)}
+                className={text.trim() ? 'self-end rounded-full bg-rose-600 px-5 py-2.5' : 'self-end rounded-full bg-rose-600/40 px-5 py-2.5'}
+              >
+                <Text className="font-sans-bold text-small text-white">{card.input.send}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          <View className={side ? 'gap-2' : 'flex-row flex-wrap gap-2'}>
+            {card.options.map((o) => (
+              <Pressable
+                key={o.id}
+                accessibilityRole="button"
+                onPress={() => {
+                  tick();
+                  game.actions.pick(o.id);
+                }}
+                className={side ? 'rounded-full bg-white/15 px-3.5 py-2 active:bg-white/25' : 'rounded-full bg-paper-sunken px-3.5 py-2.5 active:bg-rose-50'}
+              >
+                <Text className={side ? 'font-sans-medium text-small text-white' : 'font-sans-medium text-small text-ink'}>{o.emoji ? `${o.emoji}  ${o.label}` : o.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 }

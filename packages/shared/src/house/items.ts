@@ -12,17 +12,24 @@
  *   furniture  stays put unless we move it while decorating; some have seats
  *   stove      where you cook; a dish appears on the table when it's done
  *   plant      a garden plant that grows a little each day it's watered
+ *   fun        something the things-to-do layer handles (scene/fun.tsx):
+ *              the telescope, the garden beds, the mailbox
+ *
+ * Some things only come once we've been together long enough (unlock), or
+ * while a date is on (the picnic blanket, the candles): see placeItems.
  */
 import { FLOOR_H, type RegionId } from './layout';
 
-export type ItemKind = 'light' | 'door' | 'tv' | 'frame' | 'carry' | 'furniture' | 'stove' | 'plant';
+export type ItemKind = 'light' | 'door' | 'tv' | 'frame' | 'carry' | 'furniture' | 'stove' | 'plant' | 'fun';
 
 /** Which shape draws it (scene/items.tsx). */
 export type ItemModel =
   | 'sofa' | 'armchair' | 'coffeeTable' | 'tvUnit' | 'bookshelf' | 'floorLamp' | 'rug' | 'plantPot' | 'diningTable' | 'chair'
   | 'counter' | 'fridge' | 'pendant' | 'bed' | 'nightstand' | 'bedLamp' | 'wardrobe' | 'desk' | 'deskLamp' | 'balconyChair'
   | 'balconyTable' | 'lounger' | 'umbrella' | 'frontDoor' | 'balconyDoor' | 'mug' | 'book' | 'pillow' | 'ball' | 'teddy'
-  | 'vase' | 'wateringCan' | 'frame' | 'gardenPlant' | 'beanbag' | 'dish';
+  | 'vase' | 'wateringCan' | 'frame' | 'gardenPlant' | 'beanbag' | 'dish'
+  | 'firePit' | 'logBench' | 'hotTub' | 'telescope' | 'gardenBed' | 'swing' | 'mailbox' | 'fairyLights' | 'picnic' | 'popcorn'
+  | 'blanket' | 'candles' | 'balloons' | 'cake';
 
 export interface Seat {
   /** From the item's centre, in its own frame (before it's turned). */
@@ -56,6 +63,8 @@ export interface ItemDef {
   movable?: boolean;
   /** A door between two regions: the portal it sits in. */
   portal?: [RegionId, RegionId];
+  /** Only there once this is unlocked (fun.ts UNLOCKS), or while this date is on ('picnic', 'movie', 'candles', 'party'). */
+  unlock?: string;
 }
 
 const F = FLOOR_H;
@@ -117,6 +126,33 @@ export const ITEMS: ItemDef[] = [
   { key: 'teddy', kind: 'carry', model: 'teddy', label: 'Teddy', x: -4.0, y: F + 0.6, z: 0.6, ry: T / 2, hw: 0.12, hd: 0.12 },
   { key: 'vase', kind: 'carry', model: 'vase', label: 'Flowers', x: 3.1, y: 0.78, z: 1.6, ry: 0, hw: 0.1, hd: 0.1 },
   { key: 'watering_can', kind: 'carry', model: 'wateringCan', label: 'Watering can', x: -8.6, y: 0, z: 7.4, ry: 0.5, hw: 0.15, hd: 0.1 },
+
+  // Our photos on the living-room wall.
+  { key: 'frame_wall_1', kind: 'frame', model: 'frame', label: 'Photo', x: -3.3, y: 1.35, z: -3.72, ry: 0, hw: 0.2, hd: 0.05 },
+  { key: 'frame_wall_2', kind: 'frame', model: 'frame', label: 'Photo', x: -2.7, y: 1.6, z: -3.72, ry: 0, hw: 0.2, hd: 0.05 },
+  { key: 'frame_wall_3', kind: 'frame', model: 'frame', label: 'Photo', x: -2.1, y: 1.35, z: -3.72, ry: 0, hw: 0.2, hd: 0.05 },
+  { key: 'frame_wall_4', kind: 'frame', model: 'frame', label: 'Photo', x: -1.5, y: 1.6, z: -3.72, ry: 0, hw: 0.2, hd: 0.05 },
+  // Letters for each other, by the path to the door.
+  { key: 'mailbox', kind: 'fun', model: 'mailbox', label: 'Mailbox', x: -1.4, y: 0, z: 6.5, ry: T, hw: 0.2, hd: 0.2 },
+
+  // Things that come as the days together add up.
+  { key: 'fire_pit', kind: 'light', model: 'firePit', label: 'Fire pit', x: -6, y: 0, z: 12, ry: 0, hw: 0.55, hd: 0.55, unlock: 'fire_pit' },
+  { key: 'log_bench', kind: 'furniture', model: 'logBench', label: 'Bench', x: -6, y: 0, z: 13.3, ry: T, hw: 0.8, hd: 0.25, unlock: 'fire_pit', seats: [{ x: -0.35, z: 0.05, y: 0.4 }, { x: 0.35, z: 0.05, y: 0.4 }] },
+  { key: 'garden_bed_1', kind: 'fun', model: 'gardenBed', label: 'Garden bed', x: -11.5, y: 0, z: 9.4, ry: 0, hw: 0.5, hd: 0.7, unlock: 'garden_beds' },
+  { key: 'garden_bed_2', kind: 'fun', model: 'gardenBed', label: 'Garden bed', x: -11.5, y: 0, z: 11.1, ry: 0, hw: 0.5, hd: 0.7, unlock: 'garden_beds' },
+  { key: 'garden_bed_3', kind: 'fun', model: 'gardenBed', label: 'Garden bed', x: -11.5, y: 0, z: 12.8, ry: 0, hw: 0.5, hd: 0.7, unlock: 'garden_beds' },
+  { key: 'hot_tub', kind: 'furniture', model: 'hotTub', label: 'Hot tub', x: 10.6, y: 0, z: 9, ry: -T / 2, hw: 0.95, hd: 0.95, unlock: 'hot_tub', seats: [{ x: -0.38, z: 0.35, y: 0.18 }, { x: 0.38, z: 0.35, y: 0.18 }] },
+  { key: 'telescope', kind: 'fun', model: 'telescope', label: 'Telescope', x: -5.25, y: F, z: 4.95, ry: T * 0.85, hw: 0.25, hd: 0.25, unlock: 'telescope' },
+  { key: 'fairy_lights', kind: 'furniture', model: 'fairyLights', label: 'Fairy lights', x: -9, y: 0, z: 14.6, ry: 0, hw: 0.1, hd: 0.1, unlock: 'fairy_lights' },
+  { key: 'swing', kind: 'furniture', model: 'swing', label: 'Swing', x: -2.2, y: 0, z: 13.6, ry: T, hw: 1.0, hd: 0.45, unlock: 'swing', seats: [{ x: -0.32, z: 0, y: 0.5 }, { x: 0.32, z: 0, y: 0.5 }] },
+
+  // Dates, while they're on.
+  { key: 'picnic', kind: 'furniture', model: 'picnic', label: 'Picnic blanket', x: -8.5, y: 0, z: 11, ry: 0, hw: 1.0, hd: 0.8, unlock: 'picnic', seats: [{ x: -0.45, z: 0.15, y: 0.08 }, { x: 0.45, z: 0.15, y: 0.08 }] },
+  { key: 'popcorn', kind: 'furniture', model: 'popcorn', label: 'Popcorn', x: -2.95, y: 0.43, z: -0.2, ry: 0, hw: 0.1, hd: 0.1, unlock: 'movie' },
+  { key: 'sofa_blanket', kind: 'furniture', model: 'blanket', label: 'Blanket', x: -1.45, y: 0.46, z: 0, ry: -T / 2, hw: 0.1, hd: 0.1, unlock: 'movie' },
+  { key: 'candles', kind: 'furniture', model: 'candles', label: 'Candles', x: 3.1, y: 0.78, z: 1.25, ry: 0, hw: 0.1, hd: 0.1, unlock: 'candles' },
+  { key: 'balloons', kind: 'furniture', model: 'balloons', label: 'Balloons', x: 0.2, y: 0, z: -3.2, ry: 0, hw: 0.1, hd: 0.1, unlock: 'party' },
+  { key: 'cake', kind: 'furniture', model: 'cake', label: 'Cake', x: 3.1, y: 0.78, z: 2.0, ry: 0, hw: 0.1, hd: 0.1, unlock: 'party' },
 ];
 
 const byKey = new Map(ITEMS.map((i) => [i.key, i]));
@@ -161,6 +197,9 @@ export interface ItemState {
   watered?: string;
   /** Added while decorating: what it is. */
   model?: ItemModel;
+  /** A garden bed: what's planted, and the days it was watered. */
+  crop?: string;
+  days?: string[];
 }
 
 export interface PlacedItem extends ItemDef {
@@ -176,10 +215,13 @@ export function addedModel(key: string): ItemModel | null {
 /** A key for a newly added thing (keys are lower case, like the database wants). */
 export const addedKey = (model: ItemModel, id: string) => `add:${model.toLowerCase()}:${id}`;
 
-/** Everything in the house right now: the catalog with saved changes, plus what we added. */
-export function placeItems(saved: ReadonlyMap<string, ItemState>): PlacedItem[] {
+/**
+ * Everything in the house right now: the catalog with saved changes, plus
+ * what we added. Things with an unlock come only when it's in `unlocked`.
+ */
+export function placeItems(saved: ReadonlyMap<string, ItemState>, unlocked?: ReadonlySet<string>): PlacedItem[] {
   const out: PlacedItem[] = [];
-  for (const d of ITEMS) out.push(place(d, saved.get(d.key) ?? {}));
+  for (const d of ITEMS) if (!d.unlock || unlocked?.has(d.unlock)) out.push(place(d, saved.get(d.key) ?? {}));
   for (const [key, state] of saved) {
     if (byKey.has(key) || !key.startsWith('add:')) continue;
     const model = addedModel(key);
@@ -285,6 +327,8 @@ export function cleanState(s: unknown): ItemState | null {
   if (typeof o.read === 'boolean') out.read = o.read;
   if (typeof o.growth === 'number' && Number.isInteger(o.growth) && o.growth >= 0 && o.growth <= 4) out.growth = o.growth;
   if (typeof o.watered === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.watered)) out.watered = o.watered;
+  if (typeof o.crop === 'string' && /^[a-z]{3,12}$/.test(o.crop)) out.crop = o.crop;
+  if (Array.isArray(o.days) && o.days.length <= 12 && o.days.every((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))) out.days = o.days as string[];
   return out;
 }
 
@@ -292,7 +336,10 @@ export function cleanState(s: unknown): ItemState | null {
 export function actionFor(item: PlacedItem, holding: string | null, watered: boolean): string | null {
   switch (item.kind) {
     case 'light':
+      if (item.model === 'firePit') return isOn(item) ? 'Put out the fire' : 'Light the fire';
       return isOn(item) ? `Turn off ${item.label.toLowerCase()}` : `Turn on ${item.label.toLowerCase()}`;
+    case 'fun':
+      return null;
     case 'door':
       return isOpen(item) ? `Close ${item.label.toLowerCase()}` : `Open ${item.label.toLowerCase()}`;
     case 'tv':
@@ -307,7 +354,9 @@ export function actionFor(item: PlacedItem, holding: string | null, watered: boo
       if (holding !== 'watering_can') return null;
       return watered ? null : 'Water the plant';
     case 'furniture':
-      return item.seats?.length ? (item.seats[0]!.lie ? `Lie on the ${item.label.toLowerCase()}` : `Sit on the ${item.label.toLowerCase()}`) : null;
+      if (item.model === 'hotTub') return 'Get in the hot tub';
+      if (!item.seats?.length) return null;
+      return item.seats[0]!.lie ? `Lie on the ${item.label.toLowerCase()}` : `Sit on the ${item.label.toLowerCase()}`;
   }
 }
 
