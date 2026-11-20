@@ -140,7 +140,7 @@ export function findPath(from: RegionId, to: { region: RegionId; x: number; z: n
 }
 
 /** How close to a doorway's middle you can be while passing through it. */
-export const PORTAL_R = 0.48;
+export const PORTAL_R = 0.58;
 
 /** Two regions that share an edge, with no wall between. */
 function touching(a: RegionId, b: RegionId) {

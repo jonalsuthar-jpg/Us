@@ -73,6 +73,8 @@ export function HouseView() {
   const onFps = useCallback(
     (f: number) => {
       setFps(Math.round(f));
+      // In the phone's log too (adb logcat), to check how smoothly it runs.
+      console.log(`[house] ${Math.round(f)} fps (${quality})`);
       if (stepped.current || !quality) return;
       stepped.current = true;
       if (f < 22 && quality !== 'low') chooseQuality(quality === 'high' ? 'medium' : 'low');
