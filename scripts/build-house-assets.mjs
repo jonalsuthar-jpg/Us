@@ -29,6 +29,11 @@ const used = new Set([...furniture.matchAll(/asset: '([a-z0-9_]+)'/g)].map((m) =
 
 const files = [];
 for (const layer of ['ground', 'upper', 'roof']) files.push(`${layer}.glb`, `${layer}_light.png`);
+// The real sky, straight from the downloaded HDRIs.
+for (const sky of ['day', 'night']) {
+  cpSync(join(root, 'assets-src/house/hdri', `${sky}.hdr`), join(built, `sky_${sky}.hdr`));
+  files.push(`sky_${sky}.hdr`);
+}
 for (const f of readdirSync(join(built, 'models'))) if (used.has(f.replace(/\.glb$/, ''))) files.push(`models/${f}`);
 for (const id of used) if (!files.includes(`models/${id}.glb`)) throw new Error(`models/${id}.glb not built: run convert_models.py`);
 
@@ -51,7 +56,7 @@ if (process.argv.includes('--dev')) {
 }
 
 if (process.argv.includes('--upload')) {
-  const type = (p) => (p.endsWith('.glb') ? 'model/gltf-binary' : p.endsWith('.png') ? 'image/png' : 'application/json');
+  const type = (p) => (p.endsWith('.glb') ? 'model/gltf-binary' : p.endsWith('.png') ? 'image/png' : p.endsWith('.hdr') ? 'image/vnd.radiance' : 'application/json');
   for (const path of [...files, 'manifest.json']) {
     const abs = join(built, path);
     execFileSync('npx', ['--yes', 'wrangler@4', 'r2', 'object', 'put', `us-media/house/v${version}/${path}`, '--file', abs, '--content-type', type(path), '--remote'], {

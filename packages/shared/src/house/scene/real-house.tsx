@@ -1,5 +1,5 @@
 import { useLoader } from '@react-three/fiber';
-import { useEffect, useMemo } from 'react';
+import { Component, useEffect, useMemo, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -94,11 +94,20 @@ export function RealHouse({ base, light, into, onReady }: RealHouseProps) {
   return null;
 }
 
-/** The pool's water, drawn live over the baked basin. */
-export function PoolWater({ mat }: { mat: THREE.Material }) {
-  return (
-    <mesh position={[5, -0.175, 9]} material={mat}>
-      <boxGeometry args={[5.96, 0.05, 3.96]} />
-    </mesh>
-  );
+/**
+ * Around the parts that load files (the real house, the sky): if one fails,
+ * it's left out and the box house and plain sky stay, instead of the house
+ * stopping.
+ */
+export class Optional extends Component<{ children: ReactNode; fallback?: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: Error) {
+    console.warn('[house] left out:', error.message);
+  }
+  render() {
+    return this.state.failed ? (this.props.fallback ?? null) : this.props.children;
+  }
 }

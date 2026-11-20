@@ -28,7 +28,8 @@ import { animateAvatar, Avatar, bodyAct, DANCE_S, HAND, HEART_S, newMotion, WAVE
 import { Items, type HousePhoto } from './items';
 import { makeMaterials, type Quality } from './materials';
 import { HouseModel, type HouseGroups } from './model';
-import { PoolWater, RealHouse } from './real-house';
+import { Optional, RealHouse } from './real-house';
+import { Sky, Water } from './sky';
 
 /** What a button press asks the house to do. */
 export type HouseCmd =
@@ -182,10 +183,14 @@ export function HouseWorld(props: WorldProps) {
   const night = items.get(SKY_KEY)?.on === true;
   const dish = items.get(DISH_KEY)?.on === true;
 
-  // Reflections from a soft studio light, above low quality.
+  // The real sky (sky.tsx), once it has loaded: it takes over the background and the reflections.
+  const [sky, setSky] = useState(false);
+  const onSkyReady = useCallback(() => setSky(true), []);
+
+  // Until then, reflections from a soft studio light, above low quality.
   useEffect(() => {
     gl.toneMappingExposure = 1.05;
-    if (quality === 'low') return;
+    if (quality === 'low' || sky) return;
     let env: THREE.WebGLRenderTarget | null = null;
     try {
       const pmrem = new THREE.PMREMGenerator(gl);
@@ -198,19 +203,21 @@ export function HouseWorld(props: WorldProps) {
       // No float render targets on this GPU: lights alone still look fine.
     }
     return () => {
-      scene.environment = null;
+      if (env && scene.environment === env.texture) scene.environment = null;
       env?.dispose();
     };
-  }, [gl, scene, quality]);
+  }, [gl, scene, quality, sky]);
 
   // Day or night: the sky, the haze, how bright the world is.
   useEffect(() => {
-    const sky = night ? SKY_NIGHT : SKY_DAY;
-    scene.background = sky.clone();
-    scene.fog = new THREE.Fog(sky.clone(), night ? 25 : 35, night ? 70 : 95);
-    scene.environmentIntensity = night ? 0.08 : 0.35;
+    const haze = night ? SKY_NIGHT : SKY_DAY;
+    scene.fog = new THREE.Fog(haze.clone(), night ? 25 : 35, night ? 70 : 95);
+    if (!sky) {
+      scene.background = haze.clone();
+      scene.environmentIntensity = night ? 0.08 : 0.35;
+    }
     invalidate();
-  }, [scene, night, invalidate]);
+  }, [scene, night, invalidate, sky]);
 
   // Shadows: everything catches them, solid things cast them. Exterior walls cut away in the dollhouse.
   const walls = useRef<{ obj: THREE.Object3D; nx: number; nz: number; upper: boolean }[]>([]);
@@ -704,7 +711,8 @@ export function HouseWorld(props: WorldProps) {
     }
     // Low quality has no lamp light, so its night keeps more of the sky's glow.
     if (hemi.current) hemi.current.intensity += ((night ? (quality === 'low' ? 0.55 : 0.22) : quality === 'low' ? 1.1 : 0.7) - hemi.current.intensity) * Math.min(1, dt * 3);
-    if (stars.current) stars.current.visible = night;
+    // The night sky photo has its own stars.
+    if (stars.current) stars.current.visible = night && !sky;
 
     if (marker.current) {
       markerLife.current = Math.max(0, markerLife.current - dt);
@@ -895,12 +903,21 @@ export function HouseWorld(props: WorldProps) {
         <pointsMaterial color="#FFFFFF" size={0.35} sizeAttenuation fog={false} />
       </points>
       {houseUrl ? (
+        <Optional>
         <Suspense fallback={null}>
           {/* At night the lamps take over; Low quality has none that light, so it keeps more of the baked glow. */}
           <RealHouse base={houseUrl} light={night ? (quality === 'low' ? 0.45 : 0.25) : 1} into={groups} onReady={onRealReady} />
         </Suspense>
+        </Optional>
       ) : null}
-      {real ? <PoolWater mat={mats.water} /> : null}
+      {real ? <Water quality={quality} /> : null}
+      {houseUrl ? (
+        <Optional>
+          <Suspense fallback={null}>
+            <Sky base={houseUrl} night={night} onReady={onSkyReady} />
+          </Suspense>
+        </Optional>
+      ) : null}
       <HouseModel
         mats={mats}
         groups={groups}

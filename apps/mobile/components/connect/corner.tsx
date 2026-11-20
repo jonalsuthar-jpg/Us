@@ -176,11 +176,12 @@ function HousePackRow() {
   const pack = useHousePack();
   const [size, setSize] = useState<number | null>(null);
   useEffect(() => {
-    if (pack.kind !== 'none' || size !== null) return;
+    const wanting = pack.kind === 'none' || (pack.kind === 'ready' && pack.old);
+    if (!wanting || size !== null) return;
     void packSizeToFetch(sb)
       .then(setSize)
       .catch(() => {});
-  }, [pack.kind, size, sb]);
+  }, [pack, size, sb]);
 
   const start = async () => {
     const net = await Network.getNetworkStateAsync().catch(() => null);
@@ -194,13 +195,15 @@ function HousePackRow() {
     startPackDownload(sb);
   };
 
-  if (pack.kind === 'ready') return null;
+  if (pack.kind === 'ready' && !pack.old) return null;
   const label =
     pack.kind === 'downloading'
       ? `Getting the real house · ${Math.round((pack.done / Math.max(pack.total, 1)) * 100)}% · tap to pause`
       : pack.kind === 'error'
         ? `${pack.message} · tap to try again`
-        : `Get the real house${size ? ` · ${packSize(size)}` : ''}`;
+        : pack.kind === 'ready'
+          ? `A new look for the house${size ? ` · ${packSize(size)}` : ''}`
+          : `Get the real house${size ? ` · ${packSize(size)}` : ''}`;
   return (
     <Pressable
       accessibilityRole="button"

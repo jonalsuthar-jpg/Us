@@ -6,6 +6,7 @@ import { isOn, isOpen, type ItemModel, type PlacedItem } from '../items';
 import type { Materials, Quality } from './materials';
 import { REAL_MODELS, type RealModel } from './furniture';
 import { B, KitContext, useKit, type MatKey } from './model';
+import { Optional } from './real-house';
 
 /**
  * The things in the house, drawn from boxes like the house itself. Each
@@ -571,10 +572,12 @@ function Drawn({ it, assets, look }: { it: PlacedItem; assets?: string; look: Lo
   const real = assets ? REAL_MODELS[it.model] : undefined;
   if (!real || !assets) return <Model look={look} />;
   return (
-    <Suspense fallback={<Model look={look} />}>
-      <Real base={assets} real={real} color={it.state.color} />
-      {real.keepScreen ? <TvPanel on={look.on} photos={look.photos} /> : null}
-    </Suspense>
+    <Optional fallback={<Model look={look} />}>
+      <Suspense fallback={<Model look={look} />}>
+        <Real base={assets} real={real} color={it.state.color} />
+        {real.keepScreen ? <TvPanel on={look.on} photos={look.photos} /> : null}
+      </Suspense>
+    </Optional>
   );
 }
 
