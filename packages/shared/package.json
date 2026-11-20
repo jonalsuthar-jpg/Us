@@ -25,6 +25,7 @@
     "@noble/hashes": "1.8.0",
     "@react-three/fiber": "9.8.2",
     "@supabase/supabase-js": "2.118.0",
+    "chess.js": "1.4.0",
     "three": "0.187.0"
   },
   "peerDependencies": {

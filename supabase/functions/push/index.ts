@@ -38,7 +38,8 @@ type Category =
   | 'draw_invite'
   | 'doodle'
   | 'guess_turn'
-  | 'quiz_ready';
+  | 'quiz_ready'
+  | 'house';
 
 /** The feature our couple needs for each push (see public.features). */
 const FEATURE: Record<Category, string> = {
@@ -58,6 +59,7 @@ const FEATURE: Record<Category, string> = {
   doodle: 'draw',
   guess_turn: 'draw',
   quiz_ready: 'quizzes',
+  house: 'house',
 };
 
 interface Style {
@@ -104,6 +106,7 @@ const CATEGORIES: Record<Category, Style> = {
   doodle: { iosSound: 'us_chime.wav', priority: 10, iosInterruption: 'active', threadId: 'draw' },
   guess_turn: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'draw' },
   quiz_ready: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'quizzes' },
+  house: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'house' },
 };
 
 Deno.serve(async (req) => {
@@ -340,6 +343,20 @@ Deno.serve(async (req) => {
     content = both ? `finished ${title}. See how you did 👀` : `answered ${title}. Your turn to play`;
     collapseId = `quiz-${r.id}`;
     data = { category, url: `/connect/play/quiz/${r.id}` };
+  } else if (body.category === 'house') {
+    // Our House: the words are ours, chosen by what happened (the app only says which).
+    const HOUSE: Record<string, string> = {
+      gift: 'left you something in our house 🎁',
+      turn: 'played. It’s your turn in our house 🎲',
+      in: 'is in our house. Come in 🏠',
+      letter: 'sent you a letter. It’s in the mailbox 💌',
+    };
+    const content0 = HOUSE[String(body.event)];
+    if (!content0) return json({ error: 'bad_request' }, 400);
+    category = 'house';
+    content = content0;
+    collapseId = `house-${body.event}-${userId}`;
+    data = { category, url: '/house' };
   } else {
     return json({ error: 'unknown_category' }, 400);
   }
