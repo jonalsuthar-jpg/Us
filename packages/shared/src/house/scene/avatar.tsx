@@ -145,15 +145,18 @@ export interface Doing {
   talking?: boolean;
   swimming: boolean;
   /** sit, lie, cook, water, hug, or nothing. */
-  act: 'sit' | 'lie' | 'cook' | 'water' | 'hug' | null;
+  act: 'sit' | 'lie' | 'cook' | 'water' | 'hug' | 'kiss' | 'slow' | 'hands_r' | 'hands_l' | null;
+  /** Turn the head to look here (my partner), when they're near. */
+  lookAt?: [number, number, number];
   carrying: boolean;
 }
 
 /** What a pose's activity means for the body. */
 export function bodyAct(a: string | null | undefined): Doing['act'] {
   if (!a) return null;
-  const kind = a.split(':')[0];
-  return kind === 'sit' || kind === 'lie' || kind === 'cook' || kind === 'water' || kind === 'hug' ? kind : null;
+  const [kind, side] = a.split(':');
+  if (kind === 'hands') return side === 'l' ? 'hands_l' : 'hands_r';
+  return kind === 'sit' || kind === 'lie' || kind === 'cook' || kind === 'water' || kind === 'hug' || kind === 'kiss' || kind === 'slow' ? kind : null;
 }
 
 /** Moves the limbs for this frame. */
@@ -197,7 +200,15 @@ export function animateAvatar(p: AvatarParts, m: AvatarMotion, dt: number, d: Do
     p.armL.rotation.set(-0.9, 0, 0.2);
   } else if (act === 'water') {
     p.armR.rotation.set(-1.1 + Math.sin(m.busy * 3) * 0.1, 0, -0.1);
-  } else if (act === 'hug') {
+  } else if (act === 'hands_r') {
+    p.armR.rotation.set(0.1, 0, -0.45);
+  } else if (act === 'hands_l') {
+    p.armL.rotation.set(0.1, 0, 0.45);
+  } else if (act === 'slow') {
+    p.armL.rotation.set(-1.2, 0, -0.4);
+    p.armR.rotation.set(-1.2, 0, 0.4);
+    p.body.rotation.z = Math.sin(m.busy * 2) * 0.08;
+  } else if (act === 'hug' || act === 'kiss') {
     p.armL.rotation.set(-1.45, 0, -0.55);
     p.armR.rotation.set(-1.45, 0, 0.55);
   }

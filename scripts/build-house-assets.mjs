@@ -38,6 +38,8 @@ for (const sky of ['day', 'night']) {
 for (const f of readdirSync(join(built, 'models'))) if (used.has(f.replace(/\.glb$/, ''))) files.push(`models/${f}`);
 // The two of us (scripts/blender/build_characters.py).
 for (const f of ['body_m.glb', 'body_f.glb', 'moves.glb']) files.push(`characters/${f}`);
+// The sounds (scripts/generate-house-sounds.mjs).
+for (const f of readdirSync(join(built, 'sounds')).filter((f) => f.endsWith('.wav')).sort()) files.push(`sounds/${f}`);
 for (const id of used) if (!files.includes(`models/${id}.glb`)) throw new Error(`models/${id}.glb not built: run convert_models.py`);
 
 const manifest = { version, bytes: 0, files: [] };
@@ -59,7 +61,7 @@ if (process.argv.includes('--dev')) {
 }
 
 if (process.argv.includes('--upload')) {
-  const type = (p) => (p.endsWith('.glb') ? 'model/gltf-binary' : p.endsWith('.png') ? 'image/png' : p.endsWith('.hdr') ? 'image/vnd.radiance' : 'application/json');
+  const type = (p) => (p.endsWith('.glb') ? 'model/gltf-binary' : p.endsWith('.png') ? 'image/png' : p.endsWith('.hdr') ? 'image/vnd.radiance' : p.endsWith('.wav') ? 'audio/wav' : 'application/json');
   for (const path of [...files, 'manifest.json']) {
     const abs = join(built, path);
     // R2 now and then answers a 500: try again a few times before giving up.

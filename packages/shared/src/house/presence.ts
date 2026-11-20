@@ -18,6 +18,11 @@
  */
 
 export type Emote = 'wave' | 'heart' | 'dance';
+
+/** Things two of us do together, after one asks and the other says yes. */
+export type Together = 'kiss' | 'hands' | 'slow';
+export const TOGETHER: Together[] = ['kiss', 'hands', 'slow'];
+export const TOGETHER_LABEL: Record<Together, string> = { kiss: 'Kiss', hands: 'Hold hands', slow: 'Slow dance' };
 export const EMOTES: Emote[] = ['wave', 'heart', 'dance'];
 
 export interface Pose {
@@ -51,6 +56,8 @@ export type HouseOp =
   | { op: 'hello' }
   | { op: 'bye' }
   | { op: 'emote'; e: Emote }
+  | { op: 'invite'; kind: Together }
+  | { op: 'answer'; kind: Together; yes: boolean }
   | ItemOp;
 
 export type HouseEvent = HouseOp & { from: string };
@@ -111,6 +118,7 @@ export class HousePresence {
   private lastSent: Pose | null = null;
   private emotes = new Set<Listener<Emote>>();
   private items = new Set<Listener<ItemOp>>();
+  private invites = new Set<Listener<{ kind: Together; answer?: boolean }>>();
   private here = new Set<Listener<boolean>>();
   private wasHere = false;
   private off: () => void;
@@ -164,6 +172,21 @@ export class HousePresence {
     return () => void this.items.delete(fn);
   }
 
+  /** Ask my partner to do something together. */
+  invite(kind: Together) {
+    this.send({ op: 'invite', kind });
+  }
+
+  answer(kind: Together, yes: boolean) {
+    this.send({ op: 'answer', kind, yes });
+  }
+
+  /** An invitation from my partner (answer undefined), or their answer to mine. */
+  onInvite(fn: Listener<{ kind: Together; answer?: boolean }>) {
+    this.invites.add(fn);
+    return () => void this.invites.delete(fn);
+  }
+
   onEmote(fn: Listener<Emote>) {
     this.emotes.add(fn);
     return () => void this.emotes.delete(fn);
@@ -181,6 +204,7 @@ export class HousePresence {
     this.off();
     this.emotes.clear();
     this.items.clear();
+    this.invites.clear();
     this.here.clear();
   }
 
@@ -224,6 +248,13 @@ export class HousePresence {
       case 'item': {
         const op = readItemOp(e);
         if (op) for (const fn of [...this.items]) fn(op);
+        return;
+      }
+      case 'invite':
+      case 'answer': {
+        if (!TOGETHER.includes(e.kind)) return;
+        const msg = e.op === 'answer' ? { kind: e.kind, answer: e.yes === true } : { kind: e.kind };
+        for (const fn of [...this.invites]) fn(msg);
         return;
       }
       case 'emote':

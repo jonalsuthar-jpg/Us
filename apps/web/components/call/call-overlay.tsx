@@ -1,7 +1,7 @@
 'use client';
 
 import { formatDuration, isWideVideo, selfViewAspect, type CallState, type ScreenStats, type ShareMode, type VideoSize } from '@us/shared';
-import { useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
+import { useCallCards, useCallManager, useCallState, useCouple, useFeature, onMinimiseCallScreen } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronDown,
@@ -41,6 +41,8 @@ export function CallOverlay() {
   const state = useCallState();
   const visible = state.phase !== 'idle';
   const [minimised, setMinimised] = useState(false);
+  // A call started from Our House stays a bar, so the house stays on screen.
+  useEffect(() => onMinimiseCallScreen(() => setMinimised(true)), []);
   const canMinimise = visible && state.phase !== 'incoming' && state.phase !== 'ended';
   // A new ring or the end of the call always brings the full screen back.
   useEffect(() => {

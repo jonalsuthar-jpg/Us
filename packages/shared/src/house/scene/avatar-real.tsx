@@ -27,6 +27,7 @@ export function clipFor(d: Doing, m: AvatarMotion): { clip: Clip; speed: number 
   if (m.dance > 0) return { clip: 'Dance_Loop', speed: 1 };
   if (d.swimming) return { clip: d.moving ? 'Swim_Fwd_Loop' : 'Swim_Idle_Loop', speed: 1 };
   if (d.act === 'sit') return { clip: 'Sitting_Idle_Loop', speed: 1 };
+  if (d.act === 'slow') return { clip: 'Dance_Loop', speed: 0.45 };
   if (d.act === 'cook') return { clip: 'Interact', speed: 0.8 };
   if (d.act === 'water') return { clip: 'Fixing_Kneeling', speed: 1 };
   if (d.moving) {
@@ -126,6 +127,9 @@ export function RealAvatar({ base, look, rigRef, ringColor }: { base: string; lo
     if (!r || !b) return;
     let playing: THREE.AnimationAction | null = null;
     let waveT = 0;
+    let lookYaw = 0;
+    const tmpV = new THREE.Vector3();
+    const tmpUp = new THREE.Vector3();
     const rq = new THREE.Quaternion();
     const rig: AvatarRig = {
       root: r,
@@ -150,7 +154,21 @@ export function RealAvatar({ base, look, rigRef, ringColor }: { base: string; lo
           aim(B.upperarm_r, V(-0.15, -0.55, 0.8), rq, 0.9);
           aim(B.lowerarm_r, V(-0.05, 0.05, 1), rq, 0.9);
         }
-        if (d.act === 'hug') {
+        if (d.act === 'hands_r') {
+          aim(B.upperarm_r, V(-0.35, -0.92, 0.12), rq);
+          aim(B.lowerarm_r, V(-0.45, -0.8, 0.3), rq);
+        }
+        if (d.act === 'hands_l') {
+          aim(B.upperarm_l, V(0.35, -0.92, 0.12), rq);
+          aim(B.lowerarm_l, V(0.45, -0.8, 0.3), rq);
+        }
+        if (d.act === 'slow') {
+          aim(B.upperarm_r, V(-0.35, 0.15, 1), rq, 0.8);
+          aim(B.lowerarm_r, V(0.6, 0.3, 0.6), rq, 0.8);
+          aim(B.upperarm_l, V(0.35, 0.15, 1), rq, 0.8);
+          aim(B.lowerarm_l, V(-0.6, 0.3, 0.6), rq, 0.8);
+        }
+        if (d.act === 'hug' || d.act === 'kiss') {
           aim(B.upperarm_r, V(-0.3, 0.05, 1), rq);
           aim(B.lowerarm_r, V(0.9, 0.05, 0.4), rq);
           aim(B.upperarm_l, V(0.3, 0.05, 1), rq);
@@ -163,6 +181,19 @@ export function RealAvatar({ base, look, rigRef, ringColor }: { base: string; lo
           m.wave = Math.max(0, m.wave - dt);
         } else waveT = 0;
         if (m.dance > 0) m.dance = Math.max(0, m.dance - dt);
+        // Look at my partner when they're close: the head turns (not the eyes), within reason.
+        const head = B.Head;
+        if (head && d.lookAt && d.act !== 'lie') {
+          tmpV.set(d.lookAt[0], d.lookAt[1], d.lookAt[2]);
+          r.worldToLocal(tmpV);
+          const dist = Math.hypot(tmpV.x, tmpV.z);
+          if (dist < 4 && tmpV.z > -0.3) {
+            const yaw = Math.max(-1, Math.min(1, Math.atan2(tmpV.x, tmpV.z)));
+            lookYaw += (yaw * 0.75 - lookYaw) * Math.min(1, dt * 4);
+          } else lookYaw *= Math.max(0, 1 - dt * 4);
+          head.rotateOnWorldAxis(tmpUp.set(0, 1, 0), lookYaw);
+          head.updateMatrixWorld(true);
+        }
         if (heart.current) animateHeart(heart.current, m, dt);
       },
       hand(out) {

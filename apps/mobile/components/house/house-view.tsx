@@ -1,11 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Canvas, events as touchEvents } from '@react-three/fiber/native';
-import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SHOES, SKINS, tapAt, useHouseGame, useHouseLoading, zoomBy, type HouseGame, type Quality } from '@us/shared/house';
+import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, zoomBy, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
+import { useCouple } from '@us/shared/react';
+import { GLView } from 'expo-gl';
+import { phoneHouseSound } from '@/lib/house-sound';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { Check, Eye, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Plus, RotateCcw, RotateCw, Shirt, Sun, Trash2, X } from 'lucide-react-native';
+import { Camera, Check, Eye, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, StickyNote, Sun, Trash2, Volume2, VolumeX, X } from 'lucide-react-native';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AppState, PixelRatio, Pressable, ScrollView, View } from 'react-native';
+import { AppState, PixelRatio, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeOut, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { GradientView } from '../plan/art';
@@ -35,12 +38,44 @@ export function HouseView() {
   // The realistic house, when its pack is on the phone; the box house until then.
   const pack = useHousePack();
   const houseUrl = pack.kind === 'ready' ? pack.dir : undefined;
+  const { sb, couple, me } = useCouple();
+  // Sounds come with the pack; the sound button (remembered here) turns them off.
+  const [sound, setSound] = useState<HouseSound | null>(null);
+  const [muted, setMuted] = useState(false);
+  useEffect(() => {
+    void AsyncStorage.getItem('us.house.muted').then((v) => setMuted(v === '1')).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!houseUrl) return;
+    const s = phoneHouseSound(houseUrl);
+    setSound(s);
+    return () => {
+      s.dispose();
+      setSound(null);
+    };
+  }, [houseUrl]);
+  useEffect(() => sound?.setMaster(muted ? 0 : 1), [sound, muted]);
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    void AsyncStorage.setItem('us.house.muted', next ? '1' : '0').catch(() => {});
+  };
+  // Photo mode: what the house looks like right now, into Memories.
+  const capture = useCallback(
+    async ({ gl, scene, camera }: { gl: import('three').WebGLRenderer; scene: import('three').Scene; camera: import('three').Camera }) => {
+      gl.render(scene, camera);
+      const snap = await GLView.takeSnapshotAsync(gl.getContext() as never, { format: 'jpeg', compress: 0.9 });
+      const bytes = await (await fetch(String(snap.uri))).arrayBuffer();
+      await saveHousePhoto(sb, couple.id, me.id, bytes, 'image/jpeg');
+    },
+    [sb, couple.id, me.id],
+  );
   const { controls, hud } = game;
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [quality, setQuality] = useState<Quality | null>(null);
   const [active, setActive] = useState(AppState.currentState === 'active');
   const [fps, setFps] = useState(0);
-  const [panel, setPanel] = useState<'look' | 'add' | null>(null);
+  const [panel, setPanel] = useState<'look' | 'add' | 'note' | null>(null);
   const [problem, setProblem] = useState<Error | null>(null);
   // The loading screen stays until the house is in and drawing (or 25 s, whatever happens).
   const [ready, setReady] = useState(false);
@@ -142,7 +177,7 @@ export function HouseView() {
                 camera={{ fov: 55, near: 0.1, far: 200 }}
                 events={noEvents}
               >
-                <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onError={setProblem} onReady={onReady} />
+                <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onError={setProblem} onReady={onReady} sound={sound} capture={capture} />
               </Canvas>
               </Catch>
             </View>
@@ -158,6 +193,19 @@ export function HouseView() {
           <X size={22} color="#fff" />
         </Round>
         {game.place ? <Chip text={game.place} /> : null}
+      </View>
+
+      {/* Left, under it: talk, the speaker, the sound. */}
+      <View className="absolute gap-2" style={{ left: pad.left, top: pad.top + 56 }} pointerEvents="box-none">
+        <Round label={game.inCall ? 'Stop talking' : `Talk to ${game.partnerName}`} onPress={game.toggleTalk} size={44} on={game.inCall}>
+          {game.inCall ? <PhoneOff size={18} color="#fff" /> : <Phone size={18} color="#fff" />}
+        </Round>
+        <Round label={game.music ? 'Turn the speaker off' : 'Play the speaker'} onPress={game.toggleMusic} size={44} on={game.music}>
+          <Radio size={18} color="#fff" />
+        </Round>
+        <Round label={muted ? 'Sound on' : 'Sound off'} onPress={toggleMute} size={44}>
+          {muted ? <VolumeX size={18} color="#fff" /> : <Volume2 size={18} color="#fff" />}
+        </Round>
       </View>
 
       {/* Top middle: where my partner is, then anything we just did together. */}
@@ -185,6 +233,9 @@ export function HouseView() {
         <Round label={game.decorate ? 'Done decorating' : 'Decorate'} onPress={() => game.setDecorate(!game.decorate)} size={44} on={game.decorate}>
           <Paintbrush size={20} color="#fff" />
         </Round>
+        <Round label="Take a photo (saved to Memories)" onPress={game.actions.photo} size={44}>
+          <Camera size={19} color="#fff" />
+        </Round>
         <Round label="My look" onPress={() => setPanel(panel === 'look' ? null : 'look')} size={44} on={panel === 'look'}>
           <Shirt size={20} color="#fff" />
         </Round>
@@ -200,6 +251,23 @@ export function HouseView() {
         {game.decorate ? (
           <DecorTools game={game} onAdd={() => setPanel(panel === 'add' ? null : 'add')} />
         ) : (
+          <View className="items-end gap-3" pointerEvents="box-none">
+            {/* Close to each other: ask to do something together. */}
+            {hud.nearPartner && !hud.invite && !hud.asking ? (
+              <View className="flex-row gap-2">
+                {TOGETHER.map((k) => (
+                  <Pressable key={k} accessibilityRole="button" onPress={() => game.actions.invite(k)} className="rounded-full bg-rose-600/85 px-3.5 py-2 active:bg-rose-700">
+                    <Text className="font-sans-medium text-small text-white">{TOGETHER_LABEL[k]}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {hud.note ? (
+              <Pressable accessibilityRole="button" onPress={() => setPanel('note')} className="flex-row items-center gap-2 rounded-full bg-gold-500/90 px-3.5 py-2">
+                <StickyNote size={16} color="#fff" />
+                <Text className="font-sans-medium text-small text-white">{hud.note === 'read' ? 'Read the note' : 'Leave a note'}</Text>
+              </Pressable>
+            ) : null}
           <View className="flex-row items-end gap-3" pointerEvents="box-none">
             <View className="gap-3">
               <Round label="Wave" onPress={() => game.actions.emote('wave')}>
@@ -228,8 +296,26 @@ export function HouseView() {
               </Pressable>
             ) : null}
           </View>
+          </View>
         )}
       </View>
+
+      {/* They asked me to do something together. */}
+      {hud.invite ? (
+        <View className="absolute left-0 right-0 items-center" style={{ top: pad.top + 100 }} pointerEvents="box-none">
+          <View className="flex-row items-center gap-3 rounded-full bg-black/70 py-2 pl-4 pr-2">
+            <Text className="text-small text-white">{`${game.partnerName}: ${TOGETHER_LABEL[hud.invite].toLowerCase()}?`}</Text>
+            <Pressable accessibilityRole="button" onPress={() => game.actions.answer(true)} className="rounded-full bg-rose-600 px-4 py-2">
+              <Text className="font-sans-bold text-small text-white">Yes</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => game.actions.answer(false)} className="rounded-full bg-white/15 px-4 py-2">
+              <Text className="text-small text-white">Not now</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {panel === 'note' ? <NotePanel game={game} onClose={() => setPanel(null)} /> : null}
 
       {!ready ? <Opening progress={loading} partner={game.partnerName} partnerIn={!!game.partnerPlace} /> : null}
 
@@ -251,6 +337,64 @@ export function HouseView() {
           <Text className="text-[11px] text-white">{`${fps} fps`}</Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** The note on the fridge: theirs to read (and answer), or mine to leave. */
+function NotePanel({ game, onClose }: { game: HouseGame; onClose: () => void }) {
+  const theirs = game.note?.text && game.note.by !== game.meId ? game.note : null;
+  const [writing, setWriting] = useState(!theirs);
+  const [text, setText] = useState('');
+  useEffect(() => {
+    if (theirs) game.readNote();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <View className="absolute inset-0 items-center justify-center" pointerEvents="box-none">
+      <View className="w-[420px] max-w-[90%] gap-3 rounded-3xl bg-[#FFF6D9] p-5">
+        {!writing && theirs ? (
+          <>
+            <Text className="text-small text-ink-soft">{`From ${game.partnerName}`}</Text>
+            <Text className="font-sans-medium text-lead">{theirs.text}</Text>
+            <View className="flex-row justify-end gap-2">
+              <Pressable accessibilityRole="button" onPress={() => setWriting(true)} className="rounded-full bg-rose-600 px-4 py-2">
+                <Text className="font-sans-bold text-small text-white">Write back</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={onClose} className="rounded-full bg-black/10 px-4 py-2">
+                <Text className="text-small">Done</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text className="font-sans-bold text-body">{`A note for ${game.partnerName}`}</Text>
+            <TextInput
+              value={text}
+              onChangeText={(t) => setText(t.slice(0, NOTE_MAX))}
+              placeholder="They’ll find it on the fridge"
+              multiline
+              autoFocus
+              className="min-h-[90px] rounded-2xl bg-white/70 p-3 font-sans text-body text-ink"
+            />
+            <View className="flex-row justify-end gap-2">
+              <Pressable accessibilityRole="button" onPress={onClose} className="rounded-full bg-black/10 px-4 py-2">
+                <Text className="text-small">Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={!text.trim()}
+                onPress={() => {
+                  game.leaveNote(text);
+                  onClose();
+                }}
+                className={text.trim() ? 'rounded-full bg-rose-600 px-4 py-2' : 'rounded-full bg-rose-600/40 px-4 py-2'}
+              >
+                <Text className="font-sans-bold text-small text-white">Stick it on</Text>
+              </Pressable>
+            </View>
+          </>
+        )}
+      </View>
     </View>
   );
 }

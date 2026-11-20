@@ -7,6 +7,8 @@ import {
   addedKey,
   addedModel,
   DISH_KEY,
+  MUSIC_KEY,
+  NOTE_KEY,
   doorFor,
   isOn,
   isOpen,
@@ -23,7 +25,9 @@ import {
   type PlacedItem,
 } from '../items';
 import { findPath, FLOOR_H, floorY, region, regionAt, SPAWN, walkStep, type RegionId, type Waypoint } from '../layout';
-import { holdLoses, type Emote, type HousePresence, type Pose } from '../presence';
+import { holdLoses, type Emote, type HousePresence, type Pose, type Together } from '../presence';
+import { hoursNow, isNight, skyAt, weatherFor, type Weather } from '../sky';
+import { MUSIC_S, nearness, stepSound, type HouseSound } from '../sound';
 import type { HouseStore } from '../store';
 import { Avatar, bodyAct, DANCE_S, HEART_S, newMotion, WAVE_S, type AvatarRig } from './avatar';
 import { RealAvatar } from './avatar-real';
@@ -42,7 +46,12 @@ export type HouseCmd =
   | { t: 'add'; model: ItemModel }
   | { t: 'deselect' }
   /** Walk to a spot (through doors and up stairs), then use the thing there if given. */
-  | { t: 'walkTo'; x: number; y: number; z: number; use?: string };
+  | { t: 'walkTo'; x: number; y: number; z: number; use?: string }
+  /** Ask my partner to do something together, or answer them. */
+  | { t: 'invite'; kind: Together }
+  | { t: 'answer'; yes: boolean }
+  /** Take a photo of what's on screen (into Memories). */
+  | { t: 'photo' };
 
 /**
  * What the screen around the canvas feeds in: the joystick, drags to look
@@ -106,6 +115,13 @@ export interface HudState {
   holding: string | null;
   /** Decorating: the thing picked, and what can be done to it. */
   selected: { key: string; label: string; paint: boolean; added: boolean; moved: boolean } | null;
+  /** My partner is close enough to do something together. */
+  nearPartner: boolean;
+  /** They asked me (answer it), or I asked them (waiting). */
+  invite: Together | null;
+  asking: Together | null;
+  /** At the fridge: a note of theirs to read, or room to leave mine. */
+  note: 'read' | 'write' | null;
 }
 
 export interface WorldProps {
@@ -132,6 +148,14 @@ export interface WorldProps {
   onFps?: (fps: number, calls: number) => void;
   /** Something went wrong drawing the house; it stops, and this says what. */
   onError?: (error: Error) => void;
+  /** Our couple, for today's weather (the same for both of us). */
+  coupleId?: string;
+  /** The sounds, once the pack has them. */
+  sound?: HouseSound | null;
+  /** On a call together: we talk with our hands a little. */
+  talking?: boolean;
+  /** Saves a picture of the house as it's drawn now (into Memories). */
+  capture?: (r: { gl: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.Camera }) => Promise<void>;
   /** The house is in and drawing: time to take the loading screen away. */
   onReady?: () => void;
   /** Where the realistic house is (ground.glb, …). Without it, or until it loads, the box house stands in. */
@@ -146,6 +170,11 @@ export interface WorldProps {
 const ON_PHONE = typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
 
 const SKY_DAY = new THREE.Color('#BFDDF2');
+const GOLDEN = new THREE.Color('#F4B98A');
+const GREY = new THREE.Color('#9BA7B3');
+const SUNSET_LIGHT = new THREE.Color('#FFB070');
+/** Where the fireflies drift, over the lawn and the pots. */
+const FLIES: [number, number][] = Array.from({ length: 28 }, (_, i) => [-12 + ((i * 37) % 24), 5 + ((i * 53) % 9)]);
 const SKY_NIGHT = new THREE.Color('#0D1630');
 const REACH = 1.05;
 const COOK_S = 6;
@@ -177,12 +206,16 @@ interface Me {
   seat: { key: string; i: number; lie: boolean } | null;
   hold: { key: string; since: number } | null;
   /** cook, water or hug, until when (seconds on the clock). */
-  doing: { act: 'cook' | 'water' | 'hug'; until: number; key?: string } | null;
+  doing: { act: 'cook' | 'water' | 'hug' | 'kiss' | 'slow'; until: number; key?: string } | null;
+  /** Hand in hand: I lead (my right hand) or follow beside them (my left). */
+  hands: { lead: boolean } | null;
+  /** Metres walked since the last footstep. */
+  stride: number;
 }
 
 /** The house, the two of us, the things in it and the camera. Goes inside a Canvas. */
 export function HouseWorld(props: WorldProps) {
-  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl } = props;
+  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl, coupleId, sound, talking, capture } = props;
   const { gl, scene, camera, invalidate } = useThree();
   const mats = useMemo(() => makeMaterials(quality), [quality]);
   useEffect(() => () => mats.dispose(), [mats]);
@@ -201,7 +234,15 @@ export function HouseWorld(props: WorldProps) {
   const placed = useMemo(() => placeItems(items), [items]);
   const placedRef = useRef(placed);
   placedRef.current = placed;
-  const night = items.get(SKY_KEY)?.on === true;
+  // The clock decides day and night (and the moon button, for a few hours); checked every half minute.
+  const [minute, setMinute] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setMinute(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const night = isNight(items.get(SKY_KEY), new Date(minute));
+  const weather: Weather = coupleId ? weatherFor(coupleId, today(new Date(minute))) : 'clear';
+  const note = items.get(NOTE_KEY);
   const dish = items.get(DISH_KEY)?.on === true;
 
   // The real sky (sky.tsx), once it has loaded: it takes over the background and the reflections.
@@ -274,12 +315,14 @@ export function HouseWorld(props: WorldProps) {
     motion: newMotion(),
     rig: null,
     speed: 0,
+    hands: null,
+    stride: 0,
     place: '',
     seat: null,
     hold: null,
     doing: null,
   }).current;
-  const them = useRef({ pos: new THREE.Vector3(), heading: 0, shown: false, motion: newMotion(), rig: null as AvatarRig | null, place: null as string | null, pose: null as Pose | null }).current;
+  const them = useRef({ pos: new THREE.Vector3(), heading: 0, shown: false, motion: newMotion(), rig: null as AvatarRig | null, stride: 0, wasIn: false, last: new THREE.Vector3(), place: null as string | null, pose: null as Pose | null }).current;
   const target = useRef(new THREE.Vector3(SPAWN.x, 1.1, SPAWN.z)).current;
   const marker = useRef<THREE.Mesh>(null);
   const markerLife = useRef(0);
@@ -290,6 +333,37 @@ export function HouseWorld(props: WorldProps) {
   const decor = useRef<{ key: string | null; draft: { x: number; z: number; ry: number } | null; dirty: boolean }>({ key: null, draft: null, dirty: false }).current;
   const moments = useRef(new Set<string>());
   const sun = useRef<THREE.DirectionalLight>(null);
+  const rain = useRef<THREE.Points>(null);
+  const flies = useRef<THREE.Points>(null);
+  const splashed = useRef(false);
+  const skyClock = useRef(0);
+  const lightNow = useRef({ daylight: 1, golden: 0, dim: 1, sun: [12, 20, 14] as [number, number, number] });
+  const skyReady = sky;
+  const music = items.get(MUSIC_KEY)?.on ? items.get(MUSIC_KEY) : undefined;
+  const rainGeo = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    const n = quality === 'low' ? 500 : 1200;
+    const p = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      p[i * 3] = -20 + Math.random() * 40;
+      p[i * 3 + 1] = Math.random() * 12;
+      p[i * 3 + 2] = 6 + Math.random() * 10;
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    return g;
+  }, [quality]);
+  const fliesGeo = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(FLIES.length * 3), 3));
+    return g;
+  }, []);
+  useEffect(
+    () => () => {
+      rainGeo.dispose();
+      fliesGeo.dispose();
+    },
+    [rainGeo, fliesGeo],
+  );
   const hemi = useRef<THREE.HemisphereLight>(null);
   const stars = useRef<THREE.Points>(null);
 
@@ -304,6 +378,45 @@ export function HouseWorld(props: WorldProps) {
       else them.motion.heart = HEART_S;
     });
   }, [presence, them]);
+
+  const asks = useRef<{ invite: Together | null; asking: Together | null }>({ invite: null, asking: null }).current;
+  useEffect(() => {
+    if (!presence) return;
+    return presence.onInvite(({ kind, answer }) => {
+      if (answer === undefined) asks.invite = kind;
+      else if (asks.asking === kind) {
+        asks.asking = null;
+        if (answer) begin(kind, true);
+        else onMoment?.(`${partnerName} said maybe later`);
+      }
+    });
+  }, [presence, asks, partnerName, onMoment]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Start something together; whoever asked leads the walk hand in hand. */
+  function begin(kind: Together, asked: boolean) {
+    const now = clock.elapsedTime;
+    if (me.seat) standUp();
+    me.path = [];
+    if (kind === 'kiss') {
+      me.doing = { act: 'kiss', until: now + 3.5 };
+      moment(`kiss:${Math.floor(now / 15)}`, 'A kiss');
+    } else if (kind === 'slow') {
+      me.doing = { act: 'slow', until: now + 60 };
+      moment(`slow:${Math.floor(now / 60)}`, 'Slow dancing');
+      if (!music) save(MUSIC_KEY, { on: true, at: new Date().toISOString() });
+    } else {
+      me.hands = { lead: asked };
+      moment(`hands:${Math.floor(now / 60)}`, 'Hand in hand', false);
+    }
+  }
+
+  // A note of theirs I haven't read: say so once, on the way in.
+  const noted = useRef(false);
+  useEffect(() => {
+    if (noted.current || !note?.text || note.by === meId || note.read) return;
+    noted.current = true;
+    onMoment?.('There’s a note on the fridge');
+  }, [note, meId, onMoment]);
 
   useLayoutEffect(() => {
     const s = sun.current;
@@ -337,6 +450,7 @@ export function HouseWorld(props: WorldProps) {
     if (moments.current.has(id)) return;
     moments.current.add(id);
     onMoment?.(text);
+    sound?.play('chime', 0.45);
     if (hearts) {
       me.motion.heart = HEART_S;
       them.motion.heart = HEART_S;
@@ -444,10 +558,13 @@ export function HouseWorld(props: WorldProps) {
   const use = (item: PlacedItem) => {
     switch (item.kind) {
       case 'light':
+        sound?.play('click', 0.5);
         return save(item.key, { on: !isOn(item) });
       case 'door':
+        sound?.play(item.key === 'fridge' ? 'fridge' : 'door', 0.55);
         return save(item.key, { open: !isOpen(item) });
       case 'tv':
+        sound?.play('click', 0.5);
         return save(item.key, { on: !isOn(item) });
       case 'frame': {
         if (!photos.length) return onMoment?.('Add photos to Memories to see them here');
@@ -568,6 +685,7 @@ export function HouseWorld(props: WorldProps) {
       me.path = [];
       me.pending = null;
       me.doing = null;
+      me.hands = null;
       const swim = me.at === 'pool';
       const speed = (mag > 0.85 ? 3.6 : 1.0 + 1.9 * mag) * (swim ? 0.55 : 1);
       me.speed = speed;
@@ -648,11 +766,55 @@ export function HouseWorld(props: WorldProps) {
       onMoment?.(`${partnerName} has it`);
     }
 
-    const act = me.seat ? `${me.seat.lie ? 'lie' : 'sit'}:${me.seat.key}:${me.seat.i}` : me.doing ? me.doing.act : me.at === 'pool' ? 'swim' : undefined;
+    // Hand in hand: the one who follows walks beside the one who leads (on their right).
+    if (me.hands && !me.hands.lead) {
+      if (p && p.a === 'hands:r' && Math.hypot(p.x - me.pos.x, p.z - me.pos.z) < 3) {
+        const rx = -Math.cos(p.h);
+        const rz = Math.sin(p.h);
+        const tx = p.x + rx * 0.55;
+        const tz = p.z + rz * 0.55;
+        const r = regionAt(tx, p.y + 0.1, tz);
+        if (r) {
+          me.pos.x += (tx - me.pos.x) * Math.min(1, dt * 10);
+          me.pos.z += (tz - me.pos.z) * Math.min(1, dt * 10);
+          me.pos.y = floorY(r.id, me.pos.x);
+          me.at = r.id;
+        }
+        me.heading += angleDiff(me.heading, p.h) * Math.min(1, dt * 10);
+        moving = p.m === 1;
+        me.speed = p.s ?? 1.4;
+      } else me.hands = null;
+    }
+    if (me.hands?.lead && (!p || Math.hypot(p.x - me.pos.x, p.z - me.pos.z) > 3)) me.hands = null;
+    // A kiss or a slow dance: turn to each other (and step close for the dance).
+    if (p && (me.doing?.act === 'kiss' || me.doing?.act === 'slow')) {
+      const dx = p.x - me.pos.x;
+      const dz = p.z - me.pos.z;
+      me.heading += angleDiff(me.heading, Math.atan2(dx, dz)) * Math.min(1, dt * 8);
+      const d = Math.hypot(dx, dz);
+      if (d > 0.6) {
+        const k = Math.min(d - 0.6, dt * 1.2) / d;
+        const next = walkStep(me.at, me.pos.x, me.pos.z, me.pos.x + dx * k, me.pos.z + dz * k);
+        me.pos.x = next.x;
+        me.pos.z = next.z;
+        me.at = next.at;
+      }
+    }
+    const act = me.seat
+      ? `${me.seat.lie ? 'lie' : 'sit'}:${me.seat.key}:${me.seat.i}`
+      : me.hands
+        ? me.hands.lead
+          ? 'hands:r'
+          : 'hands:l'
+        : me.doing
+          ? me.doing.act
+          : me.at === 'pool'
+            ? 'swim'
+            : undefined;
     if (me.rig) {
       me.rig.root.position.copy(me.pos);
       me.rig.root.rotation.y = me.heading;
-      me.rig.update(dt, { moving, speed: me.speed, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold }, me.motion);
+      me.rig.update(dt, { moving, speed: me.speed, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold, talking: talking && !moving, lookAt: p && them.shown ? [them.pos.x, them.pos.y + 1.6, them.pos.z] : undefined }, me.motion);
     }
     const label = region(me.at).label;
     if (label !== me.place) {
@@ -686,7 +848,7 @@ export function HouseWorld(props: WorldProps) {
         them.rig.root.visible = !(view === 'ground' && them.pos.y > FLOOR_H / 2);
         them.rig.root.position.copy(them.pos);
         them.rig.root.rotation.y = them.heading;
-        them.rig.update(dt, { moving: p.m === 1, speed: p.s, swimming: p.a === 'swim', act: bodyAct(p.a), carrying: !!p.hk }, them.motion);
+        them.rig.update(dt, { moving: p.m === 1, speed: p.s, swimming: p.a === 'swim', act: bodyAct(p.a), carrying: !!p.hk, talking: talking && p.m !== 1, lookAt: [me.pos.x, me.pos.y + 1.6, me.pos.z] }, them.motion);
       } else {
         them.shown = false;
         them.rig.root.visible = false;
@@ -724,13 +886,109 @@ export function HouseWorld(props: WorldProps) {
     if (night && out(act) && out(p?.a)) moment('stars', 'Stargazing together');
     if (me.doing?.act === 'hug' && p?.a === 'hug' && Math.hypot(p.x - me.pos.x, p.z - me.pos.z) < 1.3) moment(`hug:${Math.floor(now / 10)}`, 'A hug');
 
+    // Footsteps (mine, and theirs quieter with distance), and a splash into the pool.
+    if (sound) {
+      if (moving && !me.seat && me.at !== 'pool') {
+        me.stride += me.speed * dt;
+        if (me.stride > (me.speed > 2.5 ? 0.85 : 0.65)) {
+          me.stride = 0;
+          sound.play(stepSound(me.at), me.speed > 2.5 ? 0.55 : 0.4);
+        }
+      }
+      const inPool = me.at === 'pool';
+      if (inPool && !splashed.current) sound.play('splash', 0.6);
+      splashed.current = inPool;
+      if (p && them.shown) {
+        const far = Math.hypot(p.x - me.pos.x, p.z - me.pos.z);
+        if (p.m === 1 && p.a !== 'swim') {
+          them.stride += them.last.distanceTo(them.pos);
+          if (them.stride > 0.7) {
+            them.stride = 0;
+            const r = regionAt(p.x, p.y + 0.1, p.z);
+            sound.play(stepSound(r?.id ?? 'living'), 0.4 * nearness(far));
+          }
+        }
+        const theyIn = p.a === 'swim';
+        if (theyIn && !them.wasIn) sound.play('splash', 0.6 * nearness(far));
+        them.wasIn = theyIn;
+      }
+      them.last.copy(them.pos);
+      // Busy sounds: the pan, the watering can, close by.
+      const stove = all.find((i) => i.key === 'counter');
+      const cookingNear = (who: { x: number; z: number }, a?: string) => (a === 'cook' && stove ? nearness(Math.hypot(stove.x - who.x, stove.z - who.z)) : 0);
+      const sizzle = Math.max(me.doing?.act === 'cook' ? 1 : 0, p ? cookingNear(p, p.a) * nearness(Math.hypot(p.x - me.pos.x, p.z - me.pos.z)) : 0);
+      sound.loop('sizzle', sizzle * 0.35);
+      sound.loop('pour', me.doing?.act === 'water' ? 0.4 : 0);
+      // Outside: birds by day, crickets at night, the rain; softer indoors.
+      const indoors = region(me.at).inside ? 0.45 : 1;
+      sound.loop('birds', !night && weather !== 'rain' ? 0.22 * indoors : 0);
+      sound.loop('crickets', night && weather !== 'rain' ? 0.18 * indoors : 0);
+      sound.loop('rain', weather === 'rain' ? 0.35 * indoors : 0);
+      sound.loop('music', music ? 0.3 : 0, music ? ((Date.now() - Date.parse(music.at ?? new Date().toISOString())) / 1000) % MUSIC_S : 0);
+    }
+
+    // The sun crosses the sky with the clock; the weather dims it.
+    skyClock.current -= dt;
+    if (skyClock.current <= 0) {
+      skyClock.current = 2;
+      const s = skyAt(hoursNow());
+      const daylight = night ? 0 : Math.max(s.daylight, 0.35);
+      const dim = weather === 'rain' ? 0.4 : weather === 'cloudy' ? 0.65 : weather === 'fog' ? 0.55 : 1;
+      lightNow.current = { daylight, golden: night ? 0 : s.golden, dim, sun: s.sun };
+      if (sun.current) sun.current.position.set(night ? 12 : s.sun[0], night ? 20 : s.sun[1], night ? 14 : s.sun[2]);
+      const sky = night ? SKY_NIGHT : SKY_DAY.clone().lerp(GOLDEN, s.golden * 0.6).lerp(GREY, 1 - dim);
+      if (!skyReady) scene.background = sky;
+      if (scene.fog instanceof THREE.Fog) {
+        scene.fog.color.copy(sky);
+        scene.fog.near = weather === 'fog' ? 4 : night ? 25 : 35;
+        scene.fog.far = weather === 'fog' ? 32 : night ? 70 : 95;
+      }
+      if (skyReady) scene.backgroundIntensity = (night ? 0.6 : 0.5 + 0.5 * s.daylight) * dim;
+    }
+    const L = lightNow.current;
+
+    // Rain falls round us, and never inside the house.
+    if (rain.current) {
+      rain.current.visible = weather === 'rain';
+      if (weather === 'rain') {
+        const pos = rain.current.geometry.attributes.position as THREE.BufferAttribute;
+        for (let i = 0; i < pos.count; i++) {
+          let y = pos.getY(i) - dt * 11;
+          if (y < 0) {
+            y = 9 + Math.random() * 3;
+            let x = me.pos.x + (Math.random() - 0.5) * 24;
+            let z = me.pos.z + (Math.random() - 0.5) * 24;
+            if (Math.abs(x) < 6.6 && Math.abs(z) < 4.8) x = x < 0 ? -6.8 - Math.random() * 3 : 6.8 + Math.random() * 3;
+            pos.setX(i, x);
+            pos.setZ(i, z);
+          }
+          pos.setY(i, y);
+        }
+        pos.needsUpdate = true;
+      }
+    }
+    // Fireflies on a dry night, drifting over the garden.
+    if (flies.current) {
+      flies.current.visible = night && weather !== 'rain';
+      if (flies.current.visible) {
+        const pos = flies.current.geometry.attributes.position as THREE.BufferAttribute;
+        const t = clock.elapsedTime;
+        for (let i = 0; i < pos.count; i++) {
+          const b = FLIES[i]!;
+          pos.setXYZ(i, b[0] + Math.sin(t * 0.4 + i) * 0.8, 0.6 + Math.sin(t * 0.9 + i * 1.7) * 0.35, b[1] + Math.cos(t * 0.3 + i * 0.7) * 0.8);
+        }
+        pos.needsUpdate = true;
+        (flies.current.material as THREE.PointsMaterial).opacity = 0.55 + Math.sin(t * 3) * 0.35;
+      }
+    }
+
     // Night: the moon, the stars, the lamps doing the work.
     if (sun.current) {
-      sun.current.intensity += ((night ? 0.35 : quality === 'low' ? 1.6 : 2.4) - sun.current.intensity) * Math.min(1, dt * 3);
-      sun.current.color.set(night ? '#9DB4FF' : '#FFF1DC');
+      sun.current.intensity += ((night ? 0.35 : (quality === 'low' ? 1.6 : 2.4) * L.daylight * L.dim) - sun.current.intensity) * Math.min(1, dt * 3);
+      sun.current.color.set(night ? '#9DB4FF' : '#FFF1DC').lerp(SUNSET_LIGHT, L.golden * 0.7);
     }
     // Low quality has no lamp light, so its night keeps more of the sky's glow.
-    if (hemi.current) hemi.current.intensity += ((night ? (quality === 'low' ? 0.55 : 0.22) : quality === 'low' ? 1.1 : 0.7) - hemi.current.intensity) * Math.min(1, dt * 3);
+    if (hemi.current) hemi.current.intensity += ((night ? (quality === 'low' ? 0.55 : 0.22) : (quality === 'low' ? 1.1 : 0.7) * (0.6 + 0.4 * L.dim) * Math.max(0.5, L.daylight)) - hemi.current.intensity) * Math.min(1, dt * 3);
     // The night sky photo has its own stars.
     if (stars.current) stars.current.visible = night && !sky;
 
@@ -769,6 +1027,14 @@ export function HouseWorld(props: WorldProps) {
       seated: !!me.seat,
       holding: me.hold ? (itemDef(me.hold.key)?.label ?? null) : null,
       selected: sel ? { key: sel.key, label: sel.label, paint: !!sel.paint, added: !!addedModel(sel.key), moved: items.has(sel.key) } : null,
+      nearPartner: !!(them.pose && them.shown && !controls.decorate && Math.hypot(them.pose.x - me.pos.x, them.pose.z - me.pos.z) < 1.8 && Math.abs(them.pose.y - me.pos.y) < 1),
+      invite: asks.invite,
+      asking: asks.asking,
+      note: (() => {
+        const fridge = all.find((i) => i.key === 'fridge');
+        if (!fridge || controls.decorate || floorOf(me.pos.y) !== 0 || Math.hypot(fridge.x - me.pos.x, fridge.z - me.pos.z) > 1.8) return null;
+        return note?.text && note.by && note.by !== meId ? 'read' : 'write';
+      })(),
     };
     const sig = JSON.stringify(state);
     if (sig !== hud.current.last) {
@@ -845,6 +1111,26 @@ export function HouseWorld(props: WorldProps) {
         commitDraft();
         decor.key = null;
         return;
+      case 'invite':
+        asks.asking = cmd.kind;
+        presence?.invite(cmd.kind);
+        onMoment?.(`Asked ${partnerName}`);
+        return;
+      case 'answer': {
+        const kind = asks.invite;
+        asks.invite = null;
+        if (!kind) return;
+        presence?.answer(kind, cmd.yes);
+        if (cmd.yes) begin(kind, false);
+        return;
+      }
+      case 'photo':
+        if (!capture) return;
+        sound?.play('click', 0.6);
+        void capture({ gl, scene, camera })
+          .then(() => onMoment?.('Saved to Memories'))
+          .catch(() => onMoment?.('Couldn’t save the photo'));
+        return;
       case 'walkTo': {
         const r = regionAt(cmd.x, cmd.y + 0.1, cmd.z);
         if (!r) return;
@@ -919,7 +1205,10 @@ export function HouseWorld(props: WorldProps) {
   /** Crossing a shut door's doorway opens it, like walking up to it would. */
   function openDoorBetween(a: RegionId, b: RegionId) {
     const door = doorFor(a, b, placedRef.current);
-    if (door && !isOpen(door)) save(door.key, { open: true });
+    if (door && !isOpen(door)) {
+      sound?.play('door', 0.5);
+      save(door.key, { open: true });
+    }
   }
 
   /** A spot in front of an item, where I'd stand to use it. */
@@ -953,6 +1242,12 @@ export function HouseWorld(props: WorldProps) {
         <planeGeometry args={[240, 240]} />
         <meshLambertMaterial color={night ? '#22351F' : '#6E9650'} />
       </mesh>
+      <points ref={rain} geometry={rainGeo} visible={false}>
+        <pointsMaterial color="#C9D6E3" size={0.06} transparent opacity={0.55} depthWrite={false} />
+      </points>
+      <points ref={flies} geometry={fliesGeo} visible={false}>
+        <pointsMaterial color="#FFE98A" size={0.12} transparent opacity={0.8} depthWrite={false} fog={false} />
+      </points>
       <points ref={stars} geometry={starGeo} visible={night}>
         <pointsMaterial color="#FFFFFF" size={0.35} sizeAttenuation fog={false} />
       </points>

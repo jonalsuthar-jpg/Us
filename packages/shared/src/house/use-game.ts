@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallManager, useCallState } from '../react/call-provider';
+import { minimiseCallScreen } from '../react/call-ui';
 import { useCouple } from '../react/couple-provider';
-import { avatarKey, SKY_KEY, type ItemModel, type LookState } from './items';
-import type { Emote } from './presence';
+import { avatarKey, MUSIC_KEY, NOTE_KEY, SKY_KEY, type ItemModel, type LookState } from './items';
+import { isNight } from './sky';
+import type { Emote, Together } from './presence';
 import { LOOKS } from './scene/avatar';
 import { createControls, setView, type HouseControls, type HudState, type WorldProps } from './scene/world';
 import { useHouse, useHouseItems, useHousePhotos } from './use-house';
 
-const NO_HUD: HudState = { action: null, seated: false, holding: null, selected: null };
+const NO_HUD: HudState = { action: null, seated: false, holding: null, selected: null, nearPartner: false, invite: null, asking: null, note: null };
 
 /**
  * Everything the house screen needs, the same on the phone and the web: the
@@ -14,7 +17,9 @@ const NO_HUD: HudState = { action: null, seated: false, holding: null, selected:
  * draw the buttons and feed in the joystick and taps.
  */
 export function useHouseGame() {
-  const { me, partner, mySlot } = useCouple();
+  const { me, partner, mySlot, couple } = useCouple();
+  const call = useCallState();
+  const calls = useCallManager();
   const { presence, store, partnerHere } = useHouse();
   const items = useHouseItems(store);
   const photos = useHousePhotos();
@@ -39,7 +44,11 @@ export function useHouseGame() {
   // items changes whenever the store does, which is when a look could have.
   const mine: LookState = useMemo(() => store?.look(myKey) ?? LOOKS[mySlot === 'a' ? 0 : 1]!, [store, myKey, mySlot, items]); // eslint-disable-line react-hooks/exhaustive-deps
   const theirs: LookState = useMemo(() => store?.look(theirKey) ?? LOOKS[mySlot === 'a' ? 1 : 0]!, [store, theirKey, mySlot, items]); // eslint-disable-line react-hooks/exhaustive-deps
-  const night = items.get(SKY_KEY)?.on === true;
+  const night = isNight(items.get(SKY_KEY), new Date());
+  const music = items.get(MUSIC_KEY)?.on === true;
+  const note = items.get(NOTE_KEY);
+  const inCall = call.phase !== 'idle' && call.phase !== 'ended';
+  const talking = call.phase === 'connected';
 
   const cmd = controls.cmds;
   const actions = useMemo(
@@ -51,6 +60,9 @@ export function useHouseGame() {
       remove: () => cmd.push({ t: 'remove' }),
       add: (model: ItemModel) => cmd.push({ t: 'add', model }),
       deselect: () => cmd.push({ t: 'deselect' }),
+      invite: (kind: Together) => cmd.push({ t: 'invite', kind }),
+      answer: (yes: boolean) => cmd.push({ t: 'answer', yes }),
+      photo: () => cmd.push({ t: 'photo' }),
     }),
     [cmd, controls],
   );
@@ -70,7 +82,21 @@ export function useHouseGame() {
     setViewState(next);
   }, [controls]);
 
-  const toggleNight = useCallback(() => store?.set(SKY_KEY, { on: !night }), [store, night]);
+  // "Night for now" (or day): for both of us, for a few hours; then the clock again.
+  const toggleNight = useCallback(() => store?.set(SKY_KEY, { on: !night, at: new Date().toISOString() }), [store, night]);
+  // The speaker: the same bar for both of us.
+  const toggleMusic = useCallback(() => store?.set(MUSIC_KEY, music ? { on: false } : { on: true, at: new Date().toISOString() }), [store, music]);
+  // Talk: a voice call, kept as a small bar so the house stays on screen.
+  const toggleTalk = useCallback(() => {
+    if (inCall) return void calls.hangup();
+    void calls.startCall('audio').catch(() => onMoment('Couldn’t start the call'));
+    minimiseCallScreen();
+  }, [calls, inCall, onMoment]);
+  // The note on the fridge: leave one, or read theirs (and they see I did).
+  const leaveNote = useCallback((text: string) => store?.set(NOTE_KEY, { text: text.trim(), by: me.id, at: new Date().toISOString() }), [store, me.id]);
+  const readNote = useCallback(() => {
+    if (note?.text && note.by !== me.id && !note.read) store?.set(NOTE_KEY, { ...note, read: true });
+  }, [store, note, me.id]);
 
   const setLook = useCallback((patch: Partial<LookState>) => store?.set(myKey, { ...mine, ...patch }), [store, myKey, mine]);
   // No look of mine saved yet, once we know: the house invites me to make one.
@@ -92,9 +118,11 @@ export function useHouseGame() {
     onPartnerPlace: setPartnerPlace,
     onHud: setHud,
     onMoment,
+    coupleId: couple.id,
+    talking,
   };
 
-  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, toggleView, night, toggleNight, look: mine, setLook, needsLook, actions, partnerName: partner.display_name };
+  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, toggleView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
 }
 
 export type HouseGame = ReturnType<typeof useHouseGame>;

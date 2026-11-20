@@ -1,5 +1,5 @@
 import { formatDuration, isWideVideo, selfViewAspect, videoFit, type CallState, type VideoSize } from '@us/shared';
-import { useCallCards, useCallManager, useCallState, useCouple, useFeature } from '@us/shared/react';
+import { useCallCards, useCallManager, useCallState, useCouple, useFeature, onMinimiseCallScreen } from '@us/shared/react';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { Bluetooth, Check, ChevronDown, Ear, Headphones, Layers, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, Smartphone, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
@@ -34,6 +34,8 @@ import { Display, Text } from '../ui/text';
 export function CallScreen() {
   const state = useCallState();
   const [minimised, setMinimised] = useState(false);
+  // A call started from Our House stays a bar, so the house stays on screen.
+  useEffect(() => onMinimiseCallScreen(() => setMinimised(true)), []);
   // Watching their shared screen or a wide camera full screen, turned sideways.
   const [full, setFull] = useState(false);
   // The shape of the picture they're sending, once its first frame arrives.

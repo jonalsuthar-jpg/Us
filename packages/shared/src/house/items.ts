@@ -147,6 +147,13 @@ export interface ItemState {
   z?: number;
   ry?: number;
   color?: string;
+  /** When it was set (ISO): "Night for now" lasts a few hours from here. */
+  at?: string;
+  /** A note on the fridge: what it says and who left it. */
+  text?: string;
+  by?: string;
+  /** The note has been read by the one it was left for. */
+  read?: boolean;
   /** frame / tv: which memory photo. */
   photo?: string;
   /** plant: 0–4, and the day (YYYY-MM-DD) it was last watered. */
@@ -272,6 +279,10 @@ export function cleanState(s: unknown): ItemState | null {
   }
   if (typeof o.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(o.color)) out.color = o.color;
   if (typeof o.photo === 'string' && o.photo.length <= 300) out.photo = o.photo;
+  if (typeof o.at === 'string' && o.at.length <= 40 && Number.isFinite(Date.parse(o.at))) out.at = o.at;
+  if (typeof o.text === 'string' && o.text.trim() && o.text.length <= NOTE_MAX) out.text = o.text;
+  if (typeof o.by === 'string' && /^[0-9a-f-]{1,64}$/i.test(o.by)) out.by = o.by;
+  if (typeof o.read === 'boolean') out.read = o.read;
   if (typeof o.growth === 'number' && Number.isInteger(o.growth) && o.growth >= 0 && o.growth <= 4) out.growth = o.growth;
   if (typeof o.watered === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.watered)) out.watered = o.watered;
   return out;
@@ -347,5 +358,10 @@ export function cleanLook(s: unknown): LookState | null {
 
 /** Day or night, for both of us. */
 export const SKY_KEY = 'sky';
+/** The speaker: playing, and since when (so we both hear the same bar). */
+export const MUSIC_KEY = 'music';
+/** A note left on the fridge for the other to find. */
+export const NOTE_KEY = 'note';
+export const NOTE_MAX = 280;
 /** A dish on the table, after cooking. */
 export const DISH_KEY = 'dish';

@@ -1,8 +1,10 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
-import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SHOES, SKINS, tapAt, useHouseGame, useHouseLoading, zoomBy, type HouseGame, type Quality } from '@us/shared/house';
-import { Check, Eye, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Plus, RotateCcw, RotateCw, Shirt, Sun, Trash2, X } from 'lucide-react';
+import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, zoomBy, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
+import type * as THREE from 'three';
+import { webHouseSound } from '@/lib/house-sound';
+import { Camera, Check, Eye, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, StickyNote, Sun, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { housePackBase } from '@us/shared/house/light';
 import { useCouple } from '@us/shared/react';
 import { useRouter } from 'next/navigation';
@@ -34,11 +36,50 @@ export function HouseView() {
   const router = useRouter();
   const game = useHouseGame();
   const houseUrl = useHousePackUrl();
+  const { sb, couple, me } = useCouple();
+  // Sounds come with the pack; the sound button (remembered in this browser) turns them off.
+  const [sound, setSound] = useState<HouseSound | null>(null);
+  const [muted, setMuted] = useState(false);
+  useEffect(() => {
+    try {
+      setMuted(localStorage.getItem('us.house.muted') === '1');
+    } catch {
+      // Private window: sound on.
+    }
+  }, []);
+  useEffect(() => {
+    if (!houseUrl) return;
+    const s = webHouseSound(houseUrl);
+    setSound(s);
+    return () => {
+      s.dispose();
+      setSound(null);
+    };
+  }, [houseUrl]);
+  useEffect(() => sound?.setMaster(muted ? 0 : 1), [sound, muted]);
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    try {
+      localStorage.setItem('us.house.muted', next ? '1' : '0');
+    } catch {
+      // As above.
+    }
+  };
+  // Photo mode: drawn once more and read straight away, into Memories.
+  const capture = useCallback(
+    async ({ gl, scene, camera }: { gl: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.Camera }) => {
+      gl.render(scene, camera);
+      const blob = await (await fetch(gl.domElement.toDataURL('image/jpeg', 0.9))).blob();
+      await saveHousePhoto(sb, couple.id, me.id, blob, 'image/jpeg');
+    },
+    [sb, couple.id, me.id],
+  );
   const { controls, hud } = game;
   const box = useRef<HTMLDivElement>(null);
   const [quality, setQuality] = useState<Quality>(savedQuality);
   const [visible, setVisible] = useState(true);
-  const [panel, setPanel] = useState<'look' | 'add' | null>(null);
+  const [panel, setPanel] = useState<'look' | 'add' | 'note' | null>(null);
   const [touch, setTouch] = useState(false);
   // The loading screen stays until the house is in and drawing (or 25 s, whatever happens).
   const [ready, setReady] = useState(false);
@@ -193,7 +234,7 @@ export function HouseView() {
           // Clicks reach the scene through the handlers above, not R3F's raycasting on every move.
           style={{ pointerEvents: 'none' }}
         >
-          <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onReady={onReady} />
+          <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onReady={onReady} sound={sound} capture={capture} />
         </Canvas>
       </div>
 
@@ -204,6 +245,18 @@ export function HouseView() {
           <X size={22} />
         </HudButton>
         {game.place ? <Chip>{game.place}</Chip> : null}
+      </div>
+
+      <div className="pointer-events-none absolute left-4 top-[72px] flex flex-col gap-2">
+        <HudButton label={game.inCall ? 'Stop talking' : `Talk to ${game.partnerName}`} onClick={game.toggleTalk} on={game.inCall}>
+          {game.inCall ? <PhoneOff size={18} /> : <Phone size={18} />}
+        </HudButton>
+        <HudButton label={game.music ? 'Turn the speaker off' : 'Play the speaker'} onClick={game.toggleMusic} on={game.music}>
+          <Radio size={18} />
+        </HudButton>
+        <HudButton label={muted ? 'Sound on' : 'Sound off'} onClick={toggleMute}>
+          {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </HudButton>
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 top-4 flex flex-col items-center gap-2">
@@ -225,6 +278,9 @@ export function HouseView() {
         <HudButton label={game.decorate ? 'Done decorating' : 'Decorate'} onClick={() => game.setDecorate(!game.decorate)} on={game.decorate}>
           <Paintbrush size={20} />
         </HudButton>
+        <HudButton label="Take a photo (saved to Memories)" onClick={actions.photo}>
+          <Camera size={19} />
+        </HudButton>
         <HudButton label="My look" onClick={() => setPanel(panel === 'look' ? null : 'look')} on={panel === 'look'}>
           <Shirt size={20} />
         </HudButton>
@@ -240,7 +296,23 @@ export function HouseView() {
         {game.decorate ? (
           <DecorTools game={game} onAdd={() => setPanel(panel === 'add' ? null : 'add')} />
         ) : (
-          <>
+          <div className="flex flex-col items-end gap-3">
+            {hud.nearPartner && !hud.invite && !hud.asking ? (
+              <div className="pointer-events-auto flex gap-2">
+                {TOGETHER.map((k) => (
+                  <button key={k} type="button" onClick={() => actions.invite(k)} className="rounded-full bg-rose-600/85 px-3.5 py-2 text-small font-medium text-white hover:bg-rose-700">
+                    {TOGETHER_LABEL[k]}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {hud.note ? (
+              <button type="button" onClick={() => setPanel('note')} className="pointer-events-auto flex items-center gap-2 rounded-full bg-gold-500/90 px-3.5 py-2 text-small font-medium text-white">
+                <StickyNote size={16} />
+                {hud.note === 'read' ? 'Read the note' : 'Leave a note'}
+              </button>
+            ) : null}
+          <div className="flex items-end gap-3">
             <div className="flex flex-col gap-3">
               <HudButton label="Wave (1)" onClick={() => actions.emote('wave')} big>
                 <Hand size={22} />
@@ -262,7 +334,8 @@ export function HouseView() {
                 {!touch ? <kbd className="rounded bg-white/25 px-1.5 text-[10px] font-medium">E</kbd> : null}
               </button>
             ) : null}
-          </>
+          </div>
+          </div>
         )}
       </div>
 
@@ -282,6 +355,20 @@ export function HouseView() {
         </span>
       </div>
 
+      {hud.invite ? (
+        <div className="pointer-events-none absolute inset-x-0 top-28 flex justify-center">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-black/70 py-2 pl-4 pr-2 text-small text-white">
+            {`${game.partnerName}: ${TOGETHER_LABEL[hud.invite].toLowerCase()}?`}
+            <button type="button" onClick={() => actions.answer(true)} className="rounded-full bg-rose-600 px-4 py-2 font-bold">
+              Yes
+            </button>
+            <button type="button" onClick={() => actions.answer(false)} className="rounded-full bg-white/15 px-4 py-2">
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {panel === 'note' ? <NotePanel game={game} onClose={() => setPanel(null)} /> : null}
       {panel === 'look' ? <LookPanel game={game} onClose={() => setPanel(null)} /> : null}
       {panel === 'add' && game.decorate ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-24 flex justify-center">
@@ -381,6 +468,63 @@ function DecorTools({ game, onAdd }: { game: HouseGame; onAdd: () => void }) {
         <HudButton label="Add something" onClick={onAdd} big>
           <Plus size={24} />
         </HudButton>
+      </div>
+    </div>
+  );
+}
+
+/** The note on the fridge: theirs to read (and answer), or mine to leave. */
+function NotePanel({ game, onClose }: { game: HouseGame; onClose: () => void }) {
+  const theirs = game.note?.text && game.note.by !== game.meId ? game.note : null;
+  const [writing, setWriting] = useState(!theirs);
+  const [text, setText] = useState('');
+  useEffect(() => {
+    if (theirs) game.readNote();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div className="pointer-events-auto flex w-[420px] max-w-[90%] flex-col gap-3 rounded-3xl bg-[#FFF6D9] p-5 text-ink" onKeyDown={(e) => e.stopPropagation()}>
+        {!writing && theirs ? (
+          <>
+            <span className="text-small text-ink-soft">From {game.partnerName}</span>
+            <p className="text-lead font-medium">{theirs.text}</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setWriting(true)} className="rounded-full bg-rose-600 px-4 py-2 text-small font-bold text-white">
+                Write back
+              </button>
+              <button type="button" onClick={onClose} className="rounded-full bg-black/10 px-4 py-2 text-small">
+                Done
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <span className="font-bold">A note for {game.partnerName}</span>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value.slice(0, NOTE_MAX))}
+              placeholder="They’ll find it on the fridge"
+              autoFocus
+              className="min-h-[90px] rounded-2xl bg-white/70 p-3 text-body outline-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={onClose} className="rounded-full bg-black/10 px-4 py-2 text-small">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!text.trim()}
+                onClick={() => {
+                  game.leaveNote(text);
+                  onClose();
+                }}
+                className="rounded-full bg-rose-600 px-4 py-2 text-small font-bold text-white disabled:opacity-40"
+              >
+                Stick it on
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

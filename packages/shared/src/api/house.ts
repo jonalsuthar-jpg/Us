@@ -2,7 +2,7 @@ import type { Json } from '../database.types';
 import { HOUSE_PACK_VERSION } from '../house/pack';
 import { StaleHouseError, type HouseApi, type HouseRow } from '../house/store';
 import type { UsClient } from '../supabase';
-import { listMemories, memoryPhotos, signedPhotoUrls } from './memory';
+import { createMemory, listMemories, memoryPhotos, signedPhotoUrls, uploadMemoryPhoto } from './memory';
 
 /**
  * Our House on the server: the saved things (house_items) and the photos
@@ -42,4 +42,12 @@ export async function housePackBase(sb: UsClient): Promise<string> {
   const base = (data as { base?: unknown } | null)?.base;
   if (typeof base !== 'string' || !/^https:\/\//.test(base)) throw new Error('No house pack address');
   return `${base}/v${HOUSE_PACK_VERSION}`;
+}
+
+/** A photo taken in the house, kept in Memories as a moment of today. */
+export async function saveHousePhoto(sb: UsClient, coupleId: string, meId: string, body: Blob | ArrayBuffer | Uint8Array, contentType = 'image/jpeg') {
+  const path = await uploadMemoryPhoto(sb, coupleId, body, contentType);
+  const d = new Date();
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return createMemory(sb, { couple_id: coupleId, created_by: meId, title: 'In our house', happened_on: day, photo_path: path, photo_paths: [path], kind: 'moment' });
 }
