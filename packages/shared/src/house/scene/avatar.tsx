@@ -110,21 +110,50 @@ export interface AvatarMotion {
   walk: number;
   /** 0 standing … 1 walking, eased. */
   stride: number;
-  /** Seconds left of a wave or heart. */
+  /** Seconds left of a wave, a heart or a dance. */
   wave: number;
   heart: number;
+  dance: number;
+  /** Seconds into whatever I'm doing (cooking, watering, a hug). */
+  busy: number;
 }
 
-export const newMotion = (): AvatarMotion => ({ walk: 0, stride: 0, wave: 0, heart: 0 });
+export const newMotion = (): AvatarMotion => ({ walk: 0, stride: 0, wave: 0, heart: 0, dance: 0, busy: 0 });
 
 export const WAVE_S = 2.2;
 export const HEART_S = 2.4;
+export const DANCE_S = 4;
 
-/** Moves the limbs for this frame. swimming lowers us and turns the walk into a crawl. */
-export function animateAvatar(p: AvatarParts, m: AvatarMotion, dt: number, moving: boolean, swimming: boolean) {
+export interface Doing {
+  moving: boolean;
+  swimming: boolean;
+  /** sit, lie, cook, water, hug, or nothing. */
+  act: 'sit' | 'lie' | 'cook' | 'water' | 'hug' | null;
+  carrying: boolean;
+}
+
+/** What a pose's activity means for the body. */
+export function bodyAct(a: string | null | undefined): Doing['act'] {
+  if (!a) return null;
+  const kind = a.split(':')[0];
+  return kind === 'sit' || kind === 'lie' || kind === 'cook' || kind === 'water' || kind === 'hug' ? kind : null;
+}
+
+/** Moves the limbs for this frame. */
+export function animateAvatar(p: AvatarParts, m: AvatarMotion, dt: number, d: Doing) {
+  const { moving, swimming, act, carrying } = d;
   m.stride += ((moving ? 1 : 0) - m.stride) * Math.min(1, dt * 8);
   m.walk += dt * (swimming ? 4 : 9) * Math.max(m.stride, 0.15);
+  m.busy = act ? m.busy + dt : 0;
   const swing = Math.sin(m.walk) * 0.7 * m.stride;
+  p.root.rotation.order = 'YXZ';
+  p.root.rotation.x = act === 'lie' ? -Math.PI / 2 : 0;
+  p.body.rotation.set(0, 0, 0);
+  p.body.position.set(0, 0, 0);
+  p.armL.rotation.set(-swing * 0.8, 0, 0.08);
+  p.armR.rotation.set(swing * 0.8, 0, -0.08);
+  p.legL.rotation.set(swing, 0, 0);
+  p.legR.rotation.set(-swing, 0, 0);
   if (swimming) {
     p.body.rotation.x = 0.9 * m.stride + 0.2;
     p.legL.rotation.x = Math.sin(m.walk * 2) * 0.3;
@@ -132,16 +161,41 @@ export function animateAvatar(p: AvatarParts, m: AvatarMotion, dt: number, movin
     p.armL.rotation.x = -m.walk % (Math.PI * 2);
     p.armR.rotation.x = -(m.walk + Math.PI) % (Math.PI * 2);
     p.body.position.y = 0.55;
+  } else if (act === 'sit') {
+    // Hips on the seat, legs out in front.
+    p.body.position.y = -0.82;
+    p.legL.rotation.x = -Math.PI / 2;
+    p.legR.rotation.x = -Math.PI / 2;
+    p.armL.rotation.x = -0.5;
+    p.armR.rotation.x = -0.5;
+  } else if (act === 'lie') {
+    p.body.position.set(0, 0.12, 0);
+    p.armL.rotation.z = 0.25;
+    p.armR.rotation.z = -0.25;
   } else {
-    p.body.rotation.x = 0;
-    p.legL.rotation.x = swing;
-    p.legR.rotation.x = -swing;
-    p.armL.rotation.x = -swing * 0.8;
-    p.armR.rotation.x = swing * 0.8;
     p.body.position.y = Math.abs(Math.sin(m.walk)) * 0.04 * m.stride;
   }
-  p.armL.rotation.z = 0.08;
-  p.armR.rotation.z = -0.08;
+  if (act === 'cook') {
+    p.armR.rotation.set(-1.2, 0, -0.3 + Math.sin(m.busy * 9) * 0.25);
+    p.armL.rotation.set(-0.9, 0, 0.2);
+  } else if (act === 'water') {
+    p.armR.rotation.set(-1.1 + Math.sin(m.busy * 3) * 0.1, 0, -0.1);
+  } else if (act === 'hug') {
+    p.armL.rotation.set(-1.45, 0, -0.55);
+    p.armR.rotation.set(-1.45, 0, 0.55);
+  }
+  if (carrying && act !== 'lie' && !swimming) {
+    p.armR.rotation.x = -0.95;
+    p.armL.rotation.x = Math.min(p.armL.rotation.x, -0.3);
+  }
+  if (m.dance > 0) {
+    m.dance = Math.max(0, m.dance - dt);
+    const t = m.dance * 6;
+    p.body.rotation.z = Math.sin(t) * 0.18;
+    p.body.position.y += Math.abs(Math.sin(t)) * 0.08;
+    p.armL.rotation.set(Math.PI - 0.3, 0, 0.4 + Math.sin(t) * 0.3);
+    p.armR.rotation.set(Math.PI - 0.3, 0, -0.4 - Math.sin(t) * 0.3);
+  }
   if (m.wave > 0) {
     m.wave = Math.max(0, m.wave - dt);
     p.armR.rotation.x = Math.PI;
@@ -160,3 +214,6 @@ export function animateAvatar(p: AvatarParts, m: AvatarMotion, dt: number, movin
     heart.visible = false;
   }
 }
+
+/** Where the right hand is, in the avatar's own frame, for carrying things. */
+export const HAND = { x: 0.22, y: 1.0, z: 0.38 };

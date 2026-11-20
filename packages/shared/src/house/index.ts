@@ -6,6 +6,11 @@
 export * from './layout';
 export * from './presence';
 export * from './use-house';
+export * from './use-game';
+export * from './items';
+export * from './store';
+export { houseApi, housePhotos } from '../api/house';
 export { Avatar, LOOKS, type AvatarLook } from './scene/avatar';
+export type { HousePhoto } from './scene/items';
 export { QUALITIES, type Quality } from './scene/materials';
-export { createControls, HouseWorld, orbitBy, tapAt, zoomBy, type HouseControls, type WorldProps } from './scene/world';
+export { createControls, HouseWorld, orbitBy, setView, tapAt, zoomBy, type HouseCmd, type HouseControls, type HudState, type WorldProps } from './scene/world';

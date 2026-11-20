@@ -16,23 +16,23 @@ import type { Materials } from './materials';
  * the camera and you drops to a low strip.
  */
 
-interface Kit {
+export interface Kit {
   mats: Materials;
   box: THREE.BoxGeometry;
 }
-const KitContext = createContext<Kit | null>(null);
-const useKit = () => useContext(KitContext)!;
+export const KitContext = createContext<Kit | null>(null);
+export const useKit = () => useContext(KitContext)!;
 
-type V3 = [number, number, number];
-type MatKey = Exclude<keyof Materials, 'dispose'>;
+export type V3 = [number, number, number];
+export type MatKey = Exclude<keyof Materials, 'dispose'>;
 
 /** A box from corner a to corner b. */
-function B({ a, b, m }: { a: V3; b: V3; m: MatKey }) {
+export function B({ a, b, m, mat }: { a: V3; b: V3; m?: MatKey; mat?: THREE.Material }) {
   const { mats, box } = useKit();
   return (
     <mesh
       geometry={box}
-      material={mats[m]}
+      material={mat ?? mats[m ?? 'plaster']}
       position={[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]}
       scale={[Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), Math.abs(b[2] - a[2])]}
     />
@@ -126,82 +126,14 @@ function Tree({ x, z, s = 1 }: { x: number; z: number; s?: number }) {
   );
 }
 
-function Living() {
-  return (
-    <>
-      <B a={[-4.6, 0.001, -1.6]} b={[-1.0, 0.012, 1.6]} m="rug" />
-      {/* Sofa, facing the TV on the west wall. */}
-      <B a={[-2.0, 0.1, -1.1]} b={[-1.05, 0.45, 1.1]} m="fabric" />
-      <B a={[-1.3, 0.45, -1.1]} b={[-1.05, 0.95, 1.1]} m="fabric" />
-      <B a={[-2.0, 0.1, -1.3]} b={[-1.05, 0.7, -1.1]} m="fabric" />
-      <B a={[-2.0, 0.1, 1.1]} b={[-1.05, 0.7, 1.3]} m="fabric" />
-      <B a={[-1.95, 0.45, -1.0]} b={[-1.35, 0.58, -0.02]} m="cushion" />
-      <B a={[-1.95, 0.45, 0.02]} b={[-1.35, 0.58, 1.0]} m="cushion" />
-      <B a={[-3.3, 0.38, -0.55]} b={[-2.6, 0.43, 0.55]} m="wood" />
-      <B a={[-3.25, 0, -0.5]} b={[-2.65, 0.38, 0.5]} m="woodDark" />
-      {/* TV. */}
-      <B a={[-5.8, 0, -1.1]} b={[-5.35, 0.5, 1.1]} m="woodDark" />
-      <B a={[-5.75, 0.8, -0.95]} b={[-5.66, 1.75, 0.95]} m="black" />
-      <B a={[-5.66, 0.85, -0.9]} b={[-5.655, 1.7, 0.9]} m="screen" />
-      {/* Floor lamp and a plant. */}
-      <B a={[-0.65, 0, -3.25]} b={[-0.55, 1.5, -3.15]} m="metal" />
-      <B a={[-0.85, 1.5, -3.45]} b={[-0.35, 1.85, -2.95]} m="lamp" />
-      <B a={[0.15, 0, 3.15]} b={[0.65, 0.45, 3.65]} m="potTerracotta" />
-      <B a={[0.1, 0.45, 3.1]} b={[0.7, 1.3, 3.7]} m="leaves" />
-      {/* Bookshelf. */}
-      <B a={[-5.6, 0, -3.8]} b={[-4.2, 1.9, -3.4]} m="wood" />
-    </>
-  );
-}
-
 function Kitchen() {
-  return (
-    <>
-      <B a={[1.0, 0.001, -4]} b={[6, 0.006, 4]} m="tile" />
-      <B a={[5.2, 0, -1.8]} b={[5.8, 0.86, 2.8]} m="woodDark" />
-      <B a={[5.15, 0.86, -1.85]} b={[5.85, 0.92, 2.85]} m="counter" />
-      <B a={[5.1, 0, -2.65]} b={[5.85, 2.0, -1.9]} m="fridge" />
-      {/* Table for two, and two more chairs. */}
-      <B a={[2.4, 0.72, 0.8]} b={[3.8, 0.78, 2.4]} m="wood" />
-      <B a={[2.5, 0, 0.9]} b={[2.58, 0.72, 0.98]} m="woodDark" />
-      <B a={[3.62, 0, 0.9]} b={[3.7, 0.72, 0.98]} m="woodDark" />
-      <B a={[2.5, 0, 2.22]} b={[2.58, 0.72, 2.3]} m="woodDark" />
-      <B a={[3.62, 0, 2.22]} b={[3.7, 0.72, 2.3]} m="woodDark" />
-      {[1.25, 1.95].map((z) => (
-        <group key={z}>
-          <B a={[1.85, 0.42, z - 0.22]} b={[2.25, 0.47, z + 0.22]} m="wood" />
-          <B a={[1.85, 0, z - 0.2]} b={[1.9, 0.95, z + 0.2]} m="woodDark" />
-          <B a={[3.95, 0.42, z - 0.22]} b={[4.35, 0.47, z + 0.22]} m="wood" />
-          <B a={[4.3, 0, z - 0.2]} b={[4.35, 0.95, z + 0.2]} m="woodDark" />
-        </group>
-      ))}
-      <B a={[3.0, 2.2, 1.5]} b={[3.2, 2.4, 1.7]} m="lamp" />
-      <B a={[3.08, 2.4, 1.58]} b={[3.12, 3.0, 1.62]} m="black" />
-    </>
-  );
+  return <B a={[1.0, 0.001, -4]} b={[6, 0.006, 4]} m="tile" />;
 }
 
-function Bedroom({ y }: { y: number }) {
+/** Upstairs, the railing round the stairwell. The furniture is in the catalog (items.ts). */
+function Stairwell({ y }: { y: number }) {
   return (
     <group position={[0, y, 0]}>
-      <B a={[-4.6, 0.001, -1.8]} b={[-1.4, 0.01, 1.8]} m="rug" />
-      <B a={[-5.8, 0, -1.0]} b={[-3.6, 0.3, 1.0]} m="wood" />
-      <B a={[-5.75, 0.3, -0.95]} b={[-3.65, 0.55, 0.95]} m="bedding" />
-      <B a={[-4.6, 0.55, -0.97]} b={[-3.6, 0.6, 0.97]} m="blanket" />
-      <B a={[-5.6, 0.55, -0.85]} b={[-5.15, 0.7, -0.1]} m="cushion" />
-      <B a={[-5.6, 0.55, 0.1]} b={[-5.15, 0.7, 0.85]} m="cushion" />
-      <B a={[-5.82, 0, -1.05]} b={[-5.7, 1.2, 1.05]} m="woodDark" />
-      <B a={[-5.8, 0, -1.6]} b={[-5.3, 0.55, -1.1]} m="wood" />
-      <B a={[-5.8, 0, 1.1]} b={[-5.3, 0.55, 1.6]} m="wood" />
-      <B a={[-5.65, 0.55, -1.45]} b={[-5.45, 0.85, -1.25]} m="lamp" />
-      <B a={[-2.6, 0, -3.8]} b={[-0.4, 2.1, -3.2]} m="woodDark" />
-      {/* Landing: a desk and a plant. */}
-      <B a={[4.9, 0.72, 0.9]} b={[5.8, 0.77, 2.6]} m="wood" />
-      <B a={[4.95, 0, 0.95]} b={[5.75, 0.72, 1.0]} m="woodDark" />
-      <B a={[4.95, 0, 2.5]} b={[5.75, 0.72, 2.55]} m="woodDark" />
-      <B a={[1.4, 0, 3.2]} b={[1.85, 0.4, 3.65]} m="potTerracotta" />
-      <B a={[1.35, 0.4, 3.15]} b={[1.9, 1.2, 3.7]} m="leavesLight" />
-      {/* Railing round the stairwell. */}
       <B a={[STAIRS.x0, 0, -2.78]} b={[STAIRS.x1, 1.0, -2.72]} m="glass" />
       <B a={[STAIRS.x0, 1.0, -2.8]} b={[STAIRS.x1, 1.05, -2.7]} m="woodDark" />
     </group>
@@ -216,10 +148,6 @@ function Balcony({ y }: { y: number }) {
       <B a={[-6, 0, 4.1]} b={[-5.94, 1.0, 5.78]} m="glass" />
       <B a={[-1.06, 0, 4.1]} b={[-1, 1.0, 5.78]} m="glass" />
       <B a={[-6.02, 1.0, 5.7]} b={[-0.98, 1.05, 5.8]} m="metal" />
-      <B a={[-3.0, 0.45, 4.7]} b={[-2.4, 0.5, 5.3]} m="metal" />
-      <B a={[-2.75, 0, 4.95]} b={[-2.65, 0.45, 5.05]} m="metal" />
-      <B a={[-4.0, 0.4, 4.7]} b={[-3.4, 0.45, 5.3]} m="fabricWarm" />
-      <B a={[-2.0, 0.4, 4.7]} b={[-1.4, 0.45, 5.3]} m="fabricWarm" />
     </group>
   );
 }
@@ -286,15 +214,6 @@ function Garden() {
       <B a={[-5.95, 0, 5.55]} b={[-5.75, 2.8, 5.75]} m="trim" />
       <B a={[-1.25, 0, 5.55]} b={[-1.05, 2.8, 5.75]} m="trim" />
       <B a={[-3.8, 0, 4.0]} b={[-2.2, 0.06, 4.45]} m="stone" />
-      {/* Loungers and an umbrella. */}
-      {[3.2, 5.0].map((x) => (
-        <group key={x}>
-          <B a={[x, 0.25, 11.35]} b={[x + 0.7, 0.32, 12.1]} m="lounger" />
-          <B a={[x, 0.32, 11.3]} b={[x + 0.7, 0.75, 11.42]} m="lounger" />
-        </group>
-      ))}
-      <B a={[7.15, 0, 11.65]} b={[7.25, 2.3, 11.75]} m="metal" />
-      <B a={[6.2, 2.3, 10.7]} b={[8.2, 2.42, 12.7]} m="umbrella" />
       {/* Hedges round the garden, and trees. */}
       <B a={[-15.5, 0, 15]} b={[15.5, 1.1, 15.8]} m="hedge" />
       <B a={[-15.8, 0, -7.5]} b={[-15, 1.1, 15.8]} m="hedge" />
@@ -305,12 +224,6 @@ function Garden() {
       <Tree x={11} z={-4} s={1.1} />
       <Tree x={12} z={13} s={0.9} />
       <Tree x={-8} z={13} s={1.05} />
-      {[-8, -6.5].map((x) => (
-        <group key={x}>
-          <B a={[x, 0, 7.8]} b={[x + 0.5, 0.4, 8.3]} m="potTerracotta" />
-          <B a={[x - 0.05, 0.4, 7.75]} b={[x + 0.55, 1.0, 8.35]} m="leavesLight" />
-        </group>
-      ))}
     </>
   );
 }
@@ -321,8 +234,11 @@ export interface HouseGroups {
   ground: THREE.Group | null;
 }
 
-/** The whole place. The rig gets the three groups through refs. */
-export function HouseModel({ mats, groups }: { mats: Materials; groups: HouseGroups }) {
+/**
+ * The whole place. The rig gets the three groups through refs; the things in
+ * the house (items.tsx) go in with their floor, so they hide with it.
+ */
+export function HouseModel({ mats, groups, ground, upper }: { mats: Materials; groups: HouseGroups; ground?: ReactNode; upper?: ReactNode }) {
   const box = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const kit = useMemo(() => ({ mats, box }), [mats, box]);
   return (
@@ -331,17 +247,18 @@ export function HouseModel({ mats, groups }: { mats: Materials; groups: HouseGro
         <B a={[HOUSE.x0, -0.15, HOUSE.z0]} b={[HOUSE.x1, 0, HOUSE.z1]} m="wood" />
         <Floor y={0} upper={false} />
         <Stairs />
-        <Living />
         <Kitchen />
         <Garden />
+        {ground}
       </group>
       <group ref={(g) => void (groups.upper = g)}>
         <B a={[HOUSE.x0, FLOOR_H - 0.15, -2.7]} b={[HOUSE.x1, FLOOR_H, HOUSE.z1]} m="wood" />
         <B a={[HOUSE.x0, FLOOR_H - 0.15, HOUSE.z0]} b={[STAIRS.x0, FLOOR_H, -2.7]} m="wood" />
         <B a={[STAIRS.x1, FLOOR_H - 0.15, HOUSE.z0]} b={[HOUSE.x1, FLOOR_H, -2.7]} m="wood" />
         <Floor y={FLOOR_H} upper />
-        <Bedroom y={FLOOR_H} />
+        <Stairwell y={FLOOR_H} />
         <Balcony y={FLOOR_H} />
+        {upper}
       </group>
       <group ref={(g) => void (groups.roof = g)}>
         <Roof />

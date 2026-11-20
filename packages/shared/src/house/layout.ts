@@ -139,5 +139,55 @@ export function findPath(from: RegionId, to: { region: RegionId; x: number; z: n
   return path;
 }
 
+/** How close to a doorway's middle you can be while passing through it. */
+export const PORTAL_R = 0.48;
+
+/** Two regions that share an edge, with no wall between. */
+function touching(a: RegionId, b: RegionId) {
+  const p = region(a);
+  const q = region(b);
+  return p.x0 <= q.x1 + 0.01 && q.x0 <= p.x1 + 0.01 && p.z0 <= q.z1 + 0.01 && q.z0 <= p.z1 + 0.01;
+}
+
+const near = (x: number, z: number, px: number, pz: number, r = PORTAL_R) => (x - px) ** 2 + (z - pz) ** 2 <= r * r;
+
+/** The portals out of a region: [neighbour, x, z]. */
+export function portalsOf(id: RegionId): [RegionId, number, number][] {
+  const out: [RegionId, number, number][] = [];
+  for (const [a, b, x, z] of PORTALS) {
+    if (a === id) out.push([b, x, z]);
+    else if (b === id) out.push([a, x, z]);
+  }
+  return out;
+}
+
+/**
+ * One step of free walking (the joystick): from (x, z) in region `at`
+ * towards (nx, nz). You stay inside your room, pass through a doorway only
+ * near its middle, and slide along a wall rather than stop dead.
+ * Returns where you end up and which region that is.
+ */
+export function walkStep(at: RegionId, x: number, z: number, nx: number, nz: number): { at: RegionId; x: number; z: number } {
+  const ok = (tx: number, tz: number): RegionId | null => {
+    if (within(region(at), tx, tz)) return at;
+    for (const [next, px, pz] of portalsOf(at)) {
+      // In the doorway itself you're still where you came from.
+      if (near(tx, tz, px, pz)) return at;
+      if (!within(region(next), tx, tz)) continue;
+      // Regions that touch (the garden, the stairs) are open between them;
+      // past a wall you need the doorway.
+      if (near(x, z, px, pz, PORTAL_R + 0.25) || touching(at, next)) return next;
+    }
+    return null;
+  };
+  const full = ok(nx, nz);
+  if (full) return { at: full, x: nx, z: nz };
+  const alongX = ok(nx, z);
+  if (alongX) return { at: alongX, x: nx, z };
+  const alongZ = ok(x, nz);
+  if (alongZ) return { at: alongZ, x, z: nz };
+  return { at, x, z };
+}
+
 /** Where you start: on the front path, facing the door. */
 export const SPAWN = { x: -3, z: 6.2, region: 'gardenN' as RegionId };

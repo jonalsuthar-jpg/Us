@@ -1425,5 +1425,33 @@ await test('birthday story: read-only, kept in Memories, nobody else ever', asyn
   await rejects(as(parul, () => q(`select public.birthday_keep($1)`, [room.id])), /does not exist/, 'the day’s functions are gone');
 });
 
+await test('our house: both of us change things, through the version check; nobody else sees them', async () => {
+  assert.ok((await one(`select features from public.plans where id = 'full'`)).features.includes('house'));
+  const set = (who, key, state, version) => as(who, () => one(`select public.set_house_item($1, $2::jsonb, $3) as v`, [key, state === null ? null : JSON.stringify(state), version]));
+  assert.equal((await set(jonal, 'floor_lamp', { on: false }, 0)).v, 1);
+  assert.equal((await set(parul, 'floor_lamp', { on: true }, 1)).v, 2, 'partner changes it');
+  await rejects(set(jonal, 'floor_lamp', { on: false }, 1), /stale/, 'a change made on an old version');
+  await rejects(set(jonal, 'floor_lamp', { on: false }, 0), /stale/, 'adding what is already there');
+  const rows = await as(jonal, () => q(`select item_key, state, version, updated_by from public.house_items`));
+  assert.deepEqual(rows.map((r) => [r.item_key, r.state.on, r.version, r.updated_by]), [['floor_lamp', true, 2, parul]]);
+  assert.equal((await as(erin, () => q(`select item_key from public.house_items`))).length, 0, 'outsider reads nothing');
+  await rejects(set(erin, 'floor_lamp', { on: false }, 1), /not paired|feature off/, 'outsider writes nothing');
+
+  // Only through the function, and only sane keys and states.
+  await rejects(as(jonal, () => q(`update public.house_items set state = '{}'`)), /permission denied/, 'direct update');
+  await rejects(as(jonal, () => q(`insert into public.house_items (couple_id, item_key, state) select couple_id, 'x', '{}' from public.house_items limit 1`)), /permission denied/, 'direct insert');
+  await rejects(as(jonal, () => q(`delete from public.house_items`)), /permission denied/, 'direct delete');
+  await rejects(set(jonal, 'Bad Key!', {}, 0), /bad key/, 'key');
+  await rejects(as(jonal, () => q(`select public.set_house_item('sofa', '[1]'::jsonb, 0)`)), /bad state/, 'not an object');
+  await rejects(set(jonal, 'sofa', { junk: 'x'.repeat(3000) }, 0), /bad state/, 'too big');
+
+  // Taking something away needs the version too.
+  await set(jonal, 'add:plantpot:ab12cd', { x: 1, z: 1 }, 0);
+  await rejects(set(parul, 'add:plantpot:ab12cd', null, 5), /stale/, 'remove on an old version');
+  assert.equal((await set(parul, 'add:plantpot:ab12cd', null, 1)).v, 0);
+  assert.equal((await as(jonal, () => q(`select item_key from public.house_items where item_key like 'add:%'`))).length, 0);
+
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`);
 await db.close();

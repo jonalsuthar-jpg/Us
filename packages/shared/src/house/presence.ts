@@ -7,12 +7,18 @@
  *            seconds while I stand still (that's also the heartbeat)
  *   - hello  I just came in: tell me where you are
  *   - bye    I left the house
- *   - emote  a wave or a heart, for a moment
+ *   - emote  a wave, a heart or a dance, for a moment
+ *   - item   I changed something in the house (see store.ts); the same
+ *            change is saved, this just shows it at once
  * A partner I haven't heard from in POSE_TTL_MS has left.
+ *
+ * A pose also says what I'm doing (sitting on the sofa, cooking, hugging)
+ * and what I'm carrying. Two of us grabbing the same mug: whoever picked it
+ * up first keeps it (earlier hs, then the lower id), and the other lets go.
  */
 
-export type Emote = 'wave' | 'heart';
-export const EMOTES: Emote[] = ['wave', 'heart'];
+export type Emote = 'wave' | 'heart' | 'dance';
+export const EMOTES: Emote[] = ['wave', 'heart', 'dance'];
 
 export interface Pose {
   x: number;
@@ -22,13 +28,28 @@ export interface Pose {
   h: number;
   /** Walking (1) or standing (0). */
   m: 0 | 1;
+  /** What I'm doing: sit:<item>:<seat>, lie:<item>:<seat>, cook, water, hug, swim. */
+  a?: string;
+  /** What I'm carrying, and since when (ms). */
+  hk?: string;
+  hs?: number;
+}
+
+export interface ItemOp {
+  op: 'item';
+  k: string;
+  /** The new state, or null when it was taken away. */
+  s: Record<string, unknown> | null;
+  /** The version it will have once saved. */
+  v: number;
 }
 
 export type HouseOp =
   | ({ op: 'pose' } & Pose)
   | { op: 'hello' }
   | { op: 'bye' }
-  | { op: 'emote'; e: Emote };
+  | { op: 'emote'; e: Emote }
+  | ItemOp;
 
 export type HouseEvent = HouseOp & { from: string };
 
@@ -48,7 +69,29 @@ export function readPose(e: unknown): Pose | null {
   const p = e as Partial<Pose> | null;
   if (!p || !finite(p.x, p.y, p.z, p.h)) return null;
   if (Math.abs(p.x!) > 40 || Math.abs(p.z!) > 40 || p.y! < -5 || p.y! > 12) return null;
-  return { x: p.x!, y: p.y!, z: p.z!, h: p.h!, m: p.m ? 1 : 0 };
+  const out: Pose = { x: p.x!, y: p.y!, z: p.z!, h: p.h!, m: p.m ? 1 : 0 };
+  if (typeof p.a === 'string' && ACT.test(p.a)) out.a = p.a;
+  if (typeof p.hk === 'string' && KEY.test(p.hk) && finite(p.hs)) {
+    out.hk = p.hk;
+    out.hs = p.hs;
+  }
+  return out;
+}
+
+const ACT = /^[a-z0-9:_-]{1,48}$/;
+export const KEY = /^[a-z0-9:_-]{1,64}$/;
+
+/** An item change from the wire, or null when it isn't one. */
+export function readItemOp(e: unknown): ItemOp | null {
+  const o = e as Partial<ItemOp> | null;
+  if (!o || typeof o.k !== 'string' || !KEY.test(o.k) || !Number.isInteger(o.v) || o.v! < 0) return null;
+  if (o.s !== null && (typeof o.s !== 'object' || Array.isArray(o.s) || JSON.stringify(o.s).length > 2048)) return null;
+  return { op: 'item', k: o.k, s: o.s ?? null, v: o.v! };
+}
+
+/** Whether my hold on a thing loses to my partner's: they picked it up first. */
+export function holdLoses(mine: { since: number; me: string }, theirs: { since: number; them: string }): boolean {
+  return theirs.since < mine.since || (theirs.since === mine.since && theirs.them < mine.me);
 }
 
 type Listener<T> = (value: T) => void;
@@ -64,6 +107,7 @@ export class HousePresence {
   private sentAt = 0;
   private lastSent: Pose | null = null;
   private emotes = new Set<Listener<Emote>>();
+  private items = new Set<Listener<ItemOp>>();
   private here = new Set<Listener<boolean>>();
   private wasHere = false;
   private off: () => void;
@@ -97,12 +141,24 @@ export class HousePresence {
   update(p: Pose) {
     this.mine = p;
     const since = this.now() - this.sentAt;
-    const stopped = this.lastSent?.m === 1 && p.m === 0;
-    if (stopped || (p.m === 1 && since >= POSE_EVERY_MS)) this.sendPose(p, false);
+    const l = this.lastSent;
+    // Stopping, starting to sit or picking something up goes out at once.
+    const changed = !!l && (l.m !== p.m || l.a !== p.a || l.hk !== p.hk);
+    if (changed || (p.m === 1 && since >= POSE_EVERY_MS)) this.sendPose(p, false);
   }
 
   emote(e: Emote) {
     this.send({ op: 'emote', e });
+  }
+
+  /** Send a change to a thing in the house (the store calls this). */
+  sendItem(op: Omit<ItemOp, 'op'>) {
+    this.send({ op: 'item', ...op });
+  }
+
+  onItem(fn: Listener<ItemOp>) {
+    this.items.add(fn);
+    return () => void this.items.delete(fn);
   }
 
   onEmote(fn: Listener<Emote>) {
@@ -121,13 +177,20 @@ export class HousePresence {
     this.send({ op: 'bye' });
     this.off();
     this.emotes.clear();
+    this.items.clear();
     this.here.clear();
   }
 
   private sendPose(p: Pose, force: boolean) {
     const round = (n: number) => Math.round(n * 100) / 100;
     const out: Pose = { x: round(p.x), y: round(p.y), z: round(p.z), h: round(p.h), m: p.m };
-    const same = this.lastSent && out.x === this.lastSent.x && out.y === this.lastSent.y && out.z === this.lastSent.z && out.h === this.lastSent.h && out.m === this.lastSent.m;
+    if (p.a) out.a = p.a;
+    if (p.hk) {
+      out.hk = p.hk;
+      out.hs = p.hs;
+    }
+    const l = this.lastSent;
+    const same = l && out.x === l.x && out.y === l.y && out.z === l.z && out.h === l.h && out.m === l.m && out.a === l.a && out.hk === l.hk;
     if (same && !force) return;
     this.lastSent = out;
     this.sentAt = this.now();
@@ -154,6 +217,11 @@ export class HousePresence {
       case 'bye':
         this.latest = null;
         break;
+      case 'item': {
+        const op = readItemOp(e);
+        if (op) for (const fn of [...this.items]) fn(op);
+        return;
+      }
       case 'emote':
         if (!EMOTES.includes(e.e)) return;
         // An emote also means they're here.

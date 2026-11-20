@@ -13,7 +13,7 @@ export function makeMaterials(quality: Quality) {
   const m = (color: string, roughness = 0.85, metalness = 0, extra: THREE.MeshStandardMaterialParameters = {}) =>
     pbr
       ? new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra })
-      : new THREE.MeshLambertMaterial({ color, transparent: extra.transparent, opacity: extra.opacity, side: extra.side });
+      : new THREE.MeshLambertMaterial({ color, ...(extra.transparent ? { transparent: true, opacity: extra.opacity } : {}) });
   const set = {
     plaster: m('#EFE8DE', 0.92),
     plasterWarm: m('#E7D6C3', 0.9),
@@ -48,7 +48,12 @@ export function makeMaterials(quality: Quality) {
     potTerracotta: m('#B4643F', 0.9),
     umbrella: m('#E8B14A', 0.9),
     lounger: m('#F5F2EC', 0.6),
-    lamp: pbr ? new THREE.MeshStandardMaterial({ color: '#FFF3D6', emissive: '#FFD9A0', emissiveIntensity: 0.9, roughness: 0.6 }) : new THREE.MeshBasicMaterial({ color: '#FFE6B8' }),
+    lampOff: m('#E9E2D4', 0.7),
+    lampBright: pbr ? new THREE.MeshStandardMaterial({ color: '#FFFFFF', emissive: '#E8F4FF', emissiveIntensity: 0.6 }) : new THREE.MeshBasicMaterial({ color: '#F2F8FF' }),
+    ember: pbr ? new THREE.MeshStandardMaterial({ color: '#C2492B', emissive: '#FF5A1F', emissiveIntensity: 0.5, roughness: 0.6 }) : new THREE.MeshBasicMaterial({ color: '#E0582E' }),
+    flowers: m('#E86A92', 0.8),
+    teddy: m('#9B6A43', 1),
+    lamp: pbr ? new THREE.MeshStandardMaterial({ color: '#FFF3D6', emissive: '#FFD9A0', emissiveIntensity: 1.4, roughness: 0.6 }) : new THREE.MeshBasicMaterial({ color: '#FFE6B8' }),
   };
   return {
     ...set,

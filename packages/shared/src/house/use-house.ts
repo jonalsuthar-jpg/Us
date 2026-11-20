@@ -1,25 +1,67 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { houseApi, housePhotos } from '../api/house';
 import { useCouple } from '../react/couple-provider';
 import { HousePresence } from './presence';
+import { HouseStore } from './store';
+
+export interface HouseSession {
+  presence: HousePresence | null;
+  store: HouseStore | null;
+  partnerHere: boolean;
+}
 
 /**
- * My presence in the house while the screen is open: says hello on the way
- * in and bye on the way out, so my partner sees me arrive and leave.
+ * The house while its screen is open: my presence (hello on the way in, bye
+ * on the way out) and everything saved, kept in step with my partner.
  */
-export function useHousePresence(): { presence: HousePresence | null; partnerHere: boolean } {
-  const { channel, me } = useCouple();
-  const [presence, setPresence] = useState<HousePresence | null>(null);
+export function useHouse(): HouseSession {
+  const { sb, couple, channel, me } = useCouple();
+  const [session, setSession] = useState<{ presence: HousePresence; store: HouseStore } | null>(null);
   const [partnerHere, setPartnerHere] = useState(false);
   useEffect(() => {
-    const p = new HousePresence(me.id, { send: (e) => channel.sendHouse(e), on: (fn) => channel.house.on(fn) });
-    setPresence(p);
-    const off = p.onPartnerHere(setPartnerHere);
+    const presence = new HousePresence(me.id, { send: (e) => channel.sendHouse(e), on: (fn) => channel.house.on(fn) });
+    const store = new HouseStore(houseApi(sb, couple.id), (op) => presence.sendItem(op));
+    const offItems = presence.onItem((op) => store.receive(op));
+    const offHere = presence.onPartnerHere(setPartnerHere);
+    // After a dropped connection, what changed meanwhile.
+    const offResync = channel.resync.on(() => void store.load().catch(() => {}));
+    void store.load().catch(() => {});
+    setSession({ presence, store });
     return () => {
-      off();
-      p.dispose();
-      setPresence(null);
+      offItems();
+      offHere();
+      offResync();
+      presence.dispose();
+      setSession(null);
       setPartnerHere(false);
     };
-  }, [channel, me.id]);
-  return { presence, partnerHere };
+  }, [sb, couple.id, channel, me.id]);
+  return { presence: session?.presence ?? null, store: session?.store ?? null, partnerHere };
+}
+
+/** Re-renders when anything saved in the house changes. */
+export function useHouseItems(store: HouseStore | null) {
+  return useSyncExternalStore(
+    (fn) => store?.subscribe(fn) ?? (() => {}),
+    () => store?.items() ?? EMPTY,
+    () => EMPTY,
+  );
+}
+
+const EMPTY = new Map();
+
+/** Our memory photos for the TV and the frames, fetched once per visit. */
+export function useHousePhotos(): { path: string; url: string }[] {
+  const { sb, couple } = useCouple();
+  const [photos, setPhotos] = useState<{ path: string; url: string }[]>([]);
+  useEffect(() => {
+    let live = true;
+    void housePhotos(sb, couple.id)
+      .then((p) => live && setPhotos(p))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [sb, couple.id]);
+  return photos;
 }

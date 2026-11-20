@@ -636,6 +636,12 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      house_items: {
+        Row: { couple_id: string; item_key: string; state: Json; version: number; updated_by: string | null; updated_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       draw_secrets: {
         Row: { drawing_id: string; couple_id: string; word: string };
         Insert: { drawing_id: string; couple_id: string; word: string };
@@ -723,6 +729,7 @@ export type Database = {
       current_couple_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       current_partner_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       set_couple_photo: { Args: { p_path: string | null }; Returns: Database['public']['Tables']['couples']['Row'] };
+      set_house_item: { Args: { p_key: string; p_state: Json | null; p_version: number }; Returns: number };
       pick_decision: {
         Args: { p_category: string };
         Returns: Database['public']['Tables']['decision_options']['Row'];
@@ -853,6 +860,7 @@ export type ArrivalCheck = Tables['arrival_checks']['Row'];
 export type Drawing = Tables['drawings']['Row'];
 export type Sticker = Tables['stickers']['Row'];
 export type DrawWord = Tables['draw_words']['Row'];
+export type HouseItemRow = Tables['house_items']['Row'];
 export type ChatDevice = Tables['chat_devices']['Row'];
 export type ChatKeyWrap = Tables['chat_key_wraps']['Row'];
 export type DrawGame = Tables['draw_games']['Row'];
