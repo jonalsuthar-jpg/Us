@@ -16,6 +16,7 @@ import {
   LOOKS,
   orbitBy,
   QUALITIES,
+  nextCameraView,
   setView,
   SKY_KEY,
   StaleHouseError,
@@ -217,6 +218,13 @@ export default function HouseLab() {
         [7000, () => ca.cmds.push({ t: 'invite', kind: 'slow' })],
         [8000, () => cb.cmds.push({ t: 'answer', yes: true })],
       ]);
+    if (scene === 'first')
+      run([
+        [500, () => setView(ca, 'first')],
+        [500, () => setView(cb, 'far')],
+        [600, () => sa.set(SKY_KEY, { on: false, at: new Date().toISOString() })],
+        [1500, () => (ca.yaw = Math.PI * 0.75)],
+      ]);
     if (scene === 'pool')
       run([
         [800, () => ca.cmds.push({ t: 'walkTo', x: 5, y: -1, z: 9 })],
@@ -250,7 +258,7 @@ export default function HouseLab() {
       else if (k === '2') c().emotes.push('heart');
       else if (k === '3') c().emotes.push('dance');
       else if (k === 'n') store().set(SKY_KEY, { on: !(store().items().get(SKY_KEY)?.on === true) });
-      else if (k === 'v') setView(c(), c().view === 'close' ? 'above' : 'close');
+      else if (k === 'v') setView(c(), nextCameraView(c().view));
       else if (k === 'p') c().decorate = !c().decorate;
       else if (['w', 'a', 's', 'd', 'shift'].includes(k)) {
         held.add(k);

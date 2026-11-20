@@ -6,7 +6,7 @@ import { avatarKey, MUSIC_KEY, NOTE_KEY, SKY_KEY, type ItemModel, type LookState
 import { isNight } from './sky';
 import type { Emote, Together } from './presence';
 import { LOOKS } from './scene/avatar';
-import { createControls, setView, type HouseControls, type HudState, type WorldProps } from './scene/world';
+import { createControls, nextCameraView, setView, type CameraView, type HouseControls, type HudState, type WorldProps } from './scene/world';
 import { useHouse, useHouseItems, useHousePhotos } from './use-house';
 
 const NO_HUD: HudState = { action: null, seated: false, holding: null, selected: null, nearPartner: false, invite: null, asking: null, note: null };
@@ -76,11 +76,15 @@ export function useHouseGame() {
     [controls],
   );
 
-  const toggleView = useCallback(() => {
-    const next = controls.view === 'close' ? 'above' : 'close';
-    setView(controls, next);
-    setViewState(next);
-  }, [controls]);
+  // The camera button: my eyes, close, far, the whole house, round again.
+  const chooseView = useCallback(
+    (v: CameraView) => {
+      setView(controls, v);
+      setViewState(v);
+    },
+    [controls],
+  );
+  const nextView = useCallback(() => chooseView(nextCameraView(controls.view)), [chooseView, controls]);
 
   // "Night for now" (or day): for both of us, for a few hours; then the clock again.
   const toggleNight = useCallback(() => store?.set(SKY_KEY, { on: !night, at: new Date().toISOString() }), [store, night]);
@@ -122,7 +126,7 @@ export function useHouseGame() {
     talking,
   };
 
-  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, toggleView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
+  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
 }
 
 export type HouseGame = ReturnType<typeof useHouseGame>;

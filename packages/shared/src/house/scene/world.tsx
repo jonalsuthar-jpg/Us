@@ -65,7 +65,7 @@ export interface HouseControls {
   /** The joystick: x right, y down, each -1…1. */
   move: [number, number];
   /** close: behind my shoulder, like a game. above: the dollhouse, cut open. */
-  view: 'close' | 'above';
+  view: CameraView;
   decorate: boolean;
   /** Taps waiting to be handled, in normalised device coordinates. */
   taps: [number, number][];
@@ -74,9 +74,18 @@ export interface HouseControls {
 }
 
 const VIEWS = {
+  // Through my own eyes: pitch is where I look (up is negative), no distance.
+  first: { pitch: 0.05, dist: 0, minPitch: -1.3, maxPitch: 1.3, minDist: 0, maxDist: 0 },
   close: { pitch: 0.32, dist: 4.2, minPitch: 0.02, maxPitch: 1.05, minDist: 2, maxDist: 7 },
-  above: { pitch: 0.82, dist: 10, minPitch: 0.3, maxPitch: 1.4, minDist: 4, maxDist: 22 },
+  far: { pitch: 0.45, dist: 8, minPitch: 0.05, maxPitch: 1.2, minDist: 5, maxDist: 12 },
+  above: { pitch: 0.82, dist: 13, minPitch: 0.3, maxPitch: 1.4, minDist: 4, maxDist: 22 },
 } as const;
+
+/** The camera button goes round these. */
+export const CAMERA_VIEWS = ['first', 'close', 'far', 'above'] as const;
+export type CameraView = (typeof CAMERA_VIEWS)[number];
+export const CAMERA_LABEL: Record<CameraView, string> = { first: 'My eyes', close: 'Close', far: 'Far', above: 'Whole house' };
+export const nextCameraView = (v: CameraView): CameraView => CAMERA_VIEWS[(CAMERA_VIEWS.indexOf(v) + 1) % CAMERA_VIEWS.length]!;
 
 export const createControls = (): HouseControls => ({ yaw: 0, pitch: VIEWS.close.pitch, dist: VIEWS.close.dist, move: [0, 0], view: 'close', decorate: false, taps: [], emotes: [], cmds: [] });
 
@@ -935,7 +944,9 @@ export function HouseWorld(props: WorldProps) {
     skyClock.current -= dt;
     if (skyClock.current <= 0) {
       skyClock.current = 2;
-      const s = skyAt(hoursNow());
+      // Day by the moon button while the clock says night: a full midday sun.
+      const clockSky = skyAt(hoursNow());
+      const s = !night && clockSky.night ? skyAt(12.5) : clockSky;
       const daylight = night ? 0 : Math.max(s.daylight, 0.35);
       const dim = weather === 'rain' ? 0.4 : weather === 'cloudy' ? 0.65 : weather === 'fog' ? 0.55 : 1;
       lightNow.current = { daylight, golden: night ? 0 : s.golden, dim, sun: s.sun };
@@ -1002,14 +1013,28 @@ export function HouseWorld(props: WorldProps) {
       marker.current.scale.setScalar(0.6 + (0.9 - markerLife.current) * 0.6);
     }
 
-    // The camera: behind my shoulder, pulled in front of any wall behind me.
+    // Through my own eyes: the camera is my head, looking where I drag; I'm not drawn, so I don't see inside myself.
+    const firstPerson = controls.view === 'first' && !controls.decorate;
+    if (me.rig) me.rig.root.visible = !firstPerson;
+    if (firstPerson) {
+      const eye = me.seat?.lie ? 0.55 : me.seat ? 1.15 : me.at === 'pool' ? 0.75 : 1.62;
+      // Standing still, I turn to face where I look, so my partner sees it.
+      if (!moving && !me.seat && !me.doing && !me.hands) me.heading += angleDiff(me.heading, controls.yaw + Math.PI) * Math.min(1, dt * 6);
+      target.set(me.pos.x, me.pos.y + eye, me.pos.z);
+      const fp = Math.cos(controls.pitch);
+      tmp.dir.set(-Math.sin(controls.yaw) * fp, -Math.sin(controls.pitch), -Math.cos(controls.yaw) * fp);
+      camera.position.copy(target).addScaledVector(tmp.dir, -0.12);
+      camera.lookAt(tmp.cam.copy(target).add(tmp.dir));
+    }
+
+    // The camera: behind my shoulder (close or far), pulled in front of any wall behind me.
     const close = !above;
     const lift = close ? (me.seat?.lie ? 0.7 : me.seat ? 1.0 : 1.45) : 1.1;
-    target.lerp(tmp.look.set(me.pos.x, me.pos.y + lift, me.pos.z), Math.min(1, dt * (close ? 10 : 6)));
+    if (!firstPerson) target.lerp(tmp.look.set(me.pos.x, me.pos.y + lift, me.pos.z), Math.min(1, dt * (close ? 10 : 6)));
     const cp = Math.cos(controls.pitch);
-    tmp.dir.set(Math.sin(controls.yaw) * cp, Math.sin(controls.pitch), Math.cos(controls.yaw) * cp);
+    if (!firstPerson) tmp.dir.set(Math.sin(controls.yaw) * cp, Math.sin(controls.pitch), Math.cos(controls.yaw) * cp);
     let dist = controls.dist;
-    if (close) {
+    if (close && !firstPerson) {
       ray.set(target, tmp.dir);
       ray.far = dist + 0.3;
       // Against the plain boxes (HouseColliders), not the real house's thousands of triangles.
@@ -1017,9 +1042,11 @@ export function HouseWorld(props: WorldProps) {
       if (wall) dist = Math.max(0.5, wall.distance - 0.25);
       ray.far = Infinity;
     }
-    tmp.cam.copy(target).addScaledVector(tmp.dir, dist);
-    camera.position.lerp(tmp.cam, close ? Math.min(1, dt * 14) : 1);
-    camera.lookAt(target);
+    if (!firstPerson) {
+      tmp.cam.copy(target).addScaledVector(tmp.dir, dist);
+      camera.position.lerp(tmp.cam, close ? Math.min(1, dt * 14) : 1);
+      camera.lookAt(target);
+    }
 
     // The buttons round the canvas: told only when something changed.
     const focus = focusFor(all);

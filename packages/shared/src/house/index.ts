@@ -18,4 +18,4 @@ export { Avatar, LOOKS, type AvatarLook } from './scene/avatar';
 export { clipFor } from './scene/avatar-real';
 export type { HousePhoto } from './scene/items';
 export { QUALITIES, type Quality } from './scene/materials';
-export { createControls, HouseWorld, orbitBy, setView, tapAt, zoomBy, type HouseCmd, type HouseControls, type HudState, type WorldProps } from './scene/world';
+export { CAMERA_LABEL, CAMERA_VIEWS, createControls, HouseWorld, nextCameraView, orbitBy, setView, tapAt, zoomBy, type CameraView, type HouseCmd, type HouseControls, type HudState, type WorldProps } from './scene/world';

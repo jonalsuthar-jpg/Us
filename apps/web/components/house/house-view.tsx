@@ -1,10 +1,10 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
-import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, zoomBy, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
+import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
 import type * as THREE from 'three';
 import { webHouseSound } from '@/lib/house-sound';
-import { Camera, Check, Eye, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, StickyNote, Sun, Trash2, Volume2, VolumeX, X } from 'lucide-react';
+import { Aperture, Check, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, StickyNote, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { housePackBase } from '@us/shared/house/light';
 import { useCouple } from '@us/shared/react';
 import { useRouter } from 'next/navigation';
@@ -81,6 +81,23 @@ export function HouseView() {
   const [visible, setVisible] = useState(true);
   const [panel, setPanel] = useState<'look' | 'add' | 'note' | null>(null);
   const [touch, setTouch] = useState(false);
+  // The camera view you last chose, remembered in this browser.
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('us.house.view');
+      if (CAMERA_VIEWS.includes(v as never)) game.chooseView(v as (typeof CAMERA_VIEWS)[number]);
+    } catch {
+      // Private window.
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const nextView = () => {
+    game.nextView();
+    try {
+      localStorage.setItem('us.house.view', CAMERA_VIEWS[(CAMERA_VIEWS.indexOf(game.view) + 1) % CAMERA_VIEWS.length]!);
+    } catch {
+      // As above.
+    }
+  };
   // The loading screen stays until the house is in and drawing (or 25 s, whatever happens).
   const [ready, setReady] = useState(false);
   const onReady = useCallback(() => setReady(true), []);
@@ -131,6 +148,8 @@ export function HouseView() {
     return () => document.removeEventListener('visibilitychange', on);
   }, []);
 
+  const nextViewRef = useRef(nextView);
+  nextViewRef.current = nextView;
   // The keyboard: held keys make the stick.
   const { actions } = game;
   useEffect(() => {
@@ -151,6 +170,7 @@ export function HouseView() {
       const k = e.key.toLowerCase();
       if (k === 'escape' && !document.fullscreenElement) return router.back();
       if (k === 'e' || k === 'enter') return actions.use();
+      if (k === 'c') return nextViewRef.current();
       if (k === '1') return actions.emote('wave');
       if (k === '2') return actions.emote('heart');
       if (k === '3') return actions.emote('dance');
@@ -180,11 +200,9 @@ export function HouseView() {
 
   // One pointer drags the camera or, if it barely moved, is a tap; two pinch.
   const pointers = useRef(new Map<number, { x: number; y: number; sx: number; sy: number }>());
-  const pinch = useRef(0);
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
-    if (pointers.current.size === 2) pinch.current = spread(pointers.current);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const p = pointers.current.get(e.pointerId);
@@ -193,20 +211,12 @@ export function HouseView() {
     if (pointers.current.size === 1) orbitBy(controls, e.clientX - p.x, e.clientY - p.y, w);
     p.x = e.clientX;
     p.y = e.clientY;
-    if (pointers.current.size === 2) {
-      const d = spread(pointers.current);
-      if (pinch.current > 0) zoomBy(controls, d / pinch.current);
-      pinch.current = d;
-    }
   };
   const onPointerUp = (e: React.PointerEvent) => {
     const p = pointers.current.get(e.pointerId);
     pointers.current.delete(e.pointerId);
     const el = box.current;
-    if (!p || !el || pointers.current.size > 0 || pinch.current > 0) {
-      if (pointers.current.size === 0) pinch.current = 0;
-      return;
-    }
+    if (!p || !el || pointers.current.size > 0) return;
     if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < 8) {
       const r = el.getBoundingClientRect();
       tapAt(controls, e.clientX - r.left, e.clientY - r.top, r.width, r.height);
@@ -222,7 +232,6 @@ export function HouseView() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onWheel={(e) => zoomBy(controls, e.deltaY < 0 ? 1.08 : 1 / 1.08)}
       >
         <Canvas
           key={quality}
@@ -269,8 +278,11 @@ export function HouseView() {
       </div>
 
       <div className="pointer-events-none absolute right-4 top-4 flex gap-2">
-        <HudButton label={game.view === 'close' ? 'See the whole house' : 'Back behind me'} onClick={game.toggleView}>
-          {game.view === 'close' ? <House size={20} /> : <Eye size={20} />}
+        <HudButton label={`Camera: ${CAMERA_LABEL[game.view]}. Click for the next view (C)`} onClick={nextView}>
+          <span className="flex flex-col items-center leading-none">
+            <SwitchCamera size={17} />
+            <span className="text-[8px]">{CAMERA_LABEL[game.view]}</span>
+          </span>
         </HudButton>
         <HudButton label={game.night ? 'Make it day' : 'Make it night'} onClick={game.toggleNight}>
           {game.night ? <Sun size={20} /> : <Moon size={20} />}
@@ -279,7 +291,7 @@ export function HouseView() {
           <Paintbrush size={20} />
         </HudButton>
         <HudButton label="Take a photo (saved to Memories)" onClick={actions.photo}>
-          <Camera size={19} />
+          <Aperture size={19} />
         </HudButton>
         <HudButton label="My look" onClick={() => setPanel(panel === 'look' ? null : 'look')} on={panel === 'look'}>
           <Shirt size={20} />
@@ -390,7 +402,7 @@ export function HouseView() {
         </div>
       ) : null}
 
-      {!touch ? <p className="pointer-events-none absolute bottom-4 left-4 text-[12px] text-white/85 drop-shadow">WASD to walk · Shift to run · drag to look · E to use · scroll to zoom</p> : null}
+      {!touch ? <p className="pointer-events-none absolute bottom-4 left-4 text-[12px] text-white/85 drop-shadow">WASD to walk · Shift to run · drag to look · E to use · C to change the camera</p> : null}
     </div>
   );
 }
@@ -606,11 +618,6 @@ function useHousePackUrl(): string | undefined {
     };
   }, [sb]);
   return url;
-}
-
-function spread(m: Map<number, { x: number; y: number }>) {
-  const [a, b] = [...m.values()];
-  return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
 }
 
 function Chip({ children }: { children: ReactNode }) {

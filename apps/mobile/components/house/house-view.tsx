@@ -1,12 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Canvas, events as touchEvents } from '@react-three/fiber/native';
-import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, zoomBy, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
+import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
 import { useCouple } from '@us/shared/react';
 import { GLView } from 'expo-gl';
 import { phoneHouseSound } from '@/lib/house-sound';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { Camera, Check, Eye, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, StickyNote, Sun, Trash2, Volume2, VolumeX, X } from 'lucide-react-native';
+import { Aperture, Check, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, StickyNote, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react-native';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, PixelRatio, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -77,6 +77,17 @@ export function HouseView() {
   const [fps, setFps] = useState(0);
   const [panel, setPanel] = useState<'look' | 'add' | 'note' | null>(null);
   const [problem, setProblem] = useState<Error | null>(null);
+  // The camera view you last chose, remembered on this phone.
+  useEffect(() => {
+    void AsyncStorage.getItem('us.house.view')
+      .then((v) => CAMERA_VIEWS.includes(v as never) && game.chooseView(v as (typeof CAMERA_VIEWS)[number]))
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const nextView = () => {
+    game.nextView();
+    const order = CAMERA_VIEWS;
+    void AsyncStorage.setItem('us.house.view', order[(order.indexOf(game.view) + 1) % order.length]!).catch(() => {});
+  };
   // The loading screen stays until the house is in and drawing (or 25 s, whatever happens).
   const [ready, setReady] = useState(false);
   const onReady = useCallback(() => setReady(true), []);
@@ -129,30 +140,20 @@ export function HouseView() {
     [quality, chooseQuality],
   );
 
-  // Looking: drag anywhere off the stick and the buttons; pinch to zoom; tap to walk or use.
+  // Looking: drag anywhere off the stick and the buttons; tap to walk or use. (The camera button sets the distance.)
   const look = useMemo(() => {
-    let lastScale = 1;
     const pan = Gesture.Pan()
       .minDistance(6)
       .maxPointers(1)
       .runOnJS(true)
       .onChange((e) => orbitBy(controls, e.changeX, e.changeY, size.w));
-    const pinch = Gesture.Pinch()
-      .runOnJS(true)
-      .onBegin(() => {
-        lastScale = 1;
-      })
-      .onChange((e) => {
-        zoomBy(controls, e.scale / lastScale);
-        lastScale = e.scale;
-      });
     const tap = Gesture.Tap()
       .maxDistance(10)
       .runOnJS(true)
       .onEnd((e, ok) => {
         if (ok) tapAt(controls, e.x, e.y, size.w, size.h);
       });
-    return Gesture.Race(tap, Gesture.Simultaneous(pan, pinch));
+    return Gesture.Race(tap, pan);
   }, [controls, size]);
 
   // expo-gl always draws at the screen's full density, so the canvas is laid
@@ -224,8 +225,9 @@ export function HouseView() {
 
       {/* Top right: how it looks. */}
       <View className="absolute flex-row gap-2" style={{ right: pad.right, top: pad.top }} pointerEvents="box-none">
-        <Round label={game.view === 'close' ? 'See the whole house' : 'Back behind me'} onPress={game.toggleView} size={44}>
-          {game.view === 'close' ? <House size={20} color="#fff" /> : <Eye size={20} color="#fff" />}
+        <Round label={`Camera: ${CAMERA_LABEL[game.view]}. Tap for the next view`} onPress={nextView} size={44}>
+          <SwitchCamera size={17} color="#fff" />
+          <Text className="text-[8px] leading-[10px] text-white">{CAMERA_LABEL[game.view]}</Text>
         </Round>
         <Round label={game.night ? 'Make it day' : 'Make it night'} onPress={game.toggleNight} size={44}>
           {game.night ? <Sun size={20} color="#fff" /> : <Moon size={20} color="#fff" />}
@@ -234,7 +236,7 @@ export function HouseView() {
           <Paintbrush size={20} color="#fff" />
         </Round>
         <Round label="Take a photo (saved to Memories)" onPress={game.actions.photo} size={44}>
-          <Camera size={19} color="#fff" />
+          <Aperture size={19} color="#fff" />
         </Round>
         <Round label="My look" onPress={() => setPanel(panel === 'look' ? null : 'look')} size={44} on={panel === 'look'}>
           <Shirt size={20} color="#fff" />
