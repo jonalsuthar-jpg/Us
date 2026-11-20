@@ -1428,8 +1428,13 @@ await test('birthday story: read-only, kept in Memories, nobody else ever', asyn
 await test('our house: both of us change things, through the version check; nobody else sees them', async () => {
   assert.ok((await one(`select features from public.plans where id = 'full'`)).features.includes('house'));
   const set = (who, key, state, version) => as(who, () => one(`select public.set_house_item($1, $2::jsonb, $3) as v`, [key, state === null ? null : JSON.stringify(state), version]));
+  // The same thing saved again within 200 ms is refused (the flood guard): space them out.
+  const pause = () => new Promise((res) => setTimeout(res, 250));
   assert.equal((await set(jonal, 'floor_lamp', { on: false }, 0)).v, 1);
+  await rejects(set(parul, 'floor_lamp', { on: true }, 1), /too fast/, 'saved again straight away: refused, before any lock');
+  await pause();
   assert.equal((await set(parul, 'floor_lamp', { on: true }, 1)).v, 2, 'partner changes it');
+  await pause();
   await rejects(set(jonal, 'floor_lamp', { on: false }, 1), /stale/, 'a change made on an old version');
   await rejects(set(jonal, 'floor_lamp', { on: false }, 0), /stale/, 'adding what is already there');
   const rows = await as(jonal, () => q(`select item_key, state, version, updated_by from public.house_items`));
@@ -1447,6 +1452,7 @@ await test('our house: both of us change things, through the version check; nobo
 
   // Taking something away needs the version too.
   await set(jonal, 'add:plantpot:ab12cd', { x: 1, z: 1 }, 0);
+  await pause();
   await rejects(set(parul, 'add:plantpot:ab12cd', null, 5), /stale/, 'remove on an old version');
   assert.equal((await set(parul, 'add:plantpot:ab12cd', null, 1)).v, 0);
   assert.equal((await as(jonal, () => q(`select item_key from public.house_items where item_key like 'add:%'`))).length, 0);
