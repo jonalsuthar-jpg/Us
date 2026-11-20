@@ -32,3 +32,20 @@ describe('the house, closed', () => {
     expect(sent.length).toBe(n);
   });
 });
+
+describe('the house store, saving', () => {
+  it('drops a flood of changes to one thing, and keeps saving the rest', async () => {
+    const { FLOOD_MAX, HouseStore } = await import('../src/house/store');
+    const saved: string[] = [];
+    const api = { load: async () => [], save: async (k: string) => (saved.push(k), saved.length) };
+    const store = new HouseStore(api, () => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (let i = 0; i < 500; i++) store.set('tv', { on: i % 2 === 0 });
+    store.set('sofa', { x: 1 });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(saved.filter((k) => k === 'tv').length).toBe(FLOOD_MAX);
+    expect(saved).toContain('sofa');
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+});

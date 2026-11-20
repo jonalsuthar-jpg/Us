@@ -28,11 +28,18 @@ export class StaleHouseError extends Error {
 
 type Listener = () => void;
 
+/** At most this many changes to one thing in FLOOD_MS. */
+export const FLOOD_MAX = 30;
+const FLOOD_MS = 5000;
+
 export class HouseStore {
   private rows = new Map<string, { state: Record<string, unknown>; version: number }>();
   /** What the server has, as far as I know: the version my next save of each thing checks against. */
   private server = new Map<string, number>();
   private queue = new Map<string, Promise<unknown>>();
+  /** When each thing was last changed, for flooding(). */
+  private recent = new Map<string, number[]>();
+  private reloadedAt = 0;
   private listeners = new Set<Listener>();
   private cache: { items: Map<string, ItemState> } | null = null;
   loaded = false;
@@ -85,7 +92,7 @@ export class HouseStore {
 
   /** Change (or with null, take away) one thing. */
   set(key: string, state: Record<string, unknown> | null) {
-    if (!KEY.test(key)) return;
+    if (!KEY.test(key) || this.flooding(key)) return;
     const v = this.version(key) + 1;
     if (state) this.rows.set(key, { state, version: v });
     else this.rows.delete(key);
@@ -98,9 +105,34 @@ export class HouseStore {
         else this.server.delete(key);
       })
       .catch((e) => {
-        if (e instanceof StaleHouseError) void this.load().catch(() => {});
+        // Behind my partner: load what's there (at most every couple of seconds, however many saves come back stale).
+        if (e instanceof StaleHouseError && Date.now() - this.reloadedAt > 2000) {
+          this.reloadedAt = Date.now();
+          void this.load().catch(() => {});
+        }
       });
     this.queue.set(key, run);
+  }
+
+  /**
+   * One thing changed far more often than anyone could (a bug saving it
+   * every frame): the extra changes are dropped, so the database never sees a
+   * stream of saves that holds everyone else's requests up.
+   */
+  private flooding(key: string): boolean {
+    const now = Date.now();
+    const times = (this.recent.get(key) ?? []).filter((t) => now - t < FLOOD_MS);
+    if (times.length >= FLOOD_MAX) {
+      if (times.length === FLOOD_MAX) {
+        times.push(now);
+        console.warn('[house] too many saves of', key);
+      }
+      this.recent.set(key, times);
+      return true;
+    }
+    times.push(now);
+    this.recent.set(key, times);
+    return false;
   }
 
   /** My partner changed something: show it, unless I already have that version or newer. */
