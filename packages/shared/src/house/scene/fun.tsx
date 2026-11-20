@@ -1502,8 +1502,8 @@ function MoodOrb({ who, colourOf, hidden }: { who: THREE.Vector3; colourOf?: str
   return <mesh ref={g} geometry={funSphere} material={colour(colourOf ?? '#FFFFFF', true)} scale={0.07} visible={false} />;
 }
 
-/** The Big Dipper, high in the north-west; and now and then a shooting star. */
-const DIPPER_DIR = new THREE.Vector3(-0.45, 0.62, -0.64).normalize();
+/** The Big Dipper, high over the garden (the balcony's telescope looks at it); and now and then a shooting star. */
+const DIPPER_DIR = new THREE.Vector3(-0.3, 0.78, 0.55).normalize();
 const DIPPER: [number, number][] = [[0, 0], [1.1, -0.2], [2.1, -0.15], [3, 0.1], [3.2, 1.0], [4.3, 1.1], [4.5, 0.2]];
 
 function NightSky() {

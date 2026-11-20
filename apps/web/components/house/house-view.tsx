@@ -4,9 +4,9 @@ import { Canvas } from '@react-three/fiber';
 import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
 import type * as THREE from 'three';
 import { webHouseSound } from '@/lib/house-sound';
-import { Aperture, Check, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react';
+import { Aperture, Check, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Video, VideoOff, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { housePackBase } from '@us/shared/house/light';
-import { useCouple } from '@us/shared/react';
+import { setCallVoiceVolume, useCouple } from '@us/shared/react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
@@ -81,6 +81,11 @@ export function HouseView() {
   const [visible, setVisible] = useState(true);
   const [panel, setPanel] = useState<'look' | 'add' | 'note' | null>(null);
   const [touch, setTouch] = useState(false);
+  // Their voice goes back to full when we stop talking or leave.
+  useEffect(() => {
+    if (!game.talking) setCallVoiceVolume(1);
+  }, [game.talking]);
+  useEffect(() => () => setCallVoiceVolume(1), []);
   // The camera view you last chose, remembered in this browser.
   useEffect(() => {
     try {
@@ -247,7 +252,7 @@ export function HouseView() {
           // Clicks reach the scene through the handlers above, not R3F's raycasting on every move.
           style={{ pointerEvents: 'none' }}
         >
-          <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onReady={onReady} sound={sound} capture={capture} />
+          <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onReady={onReady} sound={sound} capture={capture} onVoice={setCallVoiceVolume} tvVideo={game.theirVideo} />
         </Canvas>
       </div>
 
@@ -267,6 +272,11 @@ export function HouseView() {
         <HudButton label={game.inCall ? 'Stop talking' : `Talk to ${game.partnerName}`} onClick={game.toggleTalk} on={game.inCall}>
           {game.inCall ? <PhoneOff size={18} /> : <Phone size={18} />}
         </HudButton>
+        {game.talking ? (
+          <HudButton label={game.myVideo ? 'Camera off' : 'Camera on (they see you on their TV)'} onClick={game.toggleVideo} on={game.myVideo}>
+            {game.myVideo ? <Video size={18} /> : <VideoOff size={18} />}
+          </HudButton>
+        ) : null}
         <HudButton label={game.music ? 'Turn the speaker off' : 'Play the speaker'} onClick={game.toggleMusic} on={game.music}>
           <Radio size={18} />
         </HudButton>

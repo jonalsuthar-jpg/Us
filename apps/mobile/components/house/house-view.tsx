@@ -6,10 +6,11 @@ import { GLView } from 'expo-gl';
 import { phoneHouseSound } from '@/lib/house-sound';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { Aperture, Check, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react-native';
+import { Aperture, Check, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Video, VideoOff, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react-native';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Image, PixelRatio, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { RTCView } from 'react-native-webrtc';
 import Animated, { FadeOut, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { GradientView } from '../plan/art';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -77,6 +78,16 @@ export function HouseView() {
   const [fps, setFps] = useState(0);
   const [panel, setPanel] = useState<'look' | 'add' | 'note' | null>(null);
   const [problem, setProblem] = useState<Error | null>(null);
+  // Their voice by how far apart we stand (the phone can't place it left or right): the call's own track volume.
+  const remote = game.remoteStream;
+  const setVoice = useCallback(
+    (gain: number) => {
+      const track = remote?.getAudioTracks()[0] as unknown as { _setVolume?: (v: number) => void } | undefined;
+      track?._setVolume?.(gain);
+    },
+    [remote],
+  );
+  useEffect(() => () => setVoice(1), [setVoice]);
   // The camera view you last chose, remembered on this phone.
   useEffect(() => {
     void AsyncStorage.getItem('us.house.view')
@@ -178,7 +189,7 @@ export function HouseView() {
                 camera={{ fov: 55, near: 0.1, far: 200 }}
                 events={noEvents}
               >
-                <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onError={setProblem} onReady={onReady} sound={sound} capture={capture} />
+                <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onError={setProblem} onReady={onReady} sound={sound} capture={capture} onVoice={setVoice} />
               </Canvas>
               </Catch>
             </View>
@@ -204,6 +215,11 @@ export function HouseView() {
         <Round label={game.inCall ? 'Stop talking' : `Talk to ${game.partnerName}`} onPress={game.toggleTalk} size={44} on={game.inCall}>
           {game.inCall ? <PhoneOff size={18} color="#fff" /> : <Phone size={18} color="#fff" />}
         </Round>
+        {game.talking ? (
+          <Round label={game.myVideo ? 'Camera off' : 'Camera on'} onPress={game.toggleVideo} size={44} on={game.myVideo}>
+            {game.myVideo ? <Video size={18} color="#fff" /> : <VideoOff size={18} color="#fff" />}
+          </Round>
+        ) : null}
         <Round label={game.music ? 'Turn the speaker off' : 'Play the speaker'} onPress={game.toggleMusic} size={44} on={game.music}>
           <Radio size={18} color="#fff" />
         </Round>
@@ -322,6 +338,13 @@ export function HouseView() {
               <Text className="text-small text-white">Not now</Text>
             </Pressable>
           </View>
+        </View>
+      ) : null}
+
+      {/* Their camera, in a little window. */}
+      {game.theirVideo ? (
+        <View className="absolute overflow-hidden rounded-2xl border-2 border-white/70 bg-black" style={{ left: pad.left + 56, top: pad.top + 56, width: 168, height: 112 }} pointerEvents="none">
+          <RTCView streamURL={(game.theirVideo as unknown as { toURL: () => string }).toURL()} objectFit="cover" style={{ flex: 1 }} />
         </View>
       ) : null}
 

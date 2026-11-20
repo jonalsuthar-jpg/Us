@@ -693,6 +693,24 @@ export class CallManager {
     await this.applyShareQuality();
   }
 
+  /** How loud each of us is right now (0…1), from the connection's own stats: null when unknown. */
+  async audioLevels(): Promise<{ me: number | null; them: number | null }> {
+    if (!this.pc) return { me: null, them: null };
+    try {
+      const stats = await this.pc.getStats();
+      let me: number | null = null;
+      let them: number | null = null;
+      stats.forEach((r: { type: string; kind?: string; audioLevel?: number }) => {
+        if (r.kind !== 'audio' || typeof r.audioLevel !== 'number') return;
+        if (r.type === 'inbound-rtp') them = r.audioLevel;
+        else if (r.type === 'media-source') me = r.audioLevel;
+      });
+      return { me, them };
+    } catch {
+      return { me: null, them: null };
+    }
+  }
+
   /** Resolution and frame rate my shared screen is going out at right now. */
   async screenStats(): Promise<ScreenStats | null> {
     if (!this.screenTrack || !this.pc) return null;

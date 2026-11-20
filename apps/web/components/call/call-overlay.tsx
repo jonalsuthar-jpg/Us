@@ -1,7 +1,7 @@
 'use client';
 
 import { formatDuration, isWideVideo, selfViewAspect, type CallState, type ScreenStats, type ShareMode, type VideoSize } from '@us/shared';
-import { useCallCards, useCallManager, useCallState, useCouple, useFeature, onMinimiseCallScreen } from '@us/shared/react';
+import { useCallCards, useCallManager, useCallState, useCallVoiceVolume, useCouple, useFeature, onMinimiseCallScreen } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronDown,
@@ -108,6 +108,8 @@ function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }
 }
 
 function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimised: boolean; onMinimise?: () => void }) {
+  // Our House: their voice quieter the further apart we stand.
+  const houseVolume = useCallVoiceVolume();
   const m = useCallManager();
   const { partner, partnerSlot, me } = useCouple();
   const [shareNudge, setShareNudge] = useState(false);
@@ -195,7 +197,7 @@ function CallScreen({ state, minimised, onMinimise }: { state: CallState; minimi
       exit={{ opacity: 0, transition: { duration: 0.4 } }}
     >
       {/* Sharing system sound: call audio stays on the default output, as echo-free sharing expects. */}
-      <StreamAudio stream={state.remoteStream} revision={state.revision} sinkId={state.shareSoundIsSystem ? '' : sinkId} />
+      <StreamAudio stream={state.remoteStream} revision={state.revision} sinkId={state.shareSoundIsSystem ? '' : sinkId} volume={houseVolume} />
 
       {/* While ringing on a video call, my own camera glows faintly behind the veil. */}
       {ringing && isVideo && state.localStream && (

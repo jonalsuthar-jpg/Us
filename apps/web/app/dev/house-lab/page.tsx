@@ -300,6 +300,18 @@ export default function HouseLab() {
         [19000, () => cb.cmds.push({ t: 'use' })],
         [19500, () => ca.cmds.push({ t: 'use' })],
       ]);
+    if (scene === 'seek')
+      run([
+        [800, () => cb.cmds.push({ t: 'walkTo', x: -3.0, y: 0, z: 6.6 })],
+        [800, () => ca.cmds.push({ t: 'walkTo', x: -2.0, y: 0, z: 6.6 })],
+        [8000, () => ca.cmds.push({ t: 'pick', id: 'seek' })],
+        [9000, () => ca.cmds.push({ t: 'walkTo', x: 4.5, y: 0, z: 2.5 })],
+      ]);
+    if (scene === 'scope')
+      run([
+        [700, () => sa.set(SKY_KEY, { on: true, at: new Date().toISOString() })],
+        [800, () => ca.cmds.push({ t: 'pick', id: 'stars' })],
+      ]);
     if (scene === 'pool')
       run([
         [800, () => ca.cmds.push({ t: 'walkTo', x: 5, y: -1, z: 9 })],

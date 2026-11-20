@@ -182,6 +182,12 @@ export interface WorldProps {
   letters?: HouseLetters | null;
   /** Tell my partner, with a push, when they're not here. */
   notify?: (event: 'gift' | 'turn' | 'in' | 'letter') => void;
+  /** On a call: how loud each of us is (0…1), kept current by the caller. */
+  voice?: { me: number; them: number };
+  /** On a call: how loud (0…1) and from which side (-1 left … 1 right) my partner's voice should be, from where they stand. */
+  onVoice?: (gain: number, pan: number) => void;
+  /** Their camera, on the living-room TV (the web). */
+  tvVideo?: MediaStream | null;
 }
 
 /**
@@ -202,6 +208,8 @@ const REACH = 1.05;
 const COOK_S = 6;
 const WATER_S = 2.5;
 const HUG_S = 3;
+/** Louder than this on the call: talking. */
+const SPEAKING = 0.035;
 
 type View = 'all' | 'upper' | 'ground';
 
@@ -237,7 +245,7 @@ interface Me {
 
 /** The house, the two of us, the things in it and the camera. Goes inside a Canvas. */
 export function HouseWorld(props: WorldProps) {
-  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl, coupleId, sound, talking, capture, pairedAt, celebrate, letters, notify } = props;
+  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl, coupleId, sound, talking, capture, pairedAt, celebrate, letters, notify, voice, onVoice, tvVideo } = props;
   const { gl, scene, camera, invalidate } = useThree();
   const mats = useMemo(() => makeMaterials(quality), [quality]);
   useEffect(() => () => mats.dispose(), [mats]);
@@ -878,7 +886,7 @@ export function HouseWorld(props: WorldProps) {
     if (me.rig) {
       me.rig.root.position.copy(me.pos);
       me.rig.root.rotation.y = me.heading;
-      me.rig.update(dt, { moving, speed: me.speed, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold, talking: talking && !moving, lookAt: p && them.shown ? [them.pos.x, them.pos.y + 1.6, them.pos.z] : undefined }, me.motion);
+      me.rig.update(dt, { moving, speed: me.speed, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold, talking: talking && !moving && (!voice || voice.me > SPEAKING), lookAt: p && them.shown ? [them.pos.x, them.pos.y + 1.6, them.pos.z] : undefined }, me.motion);
     }
     const label = region(me.at).label;
     if (label !== me.place) {
@@ -912,7 +920,7 @@ export function HouseWorld(props: WorldProps) {
         them.rig.root.visible = !(view === 'ground' && them.pos.y > FLOOR_H / 2);
         them.rig.root.position.copy(them.pos);
         them.rig.root.rotation.y = them.heading;
-        them.rig.update(dt, { moving: p.m === 1, speed: p.s, swimming: p.a === 'swim', act: bodyAct(p.a), carrying: !!p.hk, talking: talking && p.m !== 1, lookAt: [me.pos.x, me.pos.y + 1.6, me.pos.z] }, them.motion);
+        them.rig.update(dt, { moving: p.m === 1, speed: p.s, swimming: p.a === 'swim', act: bodyAct(p.a), carrying: !!p.hk, talking: talking && p.m !== 1 && (!voice || voice.them > SPEAKING), lookAt: [me.pos.x, me.pos.y + 1.6, me.pos.z] }, them.motion);
       } else {
         them.shown = false;
         them.rig.root.visible = false;
@@ -1105,6 +1113,34 @@ export function HouseWorld(props: WorldProps) {
 
     fun.frame(dt);
 
+    // Their voice from where they stand: quieter across the house, from their side of me.
+    if (onVoice && talking) {
+      const v = voiceAt.current;
+      v.t -= dt;
+      if (v.t <= 0) {
+        v.t = 0.1;
+        let gain = 1;
+        let pan = 0;
+        if (p && them.shown) {
+          const dx = them.pos.x - me.pos.x;
+          const dz = them.pos.z - me.pos.z;
+          const d = Math.hypot(dx, dz) + Math.abs(them.pos.y - me.pos.y) * 1.5;
+          gain = Math.max(0.18, Math.min(1, 1.35 / (1 + d / 3)));
+          // The camera's right, flat on the floor.
+          camera.getWorldDirection(tmp.look);
+          const rx = -tmp.look.z;
+          const rz = tmp.look.x;
+          const rl = Math.hypot(rx, rz) || 1;
+          pan = d > 0.3 ? Math.max(-1, Math.min(1, ((dx * rx + dz * rz) / rl / Math.max(Math.hypot(dx, dz), 0.001)) * 0.85)) : 0;
+        }
+        if (Math.abs(gain - v.gain) > 0.02 || Math.abs(pan - v.pan) > 0.04) {
+          v.gain = gain;
+          v.pan = pan;
+          onVoice(gain, pan);
+        }
+      }
+    }
+
     // The buttons round the canvas: told only when something changed.
     const focus = focusFor(all);
     hud.current.focus = focus?.label ?? null;
@@ -1186,6 +1222,7 @@ export function HouseWorld(props: WorldProps) {
   });
 
   const focusRun = useRef<(() => void) | null>(null);
+  const voiceAt = useRef({ t: 0, gain: 1, pan: 0 });
 
   /** Everything as the store has it this moment: a command can follow another in the next frame, before React re-renders. */
   const fresh = () => (store ? fun.fresh() : placedRef.current);
@@ -1372,11 +1409,69 @@ export function HouseWorld(props: WorldProps) {
       <Person look={mine} quality={quality} rigRef={setMine} ringColor="#FFFFFF" base={houseUrl} />
       <Person look={theirs} quality={quality} rigRef={setTheirs} ringColor="#FF8FB0" base={houseUrl} />
       {fun.scene}
+      {tvVideo ? <TvVideo stream={tvVideo} tv={placed.find((i) => i.key === 'tv')} /> : null}
+      <SpeakRing who={me.pos} level={() => (talking && voice ? voice.me : 0)} />
+      <SpeakRing who={them.pos} level={() => (talking && voice && them.shown ? voice.them : 0)} />
       <mesh ref={marker} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
         <ringGeometry args={[0.18, 0.26, 32]} />
         <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} />
       </mesh>
     </>
+  );
+}
+
+/** Their camera on the TV: a video texture over the screen. */
+function TvVideo({ stream, tv }: { stream: MediaStream; tv?: PlacedItem }) {
+  const tex = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const v = document.createElement('video');
+    v.srcObject = stream;
+    v.muted = true;
+    v.playsInline = true;
+    void v.play().catch(() => {});
+    const t = new THREE.VideoTexture(v);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return { t, v };
+  }, [stream]);
+  useEffect(
+    () => () => {
+      if (!tex) return;
+      tex.t.dispose();
+      tex.v.srcObject = null;
+    },
+    [tex],
+  );
+  if (!tex || !tv) return null;
+  return (
+    <group position={[tv.x, tv.y, tv.z]} rotation={[0, tv.ry, 0]}>
+      <mesh position={[0, 1.275, -0.095]}>
+        <planeGeometry args={[1.8, 0.85]} />
+        <meshBasicMaterial map={tex.t} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Rings rising over whoever's talking. */
+function SpeakRing({ who, level }: { who: THREE.Vector3; level: () => number }) {
+  const g = useRef<THREE.Mesh>(null);
+  const shown = useRef(0);
+  useFrame(({ clock }, dt) => {
+    const m = g.current;
+    if (!m) return;
+    shown.current += ((level() > SPEAKING ? 1 : 0) - shown.current) * Math.min(1, dt * 8);
+    m.visible = shown.current > 0.05;
+    if (!m.visible) return;
+    const k = (clock.elapsedTime * 1.6) % 1;
+    m.position.set(who.x, who.y + 2.0 + k * 0.25, who.z);
+    m.scale.setScalar(0.12 + k * 0.16);
+    (m.material as THREE.MeshBasicMaterial).opacity = shown.current * (1 - k) * 0.8;
+  });
+  return (
+    <mesh ref={g} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+      <ringGeometry args={[0.8, 1, 24]} />
+      <meshBasicMaterial color="#FFFFFF" transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
   );
 }
 

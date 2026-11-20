@@ -55,6 +55,26 @@ export function useHouseGame() {
   const note = items.get(NOTE_KEY);
   const inCall = call.phase !== 'idle' && call.phase !== 'ended';
   const talking = call.phase === 'connected';
+  // How loud each of us is, a few times a second while we talk: who's speaking shows.
+  const voice = useMemo(() => ({ me: 0, them: 0 }), []);
+  useEffect(() => {
+    if (!talking) {
+      voice.me = 0;
+      voice.them = 0;
+      return;
+    }
+    const t = setInterval(() => {
+      void calls.audioLevels().then((l) => {
+        voice.me = l.me ?? 0;
+        voice.them = l.them ?? 0;
+      });
+    }, 200);
+    return () => clearInterval(t);
+  }, [talking, calls, voice]);
+  // Their camera, on the TV (web) or in a little window (phone), and mine to switch on.
+  const theirVideo = talking && call.remote.camera ? call.remoteStream : null;
+  const myVideo = talking && call.local.camera;
+  const toggleVideo = useCallback(() => void calls.toggleCamera().catch(() => onMoment('Couldn’t use the camera')), [calls, onMoment]);
 
   const cmd = controls.cmds;
   const actions = useMemo(
@@ -186,13 +206,14 @@ export function useHouseGame() {
     onMoment,
     coupleId: couple.id,
     talking,
+    voice,
     pairedAt: couple.paired_at,
     celebrate,
     letters,
     notify,
   };
 
-  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
+  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
 }
 
 export type HouseGame = ReturnType<typeof useHouseGame>;
