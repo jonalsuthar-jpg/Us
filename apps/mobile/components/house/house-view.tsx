@@ -50,6 +50,7 @@ export function HouseView() {
     }
   }, [game.needsLook]);
   const stepped = useRef(false);
+  const reports = useRef(0);
 
   useEffect(() => {
     void AsyncStorage.getItem(QUALITY_KEY)
@@ -71,11 +72,13 @@ export function HouseView() {
 
   // The first few seconds decide: a phone that can't keep up steps down once.
   const onFps = useCallback(
-    (f: number) => {
+    (f: number, calls: number) => {
       setFps(Math.round(f));
       // In the phone's log too (adb logcat), to check how smoothly it runs.
-      console.log(`[house] ${Math.round(f)} fps (${quality})`);
-      if (stepped.current || !quality) return;
+      console.log(`[house] ${Math.round(f)} fps, ${calls} draw calls (${quality})`);
+      // The first reports include loading; judge once it has settled.
+      reports.current++;
+      if (stepped.current || !quality || reports.current < 4) return;
       stepped.current = true;
       if (f < 22 && quality !== 'low') chooseQuality(quality === 'high' ? 'medium' : 'low');
     },
@@ -126,7 +129,7 @@ export function HouseView() {
               <Canvas
                 key={quality}
                 shadows={quality !== 'low'}
-                frameloop={!active ? 'never' : quality === 'low' ? 'demand' : 'always'}
+                frameloop={!active ? 'never' : 'always'}
                 camera={{ fov: 55, near: 0.1, far: 200 }}
                 events={noEvents}
               >

@@ -2,6 +2,7 @@ import { useLoader } from '@react-three/fiber';
 import { Component, useEffect, useMemo, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
  * The realistic house (scripts/blender/build_house.py): three layers, each a
@@ -61,6 +62,7 @@ export function RealHouse({ base, light, into, onReady }: RealHouseProps) {
           mesh.castShadow = !mat.transparent;
           mesh.receiveShadow = true;
         });
+        mergeStatic(scene);
         return { layer, scene };
       }),
     [gltfs, maps], // eslint-disable-line react-hooks/exhaustive-deps
@@ -92,6 +94,40 @@ export function RealHouse({ base, light, into, onReady }: RealHouseProps) {
   }, [layers, into, onReady]);
 
   return null;
+}
+
+/**
+ * Fewer draw calls: every piece of a layer that never moves and shares a
+ * material is merged into one mesh. On a phone each draw call crosses from
+ * JavaScript to native code, so hundreds of them cost more than the drawing.
+ * Walls that drop away in the dollhouse (userData.cut) stay as they are.
+ */
+function mergeStatic(scene: THREE.Object3D) {
+  scene.updateMatrixWorld(true);
+  const toRoot = new THREE.Matrix4().copy(scene.matrixWorld).invert();
+  const groups = new Map<string, { mat: THREE.Material; meshes: THREE.Mesh[] }>();
+  scene.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+    for (let at: THREE.Object3D | null = o; at && at !== scene; at = at.parent) if (at.userData.cut) return;
+    const attrs = Object.keys(mesh.geometry.attributes).sort().join(',');
+    const key = `${(mesh.material as THREE.Material).uuid}|${attrs}|${mesh.geometry.index ? 1 : 0}`;
+    const g = groups.get(key) ?? { mat: mesh.material as THREE.Material, meshes: [] };
+    g.meshes.push(mesh);
+    groups.set(key, g);
+  });
+  for (const { mat, meshes } of groups.values()) {
+    if (meshes.length < 2) continue;
+    const parts = meshes.map((m) => m.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(toRoot, m.matrixWorld)));
+    const merged = mergeGeometries(parts, false);
+    parts.forEach((p) => p.dispose());
+    if (!merged) continue;
+    const one = new THREE.Mesh(merged, mat);
+    one.castShadow = meshes.some((m) => m.castShadow);
+    one.receiveShadow = true;
+    scene.add(one);
+    for (const m of meshes) m.removeFromParent();
+  }
 }
 
 /**

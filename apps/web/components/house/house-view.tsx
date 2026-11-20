@@ -49,6 +49,7 @@ export function HouseView() {
     }
   }, [game.needsLook]);
   const stepped = useRef(false);
+  const reports = useRef(0);
 
   useEffect(() => setTouch(window.matchMedia('(pointer: coarse)').matches), []);
 
@@ -65,7 +66,9 @@ export function HouseView() {
   // A computer that can't keep up steps down once, in the first few seconds.
   const onFps = useCallback(
     (f: number) => {
-      if (stepped.current) return;
+      // The first reports include loading; judge once it has settled.
+      reports.current++;
+      if (stepped.current || reports.current < 4) return;
       stepped.current = true;
       if (f < 22 && quality !== 'low') chooseQuality(quality === 'high' ? 'medium' : 'low');
     },
@@ -176,7 +179,7 @@ export function HouseView() {
           key={quality}
           shadows={quality !== 'low'}
           dpr={[1, DPR[quality]]}
-          frameloop={!visible ? 'never' : quality === 'low' ? 'demand' : 'always'}
+          frameloop={!visible ? 'never' : 'always'}
           camera={{ fov: 55, near: 0.1, far: 200 }}
           gl={{ antialias: quality === 'high' }}
           // Clicks reach the scene through the handlers above, not R3F's raycasting on every move.

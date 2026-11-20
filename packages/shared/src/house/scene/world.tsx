@@ -128,7 +128,8 @@ export interface WorldProps {
   /** Something we did together ("Movie night"). */
   onMoment?: (text: string) => void;
   /** Frames per second, every few seconds. */
-  onFps?: (fps: number) => void;
+  /** Frames per second, and draw calls in the last frame, every few seconds. */
+  onFps?: (fps: number, calls: number) => void;
   /** Something went wrong drawing the house; it stops, and this says what. */
   onError?: (error: Error) => void;
   /** Where the realistic house is (ground.glb, …). Without it, or until it loads, the box house stands in. */
@@ -249,13 +250,6 @@ export function HouseWorld(props: WorldProps) {
       });
     }
   }, [gl, groups, quality, mats, placed, real]);
-
-  // Low quality draws at most 30 frames a second, on demand.
-  useEffect(() => {
-    if (quality !== 'low') return;
-    const t = setInterval(() => invalidate(), 1000 / 30);
-    return () => clearInterval(t);
-  }, [quality, invalidate]);
 
   const me = useRef<Me>({
     pos: new THREE.Vector3(SPAWN.x + (meId < partnerId ? -0.6 : 0.6), 0, SPAWN.z),
@@ -784,7 +778,7 @@ export function HouseWorld(props: WorldProps) {
     f.frames++;
     f.time += rawDt;
     if (f.time >= 3) {
-      onFps?.(f.frames / f.time);
+      onFps?.(f.frames / f.time, gl.info.render.calls);
       f.frames = 0;
       f.time = 0;
     }
