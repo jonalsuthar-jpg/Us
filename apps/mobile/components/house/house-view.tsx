@@ -1,13 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Canvas, events as touchEvents } from '@react-three/fiber/native';
-import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SHOES, SKINS, tapAt, useHouseGame, zoomBy, type HouseGame, type Quality } from '@us/shared/house';
+import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SHOES, SKINS, tapAt, useHouseGame, useHouseLoading, zoomBy, type HouseGame, type Quality } from '@us/shared/house';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { Check, Eye, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Plus, RotateCcw, RotateCw, Shirt, Sun, Trash2, X } from 'lucide-react-native';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, PixelRatio, Pressable, ScrollView, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { FadeOut, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { GradientView } from '../plan/art';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHousePack } from '@/lib/use-house-pack';
 import { Text } from '../ui/text';
@@ -41,6 +42,14 @@ export function HouseView() {
   const [fps, setFps] = useState(0);
   const [panel, setPanel] = useState<'look' | 'add' | null>(null);
   const [problem, setProblem] = useState<Error | null>(null);
+  // The loading screen stays until the house is in and drawing (or 25 s, whatever happens).
+  const [ready, setReady] = useState(false);
+  const onReady = useCallback(() => setReady(true), []);
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 25_000);
+    return () => clearTimeout(t);
+  }, []);
+  const loading = useHouseLoading();
   // The first time in, make yourself first.
   const asked = useRef(false);
   useEffect(() => {
@@ -133,7 +142,7 @@ export function HouseView() {
                 camera={{ fov: 55, near: 0.1, far: 200 }}
                 events={noEvents}
               >
-                <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onError={setProblem} />
+                <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onError={setProblem} onReady={onReady} />
               </Canvas>
               </Catch>
             </View>
@@ -222,6 +231,8 @@ export function HouseView() {
         )}
       </View>
 
+      {!ready ? <Opening progress={loading} partner={game.partnerName} partnerIn={!!game.partnerPlace} /> : null}
+
       {problem ? <Problem error={problem} /> : null}
 
       {panel === 'look' ? <LookPanel game={game} onClose={() => setPanel(null)} /> : null}
@@ -241,6 +252,26 @@ export function HouseView() {
         </View>
       ) : null}
     </View>
+  );
+}
+
+/** While the house loads: a calm screen instead of a half-built house. */
+function Opening({ progress, partner, partnerIn }: { progress: number; partner: string; partnerIn: boolean }) {
+  return (
+    <Animated.View exiting={FadeOut.duration(450)} className="absolute inset-0" pointerEvents="none">
+      <GradientView from="#8FD0EE" to="#2F6F9A" radius={0} className="flex-1 items-center justify-center gap-5">
+        <View className="h-24 w-24 items-center justify-center rounded-[28px] bg-white/20">
+          <House size={52} color="#fff" strokeWidth={1.6} />
+        </View>
+        <View className="items-center gap-1.5">
+          <Text className="font-sans-bold text-[24px] text-white">Opening our house</Text>
+          <Text className="text-small text-white/85">{partnerIn ? `${partner} is already inside` : 'Lighting the rooms, setting the table'}</Text>
+        </View>
+        <View className="h-2 w-56 overflow-hidden rounded-full bg-white/25">
+          <View className="h-full rounded-full bg-white" style={{ width: `${Math.max(6, Math.round(progress * 100))}%` }} />
+        </View>
+      </GradientView>
+    </Animated.View>
   );
 }
 

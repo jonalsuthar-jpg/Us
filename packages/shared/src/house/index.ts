@@ -7,6 +7,7 @@ export * from './layout';
 export * from './presence';
 export * from './use-house';
 export * from './use-game';
+export * from './use-loading';
 export * from './items';
 export * from './store';
 export { houseApi, housePackBase, housePhotos } from '../api/house';

@@ -1,7 +1,7 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
-import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SHOES, SKINS, tapAt, useHouseGame, zoomBy, type HouseGame, type Quality } from '@us/shared/house';
+import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SHOES, SKINS, tapAt, useHouseGame, useHouseLoading, zoomBy, type HouseGame, type Quality } from '@us/shared/house';
 import { Check, Eye, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Plus, RotateCcw, RotateCw, Shirt, Sun, Trash2, X } from 'lucide-react';
 import { housePackBase } from '@us/shared/house/light';
 import { useCouple } from '@us/shared/react';
@@ -40,6 +40,14 @@ export function HouseView() {
   const [visible, setVisible] = useState(true);
   const [panel, setPanel] = useState<'look' | 'add' | null>(null);
   const [touch, setTouch] = useState(false);
+  // The loading screen stays until the house is in and drawing (or 25 s, whatever happens).
+  const [ready, setReady] = useState(false);
+  const onReady = useCallback(() => setReady(true), []);
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 25_000);
+    return () => clearTimeout(t);
+  }, []);
+  const loading = useHouseLoading();
   // The first time in, make yourself first.
   const asked = useRef(false);
   useEffect(() => {
@@ -185,7 +193,7 @@ export function HouseView() {
           // Clicks reach the scene through the handlers above, not R3F's raycasting on every move.
           style={{ pointerEvents: 'none' }}
         >
-          <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} />
+          <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onReady={onReady} />
         </Canvas>
       </div>
 
@@ -256,6 +264,22 @@ export function HouseView() {
             ) : null}
           </>
         )}
+      </div>
+
+      <div
+        aria-hidden={ready}
+        className={cn('pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-5 bg-gradient-to-b from-[#8FD0EE] to-[#2F6F9A] text-white transition-opacity duration-500', ready ? 'opacity-0' : 'opacity-100')}
+      >
+        <span className="flex h-24 w-24 items-center justify-center rounded-[28px] bg-white/20">
+          <House size={52} strokeWidth={1.6} />
+        </span>
+        <span className="flex flex-col items-center gap-1.5">
+          <span className="text-[24px] font-bold">Opening our house</span>
+          <span className="text-small text-white/85">{game.partnerPlace ? `${game.partnerName} is already inside` : 'Lighting the rooms, setting the table'}</span>
+        </span>
+        <span className="h-2 w-56 overflow-hidden rounded-full bg-white/25">
+          <span className="block h-full rounded-full bg-white transition-[width]" style={{ width: `${Math.max(6, Math.round(loading * 100))}%` }} />
+        </span>
       </div>
 
       {panel === 'look' ? <LookPanel game={game} onClose={() => setPanel(null)} /> : null}

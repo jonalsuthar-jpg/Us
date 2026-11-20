@@ -14,6 +14,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 export const HOUSE_LAYERS = ['ground', 'upper', 'roof'] as const;
 export type HouseLayer = (typeof HOUSE_LAYERS)[number];
 
+/** What lies flat: it catches shadows but casts none worth drawing. */
+const FLOORS = new Set(['floor', 'tile', 'grass', 'paving', 'deck', 'pool']);
+
 /** The light maps are stored at half strength so bright spots aren't clipped. */
 const STORED_AT = 0.5;
 
@@ -59,7 +62,7 @@ export function RealHouse({ base, light, into, onReady }: RealHouseProps) {
             mat.lightMapIntensity = light / STORED_AT;
           }
           if (mat.transparent) mat.depthWrite = false;
-          mesh.castShadow = !mat.transparent;
+          mesh.castShadow = !mat.transparent && !FLOORS.has(mat.name.split('.')[0]!);
           mesh.receiveShadow = true;
         });
         mergeStatic(scene);

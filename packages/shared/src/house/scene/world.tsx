@@ -132,9 +132,18 @@ export interface WorldProps {
   onFps?: (fps: number, calls: number) => void;
   /** Something went wrong drawing the house; it stops, and this says what. */
   onError?: (error: Error) => void;
+  /** The house is in and drawing: time to take the loading screen away. */
+  onReady?: () => void;
   /** Where the realistic house is (ground.glb, …). Without it, or until it loads, the box house stands in. */
   houseUrl?: string;
 }
+
+/**
+ * Drawing through expo-gl (React Native), not a browser. Its float render
+ * targets don't work (reflection maps and the HDR sky drew garbage), and
+ * every draw call costs more, so phones get a lighter version.
+ */
+const ON_PHONE = typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
 
 const SKY_DAY = new THREE.Color('#BFDDF2');
 const SKY_NIGHT = new THREE.Color('#0D1630');
@@ -173,7 +182,7 @@ interface Me {
 
 /** The house, the two of us, the things in it and the camera. Goes inside a Canvas. */
 export function HouseWorld(props: WorldProps) {
-  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, houseUrl } = props;
+  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl } = props;
   const { gl, scene, camera, invalidate } = useThree();
   const mats = useMemo(() => makeMaterials(quality), [quality]);
   useEffect(() => () => mats.dispose(), [mats]);
@@ -187,6 +196,7 @@ export function HouseWorld(props: WorldProps) {
   // The realistic house, once it has loaded into the groups.
   const [real, setReal] = useState(false);
   const onRealReady = useCallback(() => setReal(true), []);
+  const opened = useRef({ frames: 0, told: false });
   const objects = useRef(new Map<string, THREE.Object3D>()).current;
   const placed = useMemo(() => placeItems(items), [items]);
   const placedRef = useRef(placed);
@@ -201,7 +211,7 @@ export function HouseWorld(props: WorldProps) {
   // Until then, reflections from a soft studio light, above low quality.
   useEffect(() => {
     gl.toneMappingExposure = 1.05;
-    if (quality === 'low' || sky) return;
+    if (quality === 'low' || sky || ON_PHONE) return;
     let env: THREE.WebGLRenderTarget | null = null;
     try {
       const pmrem = new THREE.PMREMGenerator(gl);
@@ -235,6 +245,9 @@ export function HouseWorld(props: WorldProps) {
   useLayoutEffect(() => {
     const shadows = quality !== 'low';
     gl.shadowMap.enabled = shadows;
+    // On phones the shadows are redrawn every other frame (see the frame); the house itself never moves.
+    gl.shadowMap.autoUpdate = !ON_PHONE;
+    gl.shadowMap.needsUpdate = true;
     gl.shadowMap.type = quality === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     walls.current = [];
     for (const g of [groups.ground, groups.upper, groups.roof]) {
@@ -762,6 +775,12 @@ export function HouseWorld(props: WorldProps) {
       onHud?.(state);
     }
 
+    if (ON_PHONE && gl.shadowMap.enabled && pace.current.frames % 2 === 0) gl.shadowMap.needsUpdate = true;
+    const sh = opened.current;
+    if (!sh.told && (real || !houseUrl) && ++sh.frames > 8) {
+      sh.told = true;
+      onReady?.();
+    }
     const pc = pace.current;
     pc.frames++;
     pc.time += rawDt;
@@ -945,7 +964,7 @@ export function HouseWorld(props: WorldProps) {
         </Optional>
       ) : null}
       {real ? <Water quality={quality} /> : null}
-      {houseUrl ? (
+      {houseUrl && !ON_PHONE ? (
         <Optional>
           <Suspense fallback={null}>
             <Sky base={houseUrl} night={night} onReady={onSkyReady} />
