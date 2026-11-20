@@ -13,6 +13,8 @@ import { FeatureOff } from '@/components/feature-off';
 export default function HouseScreen() {
   const on = useFeature('house');
   const [View3D, setView3D] = useState<ComponentType | null>(null);
+  const [loadError, setLoadError] = useState<Error | null>(null);
+  if (loadError) throw loadError;
 
   useEffect(() => {
     if (!on) return;
@@ -21,8 +23,13 @@ export default function HouseScreen() {
     if (Platform.OS === 'android') void NavigationBar.setVisibilityAsync('hidden').catch(() => {});
     // Let the rotation start before the heavy require blocks the JS thread.
     const t = setTimeout(() => {
-      const { HouseView } = require('@/components/house/house-view') as typeof import('@/components/house/house-view');
-      setView3D(() => HouseView);
+      try {
+        const { HouseView } = require('@/components/house/house-view') as typeof import('@/components/house/house-view');
+        setView3D(() => HouseView);
+      } catch (e) {
+        // Shown by this screen's error boundary, instead of closing the app from a timer.
+        setLoadError(e instanceof Error ? e : new Error(String(e)));
+      }
     }, 50);
     return () => {
       clearTimeout(t);

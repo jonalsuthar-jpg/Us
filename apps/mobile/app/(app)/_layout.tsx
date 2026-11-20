@@ -47,6 +47,10 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     <View className="flex-1 items-center justify-center gap-4 bg-paper px-8">
       <Display className="text-center text-heading">Something went wrong here</Display>
       <Text className="text-center text-small text-ink-soft">The rest of Us is fine. Try again, or go back home.</Text>
+      {/* Small print, so a screenshot says what broke. */}
+      <Text className="text-center font-mono text-[10px] text-ink-muted" selectable numberOfLines={4}>
+        {`${error.message}\n${(error.stack ?? '').split('\n').slice(1, 3).join('\n')}`}
+      </Text>
       <Button onPress={() => void retry()}>Try again</Button>
       <Button variant="quiet" onPress={() => router.replace('/home')}>
         Go home

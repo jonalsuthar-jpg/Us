@@ -4,7 +4,7 @@ import { ADDABLE, HAIRS, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, 
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { Check, Eye, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Plus, RotateCcw, RotateCw, Shirt, Sun, Trash2, X } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, PixelRatio, Pressable, ScrollView, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -40,6 +40,7 @@ export function HouseView() {
   const [active, setActive] = useState(AppState.currentState === 'active');
   const [fps, setFps] = useState(0);
   const [panel, setPanel] = useState<'look' | 'add' | null>(null);
+  const [problem, setProblem] = useState<Error | null>(null);
   const stepped = useRef(false);
 
   useEffect(() => {
@@ -111,6 +112,7 @@ export function HouseView() {
               pointerEvents="none"
               style={{ position: 'absolute', width: size.w * scale, height: size.h * scale, left: (size.w * (1 - scale)) / 2, top: (size.h * (1 - scale)) / 2, transform: [{ scale: 1 / scale }] }}
             >
+              <Catch onError={setProblem}>
               <Canvas
                 key={quality}
                 shadows={quality !== 'low'}
@@ -118,8 +120,9 @@ export function HouseView() {
                 camera={{ fov: 55, near: 0.1, far: 200 }}
                 events={noEvents}
               >
-                <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} />
+                <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} onError={setProblem} />
               </Canvas>
+              </Catch>
             </View>
           </View>
         </GestureDetector>
@@ -206,6 +209,8 @@ export function HouseView() {
         )}
       </View>
 
+      {problem ? <Problem error={problem} /> : null}
+
       {panel === 'look' ? <LookPanel game={game} onClose={() => setPanel(null)} /> : null}
       {panel === 'add' && game.decorate ? (
         <AddPanel
@@ -222,6 +227,37 @@ export function HouseView() {
           <Text className="text-[11px] text-white">{`${fps} fps`}</Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** Keeps a failure in the 3D view inside the house screen, so the rest of Us carries on. */
+class Catch extends Component<{ onError: (e: Error) => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: Error) {
+    this.props.onError(error);
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+/** What went wrong, with enough detail that a screenshot pins it down. */
+function Problem({ error }: { error: Error }) {
+  const where = (error.stack ?? '').split('\n').slice(0, 4).join('\n');
+  return (
+    <View className="absolute inset-0 items-center justify-center bg-black/70 px-10">
+      <View className="max-w-[560px] gap-3 rounded-3xl bg-paper p-5">
+        <Text className="font-sans-bold text-lead">The house hit a problem</Text>
+        <Text className="text-small text-ink-soft">The rest of Us is fine. Please send a screenshot of this so it can be fixed.</Text>
+        <Text className="font-mono text-[11px] text-ink-soft" selectable>{`${error.message}\n${where}`}</Text>
+        <Pressable accessibilityRole="button" onPress={() => router.back()} className="self-start rounded-full bg-rose-600 px-4 py-2.5">
+          <Text className="font-sans-bold text-small text-white">Leave the house</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

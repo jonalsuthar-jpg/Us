@@ -126,6 +126,8 @@ export interface WorldProps {
   onMoment?: (text: string) => void;
   /** Frames per second, every few seconds. */
   onFps?: (fps: number) => void;
+  /** Something went wrong drawing the house; it stops, and this says what. */
+  onError?: (error: Error) => void;
   /** Where the realistic house is (ground.glb, …). Without it, or until it loads, the box house stands in. */
   houseUrl?: string;
 }
@@ -165,7 +167,7 @@ interface Me {
 
 /** The house, the two of us, the things in it and the camera. Goes inside a Canvas. */
 export function HouseWorld(props: WorldProps) {
-  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, houseUrl } = props;
+  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, houseUrl } = props;
   const { gl, scene, camera, invalidate } = useThree();
   const mats = useMemo(() => makeMaterials(quality), [quality]);
   useEffect(() => () => mats.dispose(), [mats]);
@@ -467,7 +469,8 @@ export function HouseWorld(props: WorldProps) {
     return null;
   };
 
-  useFrame((_, rawDt) => {
+  // One frame. An error in it stops the house (and says so) instead of taking the app down.
+  const frame = (rawDt: number) => {
     const dt = Math.min(rawDt, 0.1);
     const now = clock.elapsedTime;
     const all = placedRef.current;
@@ -752,6 +755,16 @@ export function HouseWorld(props: WorldProps) {
       onFps?.(f.frames / f.time);
       f.frames = 0;
       f.time = 0;
+    }
+  };
+  const failed = useRef(false);
+  useFrame((_, rawDt) => {
+    if (failed.current) return;
+    try {
+      frame(rawDt);
+    } catch (e) {
+      failed.current = true;
+      onError?.(e instanceof Error ? e : new Error(String(e)));
     }
   });
 

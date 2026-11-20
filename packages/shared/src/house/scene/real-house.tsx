@@ -44,7 +44,9 @@ export function RealHouse({ base, light, into, onReady }: RealHouseProps) {
         // Its own copy: the loader caches one scene per file, and an object can only be in one place.
         const scene = gltfs[i]!.scene.clone(true);
         const map = maps[i]!;
+        // The phone's texture loader turns images upside down after loading, so this is set here, after.
         map.flipY = false;
+        map.needsUpdate = true;
         map.channel = 1;
         map.colorSpace = THREE.SRGBColorSpace;
         scene.traverse((o) => {
