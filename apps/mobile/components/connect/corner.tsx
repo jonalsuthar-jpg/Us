@@ -2,9 +2,13 @@ import { dailyState, QUIZ_INFO, quizState, quizVerdict, rateGap, roundScore, typ
 import { useCouple, useCoupleLive, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, usePartnerInHouse, useQuizzes } from '@us/shared/react';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { Check, House, Lock, Play, Plus } from 'lucide-react-native';
-import { useState, type ReactNode } from 'react';
-import { Pressable, View, type ViewStyle } from 'react-native';
+import { packSize } from '@us/shared/house/light';
+import * as Network from 'expo-network';
+import { Check, Download, House, Lock, Pause, Play, Plus } from 'lucide-react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Alert, Pressable, View, type ViewStyle } from 'react-native';
+import { packSizeToFetch, pausePackDownload, startPackDownload } from '@/lib/house-pack';
+import { useHousePack } from '@/lib/use-house-pack';
 import { Photo } from '../ui/photo';
 import { GradientView } from '../plan/art';
 import { Initial } from '../plan/bits';
@@ -158,6 +162,61 @@ function HouseCard() {
           <Pill label={inside ? 'Join' : 'Go in'} className="bg-white" textClass="text-[#2F7FA8]" />
         </View>
       </GradientView>
+      <HousePackRow />
+    </Pressable>
+  );
+}
+
+/**
+ * Under the house card: the realistic house is an optional download. Until
+ * it's here the house opens as it is; on mobile data it asks first.
+ */
+function HousePackRow() {
+  const { sb } = useCouple();
+  const pack = useHousePack();
+  const [size, setSize] = useState<number | null>(null);
+  useEffect(() => {
+    if (pack.kind !== 'none' || size !== null) return;
+    void packSizeToFetch(sb)
+      .then(setSize)
+      .catch(() => {});
+  }, [pack.kind, size, sb]);
+
+  const start = async () => {
+    const net = await Network.getNetworkStateAsync().catch(() => null);
+    if (net?.type === Network.NetworkStateType.CELLULAR) {
+      Alert.alert('Download on mobile data?', `The real house is ${size ? packSize(size) : 'a large download'}. You can wait for Wi-Fi instead.`, [
+        { text: 'Wait for Wi-Fi', style: 'cancel' },
+        { text: 'Download', onPress: () => startPackDownload(sb) },
+      ]);
+      return;
+    }
+    startPackDownload(sb);
+  };
+
+  if (pack.kind === 'ready') return null;
+  const label =
+    pack.kind === 'downloading'
+      ? `Getting the real house · ${Math.round((pack.done / Math.max(pack.total, 1)) * 100)}% · tap to pause`
+      : pack.kind === 'error'
+        ? `${pack.message} · tap to try again`
+        : `Get the real house${size ? ` · ${packSize(size)}` : ''}`;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={tap(() => (pack.kind === 'downloading' ? pausePackDownload() : void start()))}
+      className="mx-4 -mt-1 mb-3 flex-row items-center gap-2 rounded-full bg-white/90 px-3.5 py-2"
+    >
+      {pack.kind === 'downloading' ? <Pause size={14} color="#2F7FA8" /> : <Download size={14} color="#2F7FA8" />}
+      <Text className="flex-1 font-sans-medium text-[12.5px] text-[#2F7FA8]" numberOfLines={1}>
+        {label}
+      </Text>
+      {pack.kind === 'downloading' ? (
+        <View className="h-1.5 w-16 overflow-hidden rounded-full bg-[#2F7FA8]/20">
+          <View className="h-full bg-[#2F7FA8]" style={{ width: `${Math.round((pack.done / Math.max(pack.total, 1)) * 100)}%` }} />
+        </View>
+      ) : null}
     </Pressable>
   );
 }

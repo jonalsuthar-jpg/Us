@@ -62,7 +62,7 @@ function memoryDb(): HouseApi {
   };
 }
 
-function Pane({ who, presence, store, controls, quality, focused, onFocus }: { who: 'a' | 'b'; presence: HousePresence; store: HouseStore; controls: HouseControls; quality: Quality; focused: boolean; onFocus: () => void }) {
+function Pane({ who, presence, store, controls, quality, focused, onFocus, houseUrl }: { who: 'a' | 'b'; presence: HousePresence; store: HouseStore; controls: HouseControls; quality: Quality; focused: boolean; onFocus: () => void; houseUrl?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const down = useRef<{ x: number; y: number; sx: number; sy: number } | null>(null);
   const items = useSyncExternalStore((fn) => store.subscribe(fn), () => store.items(), () => store.items());
@@ -117,6 +117,7 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus }: { w
             setTimeout(() => setMoment(''), 3000);
           }}
           onFps={(f) => setFps(Math.round(f))}
+          houseUrl={houseUrl}
         />
       </Canvas>
       <div data-hud={who} className="pointer-events-none absolute left-3 top-3 rounded bg-black/50 px-2 py-1 font-mono text-[12px] text-white">
@@ -137,6 +138,11 @@ export default function HouseLab() {
     if (q && QUALITIES.includes(q)) setQuality(q);
   }, []);
   const [focus, setFocus] = useState<'a' | 'b'>('a');
+  // ?real=1: the realistic house from public/house (copy assets-build/house there).
+  const [houseUrl, setHouseUrl] = useState<string | undefined>();
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('real')) setHouseUrl('/house');
+  }, []);
   const lab = useMemo(() => {
     const wire = bus();
     const db = memoryDb();
@@ -257,8 +263,8 @@ export default function HouseLab() {
         ))}
       </div>
       <div className="flex flex-1 gap-1">
-        <Pane who="a" presence={lab.a} store={lab.sa} controls={lab.ca} quality={quality} focused={focus === 'a'} onFocus={() => setFocus('a')} />
-        <Pane who="b" presence={lab.b} store={lab.sb} controls={lab.cb} quality={quality} focused={focus === 'b'} onFocus={() => setFocus('b')} />
+        <Pane who="a" presence={lab.a} store={lab.sa} controls={lab.ca} quality={quality} focused={focus === 'a'} onFocus={() => setFocus('a')} houseUrl={houseUrl} />
+        <Pane who="b" presence={lab.b} store={lab.sb} controls={lab.cb} quality={quality} focused={focus === 'b'} onFocus={() => setFocus('b')} houseUrl={houseUrl} />
       </div>
     </div>
   );

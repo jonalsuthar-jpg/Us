@@ -1,5 +1,5 @@
 import { clearMyPhoto, deleteAccount, friendlyError, setMyPhoto, unpair, updateMyProfile } from '@us/shared';
-import { COUPLE_ENDED_TOPIC, useCouple } from '@us/shared/react';
+import { COUPLE_ENDED_TOPIC, useCouple, useFeature } from '@us/shared/react';
 import * as ImagePicker from '@/lib/image-picker';
 import { AVATAR_EDGE, readyPicked } from '@/lib/photo';
 import { router } from 'expo-router';
@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppLockSettings } from '@/components/app-lock-settings';
+import { HouseStorage } from '@/components/settings/house-storage';
 import { NotificationPrefsForm } from '@/components/settings/notification-prefs';
 import { ChatSecurity } from '@/components/chat/chat-key';
 import { Avatar } from '@/components/ui/avatar';
@@ -28,6 +29,7 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
   const c = usePalette();
   const theme = useThemePref();
+  const house = useFeature('house');
   const { sb, me, partner, mySlot, partnerSlot, couple, channel, myPhotoPath, photosChanged } = useCouple();
   const [name, setName] = useState(me.display_name);
   const [error, setError] = useState<string | null>(null);
@@ -198,6 +200,13 @@ export default function Settings() {
         />
         <Text className="text-small text-ink-muted">Saved on this device. Calls always use the night palette.</Text>
       </View>
+
+      {house ? (
+        <View className="gap-3">
+          <Display className="text-heading">Storage</Display>
+          <HouseStorage />
+        </View>
+      ) : null}
 
       <View className="gap-3">
         <Display className="text-heading">Notifications</Display>

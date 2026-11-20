@@ -9,6 +9,7 @@ import { AppState, PixelRatio, Pressable, ScrollView, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHousePack } from '@/lib/use-house-pack';
 import { Text } from '../ui/text';
 
 const QUALITY_KEY = 'us.house.quality';
@@ -30,6 +31,9 @@ const tick = () => void Haptics.selectionAsync().catch(() => {});
 export function HouseView() {
   const insets = useSafeAreaInsets();
   const game = useHouseGame();
+  // The realistic house, when its pack is on the phone; the box house until then.
+  const pack = useHousePack();
+  const houseUrl = pack.kind === 'ready' ? pack.dir : undefined;
   const { controls, hud } = game;
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [quality, setQuality] = useState<Quality | null>(null);
@@ -114,7 +118,7 @@ export function HouseView() {
                 camera={{ fov: 55, near: 0.1, far: 200 }}
                 events={noEvents}
               >
-                <HouseWorld {...game.world} quality={quality} onFps={onFps} />
+                <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} />
               </Canvas>
             </View>
           </View>

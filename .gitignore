@@ -40,3 +40,8 @@ Thumbs.db
 !.env.example
 backups/
 .wrangler/
+
+# Our House source art (scripts/fetch-house-assets.mjs fetches it)
+assets-src/
+apps/web/public/house/
+assets-build/

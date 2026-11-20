@@ -3,6 +3,8 @@
 import { Canvas } from '@react-three/fiber';
 import { ADDABLE, HAIRS, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SKINS, tapAt, useHouseGame, zoomBy, type HouseGame, type LookState, type Quality } from '@us/shared/house';
 import { Check, Eye, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Plus, RotateCcw, RotateCw, Shirt, Sun, Trash2, X } from 'lucide-react';
+import { housePackBase } from '@us/shared/house/light';
+import { useCouple } from '@us/shared/react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
@@ -31,6 +33,7 @@ function savedQuality(): Quality {
 export function HouseView() {
   const router = useRouter();
   const game = useHouseGame();
+  const houseUrl = useHousePackUrl();
   const { controls, hud } = game;
   const box = useRef<HTMLDivElement>(null);
   const [quality, setQuality] = useState<Quality>(savedQuality);
@@ -171,7 +174,7 @@ export function HouseView() {
           // Clicks reach the scene through the handlers above, not R3F's raycasting on every move.
           style={{ pointerEvents: 'none' }}
         >
-          <HouseWorld {...game.world} quality={quality} onFps={onFps} />
+          <HouseWorld {...game.world} quality={quality} onFps={onFps} houseUrl={houseUrl} />
         </Canvas>
       </div>
 
@@ -382,6 +385,23 @@ function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) 
       </div>
     </div>
   );
+}
+
+/** The realistic house's address, once its pack is there; the browser caches the files. */
+function useHousePackUrl(): string | undefined {
+  const { sb } = useCouple();
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    let live = true;
+    void housePackBase(sb)
+      .then(async (base) => ((await fetch(`${base}/manifest.json`)).ok ? base : undefined))
+      .then((b) => live && setUrl(b))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [sb]);
+  return url;
 }
 
 function spread(m: Map<number, { x: number; y: number }>) {

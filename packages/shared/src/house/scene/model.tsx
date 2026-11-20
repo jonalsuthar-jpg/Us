@@ -238,31 +238,37 @@ export interface HouseGroups {
  * The whole place. The rig gets the three groups through refs; the things in
  * the house (items.tsx) go in with their floor, so they hide with it.
  */
-export function HouseModel({ mats, groups, ground, upper }: { mats: Materials; groups: HouseGroups; ground?: ReactNode; upper?: ReactNode }) {
+export function HouseModel({ mats, groups, ground, upper, boxes = true }: { mats: Materials; groups: HouseGroups; ground?: ReactNode; upper?: ReactNode; boxes?: boolean }) {
   const box = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const kit = useMemo(() => ({ mats, box }), [mats, box]);
   return (
     <KitContext.Provider value={kit}>
       <group ref={(g) => void (groups.ground = g)}>
-        <B a={[HOUSE.x0, -0.15, HOUSE.z0]} b={[HOUSE.x1, 0, HOUSE.z1]} m="wood" />
-        <Floor y={0} upper={false} />
-        <Stairs />
-        <Kitchen />
-        <Garden />
+        {boxes ? (
+          <>
+            <B a={[HOUSE.x0, -0.15, HOUSE.z0]} b={[HOUSE.x1, 0, HOUSE.z1]} m="wood" />
+            <Floor y={0} upper={false} />
+            <Stairs />
+            <Kitchen />
+            <Garden />
+          </>
+        ) : null}
         {ground}
       </group>
       <group ref={(g) => void (groups.upper = g)}>
-        <B a={[HOUSE.x0, FLOOR_H - 0.15, -2.7]} b={[HOUSE.x1, FLOOR_H, HOUSE.z1]} m="wood" />
-        <B a={[HOUSE.x0, FLOOR_H - 0.15, HOUSE.z0]} b={[STAIRS.x0, FLOOR_H, -2.7]} m="wood" />
-        <B a={[STAIRS.x1, FLOOR_H - 0.15, HOUSE.z0]} b={[HOUSE.x1, FLOOR_H, -2.7]} m="wood" />
-        <Floor y={FLOOR_H} upper />
-        <Stairwell y={FLOOR_H} />
-        <Balcony y={FLOOR_H} />
+        {boxes ? (
+          <>
+            <B a={[HOUSE.x0, FLOOR_H - 0.15, -2.7]} b={[HOUSE.x1, FLOOR_H, HOUSE.z1]} m="wood" />
+            <B a={[HOUSE.x0, FLOOR_H - 0.15, HOUSE.z0]} b={[STAIRS.x0, FLOOR_H, -2.7]} m="wood" />
+            <B a={[STAIRS.x1, FLOOR_H - 0.15, HOUSE.z0]} b={[HOUSE.x1, FLOOR_H, -2.7]} m="wood" />
+            <Floor y={FLOOR_H} upper />
+            <Stairwell y={FLOOR_H} />
+            <Balcony y={FLOOR_H} />
+          </>
+        ) : null}
         {upper}
       </group>
-      <group ref={(g) => void (groups.roof = g)}>
-        <Roof />
-      </group>
+      <group ref={(g) => void (groups.roof = g)}>{boxes ? <Roof /> : null}</group>
     </KitContext.Provider>
   );
 }

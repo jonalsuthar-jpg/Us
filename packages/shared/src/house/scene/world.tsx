@@ -1,5 +1,5 @@
 import { useFrame, useThree } from '@react-three/fiber';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
@@ -28,6 +28,7 @@ import { animateAvatar, Avatar, bodyAct, DANCE_S, HAND, HEART_S, newMotion, WAVE
 import { Items, type HousePhoto } from './items';
 import { makeMaterials, type Quality } from './materials';
 import { HouseModel, type HouseGroups } from './model';
+import { PoolWater, RealHouse } from './real-house';
 
 /** What a button press asks the house to do. */
 export type HouseCmd =
@@ -125,6 +126,8 @@ export interface WorldProps {
   onMoment?: (text: string) => void;
   /** Frames per second, every few seconds. */
   onFps?: (fps: number) => void;
+  /** Where the realistic house is (ground.glb, …). Without it, or until it loads, the box house stands in. */
+  houseUrl?: string;
 }
 
 const SKY_DAY = new THREE.Color('#BFDDF2');
@@ -162,11 +165,14 @@ interface Me {
 
 /** The house, the two of us, the things in it and the camera. Goes inside a Canvas. */
 export function HouseWorld(props: WorldProps) {
-  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps } = props;
+  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, houseUrl } = props;
   const { gl, scene, camera, invalidate } = useThree();
   const mats = useMemo(() => makeMaterials(quality), [quality]);
   useEffect(() => () => mats.dispose(), [mats]);
   const groups = useRef<HouseGroups>({ ground: null, upper: null, roof: null }).current;
+  // The realistic house, once it has loaded into the groups.
+  const [real, setReal] = useState(false);
+  const onRealReady = useCallback(() => setReal(true), []);
   const objects = useRef(new Map<string, THREE.Object3D>()).current;
   const placed = useMemo(() => placeItems(items), [items]);
   const placedRef = useRef(placed);
@@ -223,7 +229,7 @@ export function HouseWorld(props: WorldProps) {
         if (cut) walls.current.push({ obj: o, nx: cut[0], nz: cut[1], upper: g === groups.upper });
       });
     }
-  }, [gl, groups, quality, mats, placed]);
+  }, [gl, groups, quality, mats, placed, real]);
 
   // Low quality draws at most 30 frames a second, on demand.
   useEffect(() => {
@@ -875,11 +881,19 @@ export function HouseWorld(props: WorldProps) {
       <points ref={stars} geometry={starGeo} visible={night}>
         <pointsMaterial color="#FFFFFF" size={0.35} sizeAttenuation fog={false} />
       </points>
+      {houseUrl ? (
+        <Suspense fallback={null}>
+          {/* At night the lamps take over; Low quality has none that light, so it keeps more of the baked glow. */}
+          <RealHouse base={houseUrl} light={night ? (quality === 'low' ? 0.45 : 0.25) : 1} into={groups} onReady={onRealReady} />
+        </Suspense>
+      ) : null}
+      {real ? <PoolWater mat={mats.water} /> : null}
       <HouseModel
         mats={mats}
         groups={groups}
-        ground={<Items items={shownItems} mats={mats} quality={quality} night={night} photos={photos} objects={objects} selected={decor.key} floor={0} carried={carried} />}
-        upper={<Items items={shownItems} mats={mats} quality={quality} night={night} photos={photos} objects={objects} selected={decor.key} floor={1} carried={carried} />}
+        boxes={!real}
+        ground={<Items items={shownItems} mats={mats} quality={quality} night={night} photos={photos} objects={objects} selected={decor.key} floor={0} carried={carried} assets={houseUrl} />}
+        upper={<Items items={shownItems} mats={mats} quality={quality} night={night} photos={photos} objects={objects} selected={decor.key} floor={1} carried={carried} assets={houseUrl} />}
       />
       <Avatar look={mine} quality={quality} partsRef={setMine} ringColor="#FFFFFF" />
       <Avatar look={theirs} quality={quality} partsRef={setTheirs} ringColor="#FF8FB0" />

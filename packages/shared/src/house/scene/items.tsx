@@ -1,8 +1,10 @@
-import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useFrame, useLoader } from '@react-three/fiber';
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { isOn, isOpen, type ItemModel, type PlacedItem } from '../items';
 import type { Materials, Quality } from './materials';
+import { REAL_MODELS, type RealModel } from './furniture';
 import { B, KitContext, useKit, type MatKey } from './model';
 
 /**
@@ -134,9 +136,7 @@ function Model({ look }: { look: Look }): ReactNode {
       return (
         <>
           <B a={[-1.1, 0, -0.25]} b={[1.1, 0.5, 0.2]} m="woodDark" />
-          <B a={[-0.95, 0.8, -0.2]} b={[0.95, 1.75, -0.11]} m="black" />
-          <B a={[-0.06, 0.5, -0.18]} b={[0.06, 0.8, -0.13]} m="black" />
-          {on ? <Slideshow photos={photos} w={1.8} h={0.85} z={-0.105} y={1.275} /> : <B a={[-0.9, 0.85, -0.11]} b={[0.9, 1.7, -0.105]} m="screen" />}
+          <TvPanel on={on} photos={photos} />
         </>
       );
     case 'bookshelf':
@@ -417,6 +417,55 @@ function Model({ look }: { look: Look }): ReactNode {
   return null;
 }
 
+/** The TV itself, on its stand or on the real cabinet: our photos when it's on. */
+function TvPanel({ on, photos }: { on: boolean; photos: HousePhoto[] }) {
+  return (
+    <>
+      <B a={[-0.95, 0.8, -0.2]} b={[0.95, 1.75, -0.11]} m="black" />
+      <B a={[-0.06, 0.5, -0.18]} b={[0.06, 0.8, -0.13]} m="black" />
+      {on ? <Slideshow photos={photos} w={1.8} h={0.85} z={-0.105} y={1.275} /> : <B a={[-0.9, 0.85, -0.11]} b={[0.9, 1.7, -0.105]} m="screen" />}
+    </>
+  );
+}
+
+/**
+ * A real model (scene/furniture.ts) fitted to the item: stood on the floor
+ * and centred, scaled, turned, lifted. A paint colour tints its texture.
+ */
+function Real({ base, real, color }: { base: string; real: RealModel; color?: string }) {
+  const gltf = useLoader(GLTFLoader, `${base}/models/${real.asset}.glb`);
+  const obj = useMemo(() => {
+    const o = gltf.scene.clone(true);
+    o.traverse((m) => {
+      const mesh = m as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      if (color) {
+        const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
+        mat.color.set(color);
+        mesh.material = mat;
+      }
+    });
+    return o;
+  }, [gltf, color]);
+  // Paint makes its own materials: free them when it changes.
+  useEffect(
+    () => () => {
+      if (!color) return;
+      obj.traverse((m) => ((m as THREE.Mesh).isMesh ? ((m as THREE.Mesh).material as THREE.Material).dispose() : undefined));
+    },
+    [obj, color],
+  );
+  return (
+    <group rotation={[0, real.yaw ?? 0, 0]} position={[0, real.lift ?? 0, 0]}>
+      <group scale={real.scale}>
+        <primitive object={obj} position={[-real.cx, -real.bottom, -real.cz]} />
+      </group>
+    </group>
+  );
+}
+
 function Blob({ paint }: { paint?: THREE.Material }) {
   const { mats } = useKit();
   const geo = useMemo(() => new THREE.SphereGeometry(1, 20, 14), []);
@@ -457,6 +506,8 @@ export interface ItemsProps {
   /** Only these floors: 0 ground (and the garden), 1 upstairs. Carried things count as ground. */
   floor: 0 | 1;
   carried: ReadonlySet<string>;
+  /** Where the real furniture is (models/<id>.glb). Without it, the box shapes. */
+  assets?: string;
 }
 
 /** The lamps that light the rooms (others just glow): a fixed set, so switching one never recompiles shaders. */
@@ -467,7 +518,7 @@ const ROOM_LIGHTS: Record<string, [number, number, number]> = {
   desk_lamp: [0, 0.35, 0.1],
 };
 
-export function Items({ items, mats, quality, night, photos, objects, selected, floor, carried }: ItemsProps) {
+export function Items({ items, mats, quality, night, photos, objects, selected, floor, carried, assets }: ItemsProps) {
   const box = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   useEffect(() => () => box.dispose(), [box]);
   const kit = useMemo(() => ({ mats, box }), [mats, box]);
@@ -504,7 +555,7 @@ export function Items({ items, mats, quality, night, photos, objects, selected, 
             else if (objects.get(it.key)?.userData.itemKey === it.key) objects.delete(it.key);
           }}
         >
-          <Model look={{ item: it, paint: paintFor(it.state.color), on: isOn(it), open: isOpen(it), night, photos }} />
+          <Drawn it={it} assets={assets} look={{ item: it, paint: paintFor(it.state.color), on: isOn(it), open: isOpen(it), night, photos }} />
           {quality !== 'low' && ROOM_LIGHTS[it.key] && !carried.has(it.key) ? (
             <pointLight position={ROOM_LIGHTS[it.key]} intensity={isOn(it) ? (night ? 3.2 : 1.1) : 0} distance={7} decay={2} color="#FFD9A0" />
           ) : null}
@@ -512,6 +563,18 @@ export function Items({ items, mats, quality, night, photos, objects, selected, 
         </group>
       ))}
     </KitContext.Provider>
+  );
+}
+
+/** An item as a real model when there is one (box shape while it loads), else its box shape. */
+function Drawn({ it, assets, look }: { it: PlacedItem; assets?: string; look: Look }) {
+  const real = assets ? REAL_MODELS[it.model] : undefined;
+  if (!real || !assets) return <Model look={look} />;
+  return (
+    <Suspense fallback={<Model look={look} />}>
+      <Real base={assets} real={real} color={it.state.color} />
+      {real.keepScreen ? <TvPanel on={look.on} photos={look.photos} /> : null}
+    </Suspense>
   );
 }
 

@@ -8,6 +8,7 @@
  *   { action: 'download', bucket, paths }   → { urls }         (GET, ≥ 6 hours, keyed by path)
  *   { action: 'remove', bucket, paths }     → { ok }
  *   { action: 'copy', from: {bucket, path}, to: {bucket, path} } → { ok }
+ *   { action: 'house' }                     → { base }         (where Our House's free art pack is)
  *   { action: 'clear' }                     → { ok }           (unpair: every file of ours)
  *
  * The rules are the old Storage policies: a path must be in our couple's
@@ -57,6 +58,11 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
 
   try {
+    // The same CC0 pack for everyone, read without links (the Worker serves house/v<n>/ openly).
+    if (body.action === 'house') {
+      return json({ base: `${(Deno.env.get('MEDIA_URL') ?? '').replace(/\/+$/, '')}/house` });
+    }
+
     if (body.action === 'clear') {
       for (const b of BUCKETS) await removeFolder(key(b, `${caller.coupleId}/`));
       return json({ ok: true });

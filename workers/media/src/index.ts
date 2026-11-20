@@ -32,6 +32,19 @@ export default {
     } catch {
       return text('bad path', 400, cors);
     }
+    // Our House's art (house/<version>/…) is the same free CC0 pack for everyone, so it's read without a link.
+    if (req.method === 'GET' && /^house\/v\d+\/[a-z0-9_./-]+$/.test(path) && !path.includes('..')) {
+      const obj = await env.BUCKET.get(path);
+      if (!obj) return text('not found', 404, cors);
+      const headers = new Headers(cors);
+      obj.writeHttpMetadata(headers);
+      headers.set('x-content-type-options', 'nosniff');
+      headers.set('etag', obj.httpEtag);
+      // A version's files never change.
+      headers.set('cache-control', 'public, max-age=31536000, immutable');
+      return new Response(obj.body, { headers });
+    }
+
     const exp = Number(url.searchParams.get('exp'));
     const sig = url.searchParams.get('sig') ?? '';
     if (!path || !Number.isFinite(exp) || exp * 1000 < Date.now()) return text('expired', 403, cors);
