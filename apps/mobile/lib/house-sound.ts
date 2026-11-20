@@ -12,6 +12,8 @@ export function phoneHouseSound(dir: string): HouseSound {
   const shots = new Map<OneShot, { players: AudioPlayer[]; next: number }>();
   const loops = new Map<Loop, { player: AudioPlayer; volume: number; playing: boolean }>();
   const all: AudioPlayer[] = [];
+  // Gone: the house closed. A late call must not make a player nobody will stop.
+  let gone = false;
 
   const shot = (name: OneShot) => {
     let s = shots.get(name);
@@ -26,7 +28,7 @@ export function phoneHouseSound(dir: string): HouseSound {
 
   return {
     play(name, volume) {
-      if (volume * master <= 0.01) return;
+      if (gone || volume * master <= 0.01) return;
       try {
         const s = shot(name);
         const p = s.players[s.next]!;
@@ -39,6 +41,7 @@ export function phoneHouseSound(dir: string): HouseSound {
       }
     },
     loop(name, volume, offset = 0) {
+      if (gone) return;
       try {
         let l = loops.get(name);
         if (volume <= 0.005) {
@@ -73,8 +76,10 @@ export function phoneHouseSound(dir: string): HouseSound {
       for (const l of loops.values()) l.player.volume = Math.min(1, l.volume * master);
     },
     dispose() {
+      gone = true;
       for (const p of all) {
         try {
+          p.pause();
           p.remove();
         } catch {
           // Already gone.

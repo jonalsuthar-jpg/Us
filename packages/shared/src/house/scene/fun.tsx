@@ -240,15 +240,19 @@ export function useFun(h: FunHost) {
   const boardGroup = useRef<THREE.Group>(null);
   const boardPlane = useRef<THREE.Mesh>(null);
 
-  const game = readGame(raw(GAME_KEY));
-  const seek = ((): Seek | null => {
+  // Read fresh wherever it's used every frame (focus, frame): what React last rendered can be a few frames behind
+  // the store, and acting on it again would save the same change over and over.
+  const readSeek = (): Seek | null => {
     const v = raw(SEEK_KEY);
     return v && isStr(v.hider) && isStr(v.seeker) && isStr(v.at) ? (v as unknown as Seek) : null;
-  })();
-  const treasure = ((): Treasure | null => {
+  };
+  const readTreasure = (): Treasure | null => {
     const v = raw(TREASURE_KEY);
     return v && isStr(v.by) && num(v.x) && num(v.y) && num(v.z) && isStr(v.at) ? ({ text: '', ...v } as unknown as Treasure) : null;
-  })();
+  };
+  const game = readGame(raw(GAME_KEY));
+  const seek = readSeek();
+  const treasure = readTreasure();
   const readDinner = (): (Dinner & { at: string; done?: boolean }) | null => {
     const v = raw(DINNER_KEY);
     return v && isStr(v.recipe) && v.recipe in RECIPES && num(v.step) && isStr(v.first) && isStr(v.second) && isStr(v.at) ? (v as unknown as Dinner & { at: string }) : null;
@@ -765,6 +769,9 @@ export function useFun(h: FunHost) {
   /** What the action button does here, if it's one of ours. */
   function focus(): { label: string; run: () => void } | null {
     if (ui.board || ui.scope) return null;
+    const game = readGame(raw(GAME_KEY));
+    const treasure = readTreasure();
+    const dinner = readDinner();
     const me = h.me;
     const now = Date.now();
     const p = h.them.pose;
@@ -961,6 +968,10 @@ export function useFun(h: FunHost) {
 
   function frame(dt: number) {
     const now = new Date();
+    const game = readGame(raw(GAME_KEY));
+    const seek = readSeek();
+    const treasure = readTreasure();
+    const dinner = readDinner();
     hud.banner = null;
     hud.cover = null;
     const p = h.them.pose;
@@ -979,7 +990,8 @@ export function useFun(h: FunHost) {
         else if (p) {
           const d = Math.hypot(p.x - h.me.pos.x, p.z - h.me.pos.z) + Math.abs(p.y - h.me.pos.y) * 2;
           hud.banner = `${warmth(d)} · ${left}s`;
-          if (d < 1.3) {
+          if (d < 1.3 && !ui.told.has(`found:${seek.at}`)) {
+            ui.told.add(`found:${seek.at}`);
             set(SEEK_KEY, { ...seek, found: true } as unknown as Record<string, unknown>);
             h.moment(`seek:${seek.at}`, 'Found you!');
             setTimeout(() => set(SEEK_KEY, null), 6000);

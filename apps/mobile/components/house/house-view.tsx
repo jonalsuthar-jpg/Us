@@ -212,7 +212,7 @@ export function HouseView() {
         <Round label="Things to do together" onPress={game.actions.fun} size={44} on={!!hud.fun.panel && !hud.fun.panel.side}>
           <Sparkles size={19} color="#fff" />
         </Round>
-        <Round label={game.inCall ? 'Stop talking' : `Talk to ${game.partnerName}`} onPress={game.toggleTalk} size={44} on={game.inCall}>
+        <Round label={game.inCall ? (game.bubbleHidden ? 'Show the call' : 'Stop talking') : `Talk to ${game.partnerName}`} onPress={game.toggleTalk} size={44} on={game.inCall}>
           {game.inCall ? <PhoneOff size={18} color="#fff" /> : <Phone size={18} color="#fff" />}
         </Round>
         {game.talking ? (

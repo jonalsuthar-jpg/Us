@@ -40,3 +40,43 @@ export function useCallVoiceVolume(): number {
     () => 1,
   );
 }
+
+/**
+ * The minimised call's bubble, put away (it stays away until the call ends
+ * or something brings it back, like Our House's Talk button).
+ */
+let bubbleHidden = false;
+const bubbleListeners = new Set<() => void>();
+
+export function setCallBubbleHidden(hidden: boolean) {
+  if (bubbleHidden === hidden) return;
+  bubbleHidden = hidden;
+  for (const fn of [...bubbleListeners]) fn();
+}
+
+export function useCallBubbleHidden(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      bubbleListeners.add(fn);
+      return () => void bubbleListeners.delete(fn);
+    },
+    () => bubbleHidden,
+    () => false,
+  );
+}
+
+/** Where the bubble was left: which side, and how far down (0 top … 1 bottom). */
+export interface BubbleSpot {
+  side: 'left' | 'right';
+  y: number;
+}
+export const BUBBLE_KEY = 'us.call.bubble';
+export function readBubbleSpot(raw: string | null): BubbleSpot {
+  try {
+    const v = raw ? (JSON.parse(raw) as Partial<BubbleSpot>) : null;
+    if (v && (v.side === 'left' || v.side === 'right') && typeof v.y === 'number' && v.y >= 0 && v.y <= 1) return { side: v.side, y: v.y };
+  } catch {
+    // A spot we can't read: the default.
+  }
+  return { side: 'right', y: 0.55 };
+}

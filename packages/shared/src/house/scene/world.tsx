@@ -27,7 +27,7 @@ import {
 import { findPath, FLOOR_H, floorY, region, regionAt, SPAWN, walkStep, type RegionId, type Waypoint } from '../layout';
 import { holdLoses, type Emote, type HousePresence, type Pose, type Together } from '../presence';
 import { hoursNow, isNight, skyAt, weatherFor, type Weather } from '../sky';
-import { MUSIC_S, nearness, stepSound, type HouseSound } from '../sound';
+import { LOOPS, MUSIC_S, nearness, stepSound, type HouseSound } from '../sound';
 import type { HouseStore } from '../store';
 import { Avatar, bodyAct, DANCE_S, HEART_S, newMotion, WAVE_S, type AvatarRig } from './avatar';
 import { useFun, useUnlocked, withMailbox, type FunCmd, type FunHud, type HouseLetters } from './fun';
@@ -1211,8 +1211,17 @@ export function HouseWorld(props: WorldProps) {
       gl.render = draw;
     };
   }, [gl, onError]);
+  // Closed: no more frames (a late one would play sounds and send where I am after the house has gone).
+  const closed = useRef(false);
+  useEffect(() => {
+    closed.current = false;
+    return () => {
+      closed.current = true;
+      if (sound) for (const l of LOOPS) sound.loop(l, 0);
+    };
+  }, [sound]);
   useFrame((_, rawDt) => {
-    if (failed.current) return;
+    if (failed.current || closed.current) return;
     try {
       frame(rawDt);
     } catch (e) {

@@ -102,7 +102,7 @@ export function Home() {
     setPhotoError(null);
     try {
       const { blob, type } = await shrinkPhoto(file);
-      await home.mutate(() => setCouplePhoto(sb, d.couple, blob, type));
+      await home.mutate(() => setCouplePhoto(sb, d.couple, blob, type), { timeoutMs: 120_000 });
     } catch (e) {
       setPhotoError((e as Error).message);
     } finally {

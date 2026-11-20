@@ -1,10 +1,11 @@
 'use client';
 
 import { formatDuration, isWideVideo, selfViewAspect, type CallState, type ScreenStats, type ShareMode, type VideoSize } from '@us/shared';
-import { useCallCards, useCallManager, useCallState, useCallVoiceVolume, useCouple, useFeature, onMinimiseCallScreen } from '@us/shared/react';
+import { BUBBLE_KEY, readBubbleSpot, setCallBubbleHidden, useCallBubbleHidden, useCallCards, useCallManager, useCallState, useCallVoiceVolume, useCouple, useFeature, onMinimiseCallScreen, type BubbleSpot } from '@us/shared/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronDown,
+  EyeOff,
   Layers,
   Maximize,
   Mic,
@@ -46,7 +47,10 @@ export function CallOverlay() {
   const canMinimise = visible && state.phase !== 'incoming' && state.phase !== 'ended';
   // A new ring or the end of the call always brings the full screen back.
   useEffect(() => {
-    if (!canMinimise) setMinimised(false);
+    if (!canMinimise) {
+      setMinimised(false);
+      setCallBubbleHidden(false);
+    }
   }, [canMinimise]);
   return (
     <>
@@ -60,49 +64,106 @@ export function CallOverlay() {
           />
         )}
       </AnimatePresence>
-      {minimised && <CallBar state={state} onExpand={() => setMinimised(false)} />}
+      {minimised && <CallBubble state={state} onExpand={() => setMinimised(false)} />}
     </>
   );
 }
 
-/** The minimised call, floating over the app: who, how long, mute and hang up. */
-function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }) {
+/**
+ * The minimised call: a bubble with their face, ringed while they talk, and
+ * the time. Drag it anywhere (it settles on the nearest side and stays there
+ * next time); click it for back to the call, mute, end, or put it away.
+ */
+function CallBubble({ state, onExpand }: { state: CallState; onExpand: () => void }) {
   const m = useCallManager();
-  const { partner } = useCouple();
+  const { partner, partnerSlot } = useCouple();
+  const hidden = useCallBubbleHidden();
+  const [open, setOpen] = useState(false);
   const elapsed = useElapsed(state.connectedAt);
-  const status =
-    state.phase === 'connected' ? formatDuration(elapsed) : state.phase === 'reconnecting' ? 'Reconnecting…' : 'Calling…';
+  const status = state.phase === 'connected' ? formatDuration(elapsed) : state.phase === 'reconnecting' ? 'Reconnecting…' : 'Calling…';
+  const SIZE = 60;
+  const [spot, setSpot] = useState<BubbleSpot>({ side: 'right', y: 0.55 });
+  useEffect(() => {
+    try {
+      setSpot(readBubbleSpot(localStorage.getItem(BUBBLE_KEY)));
+    } catch {
+      // Private window: the default spot.
+    }
+  }, []);
+  // While dragging: where it is now, in pixels.
+  const [dragAt, setDragAt] = useState<{ x: number; y: number } | null>(null);
+  const press = useRef<{ x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null);
+  const [talk, setTalk] = useState(0);
+  useEffect(() => {
+    if (state.phase !== 'connected') return;
+    const t = setInterval(() => void m.audioLevels().then((l) => setTalk(Math.min(1, (l.them ?? 0) * 6))), 300);
+    return () => clearInterval(t);
+  }, [state.phase, m]);
+
+  if (hidden) return null;
+  const vh = typeof window === 'undefined' ? 800 : window.innerHeight;
+  const vw = typeof window === 'undefined' ? 1200 : window.innerWidth;
+  const top = 12 + (vh - SIZE - 60) * spot.y;
+  const pos = dragAt ? { left: dragAt.x, top: dragAt.y } : spot.side === 'left' ? { left: 12, top } : { left: vw - SIZE - 12, top };
+  const left = (dragAt?.x ?? pos.left) + SIZE / 2 < vw / 2;
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 mx-auto flex max-w-md items-center gap-3 rounded-full bg-sage-600 py-1.5 pl-2 pr-1.5 text-white shadow-[0_12px_32px_-12px_rgba(0,0,0,0.45)]"
-    >
+    <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="fixed z-50 flex flex-col items-center" style={{ ...pos, width: SIZE, transition: dragAt ? 'none' : 'left 0.2s, top 0.2s' }}>
       <button
         type="button"
-        onClick={onExpand}
-        className="flex min-w-0 flex-1 items-center gap-3 rounded-full py-0.5 pl-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        aria-label={`Call with ${partner.display_name}, ${status}. Click for the call's controls`}
+        onPointerDown={(e) => {
+          (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+          press.current = { x: e.clientX, y: e.clientY, ox: pos.left, oy: pos.top, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const p = press.current;
+          if (!p) return;
+          if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 4) p.moved = true;
+          if (p.moved) setDragAt({ x: Math.min(vw - SIZE, Math.max(0, p.ox + e.clientX - p.x)), y: Math.min(vh - SIZE, Math.max(0, p.oy + e.clientY - p.y)) });
+        }}
+        onPointerUp={() => {
+          const p = press.current;
+          press.current = null;
+          if (!p?.moved || !dragAt) return void setOpen((o) => !o);
+          const next: BubbleSpot = { side: dragAt.x + SIZE / 2 < vw / 2 ? 'left' : 'right', y: Math.min(1, Math.max(0, (dragAt.y - 12) / Math.max(1, vh - SIZE - 60))) };
+          setSpot(next);
+          setDragAt(null);
+          try {
+            localStorage.setItem(BUBBLE_KEY, JSON.stringify(next));
+          } catch {
+            // As above.
+          }
+        }}
+        className="relative flex touch-none items-center justify-center rounded-full border-2 border-white bg-sage-600 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        style={{ width: SIZE, height: SIZE, cursor: dragAt ? 'grabbing' : 'grab' }}
       >
-        <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-white" aria-hidden />
-        <span className="min-w-0">
-          <span className="block truncate text-small font-semibold">{partner.display_name}</span>
-          <span className="block text-micro tabular-nums text-white/80" aria-live="polite">
-            {status} · back to call
-          </span>
+        <span className="pointer-events-none absolute inset-0 rounded-full bg-sage-500 transition-transform" style={{ transform: `scale(${1 + talk * 0.22})`, opacity: 0.35 + talk * 0.65, zIndex: -1 }} aria-hidden />
+        <span className="pointer-events-none">
+          <Avatar name={partner.display_name} slot={partnerSlot} size="md" />
         </span>
+        {!state.local.mic ? (
+          <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 rounded-full bg-ink p-1 text-white">
+            <MicOff className="h-3 w-3" />
+          </span>
+        ) : null}
       </button>
-      <IconButton
-        label={state.local.mic ? 'Mute' : 'Unmute'}
-        pressed={!state.local.mic}
-        tone={state.local.mic ? 'night' : 'nightOff'}
-        size="sm"
-        onClick={() => m.toggleMic()}
-      >
-        {state.local.mic ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-      </IconButton>
-      <IconButton label="End call" tone="end" size="sm" onClick={() => void m.hangup()}>
-        <PhoneOff className="h-4 w-4" />
-      </IconButton>
+      <span className="mt-1 rounded-full bg-black/55 px-2 py-0.5 text-micro tabular-nums text-white">{status}</span>
+      {open ? (
+        <div className={cn('absolute top-2 flex gap-2 rounded-full bg-black/75 p-1.5', left ? 'left-[68px]' : 'right-[68px]')}>
+          <IconButton label="Back to the call" tone="night" size="sm" onClick={() => (setOpen(false), onExpand())}>
+            <Maximize className="h-4 w-4" />
+          </IconButton>
+          <IconButton label={state.local.mic ? 'Mute' : 'Unmute'} pressed={!state.local.mic} tone={state.local.mic ? 'night' : 'nightOff'} size="sm" onClick={() => m.toggleMic()}>
+            {state.local.mic ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+          </IconButton>
+          <IconButton label="Put the bubble away" tone="night" size="sm" onClick={() => (setOpen(false), setCallBubbleHidden(true))}>
+            <EyeOff className="h-4 w-4" />
+          </IconButton>
+          <IconButton label="End call" tone="end" size="sm" onClick={() => void m.hangup()}>
+            <PhoneOff className="h-4 w-4" />
+          </IconButton>
+        </div>
+      ) : null}
     </motion.div>
   );
 }

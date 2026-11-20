@@ -1,10 +1,11 @@
 import { formatDuration, isWideVideo, selfViewAspect, videoFit, type CallState, type VideoSize } from '@us/shared';
-import { useCallCards, useCallManager, useCallState, useCouple, useFeature, onMinimiseCallScreen } from '@us/shared/react';
+import { BUBBLE_KEY, readBubbleSpot, setCallBubbleHidden, useCallBubbleHidden, useCallCards, useCallManager, useCallState, useCouple, useFeature, onMinimiseCallScreen, type BubbleSpot } from '@us/shared/react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { Bluetooth, Check, ChevronDown, Ear, Headphones, Layers, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, Smartphone, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
+import { Bluetooth, Check, ChevronDown, Ear, EyeOff, Headphones, Layers, Maximize, Mic, MicOff, Minimize, MonitorUp, PenLine, Phone, PhoneOff, Radio, Smartphone, SwitchCamera, Video, VideoOff, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { AppState, Modal, Pressable, StatusBar, useWindowDimensions, View } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   FadeIn,
@@ -60,7 +61,10 @@ export function CallScreen() {
   const canMinimise = state.phase !== 'idle' && state.phase !== 'incoming' && state.phase !== 'ended';
   // A new ring or the end of the call always brings the full screen back.
   useEffect(() => {
-    if (!canMinimise) setMinimised(false);
+    if (!canMinimise) {
+      setMinimised(false);
+      setCallBubbleHidden(false);
+    }
   }, [canMinimise]);
   const minimise = () => {
     if (canMinimise) setMinimised(true);
@@ -88,7 +92,7 @@ export function CallScreen() {
             />
           ))}
       </Modal>
-      {minimised && <CallBar state={state} onExpand={() => setMinimised(false)} />}
+      {minimised && <CallBubble state={state} onExpand={() => setMinimised(false)} />}
     </>
   );
 }
@@ -140,46 +144,109 @@ const ROUTES: Record<AudioRoute, { label: string; icon: typeof Ear }> = {
   BLUETOOTH: { label: 'Bluetooth', icon: Bluetooth },
 };
 
-/** The minimised call: who, how long, mute and hang up. Tap to go back to the call. */
-function CallBar({ state, onExpand }: { state: CallState; onExpand: () => void }) {
+/**
+ * The minimised call: a bubble with their face, ringed while they talk, and
+ * the time. Drag it anywhere (it settles on the nearest side and stays there
+ * next time); tap it for back to the call, mute, end, or put it away.
+ */
+function CallBubble({ state, onExpand }: { state: CallState; onExpand: () => void }) {
   const m = useCallManager();
-  const { partner } = useCouple();
+  const { partner, partnerSlot } = useCouple();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const hidden = useCallBubbleHidden();
+  const [open, setOpen] = useState(false);
   const elapsed = useElapsed(state.connectedAt);
-  const status =
-    state.phase === 'connected' ? formatDuration(elapsed) : state.phase === 'reconnecting' ? 'Reconnecting…' : 'Calling…';
+  const status = state.phase === 'connected' ? formatDuration(elapsed) : state.phase === 'reconnecting' ? 'Reconnecting…' : 'Calling…';
+
+  // Where it sits: a side and how far down, remembered on the phone.
+  const SIZE = 60;
+  const top = insets.top + 8;
+  const room = Math.max(1, height - insets.bottom - SIZE - 40 - top);
+  const xFor = (side: 'left' | 'right') => (side === 'left' ? Math.max(insets.left, 8) : width - SIZE - Math.max(insets.right, 8));
+  const x = useSharedValue(xFor('right'));
+  const y = useSharedValue(top + room * 0.55);
+  const [spot, setSpot] = useState<BubbleSpot>({ side: 'right', y: 0.55 });
+  useEffect(() => {
+    void AsyncStorage.getItem(BUBBLE_KEY)
+      .then((raw) => setSpot(readBubbleSpot(raw)))
+      .catch(() => {});
+  }, []);
+  // Settle where it belongs, and again when the screen turns (the house is sideways).
+  useEffect(() => {
+    x.value = withTiming(xFor(spot.side), { duration: 220 });
+    y.value = withTiming(top + room * spot.y, { duration: 220 });
+  }, [spot, width, height]); // eslint-disable-line react-hooks/exhaustive-deps
+  const settle = (cx: number, cy: number) => {
+    const next: BubbleSpot = { side: cx + SIZE / 2 < width / 2 ? 'left' : 'right', y: Math.min(1, Math.max(0, (cy - top) / room)) };
+    setSpot(next);
+    void AsyncStorage.setItem(BUBBLE_KEY, JSON.stringify(next)).catch(() => {});
+  };
+  const drag = Gesture.Pan()
+    .minDistance(4)
+    .runOnJS(true)
+    .onChange((e) => {
+      x.value += e.changeX;
+      y.value += e.changeY;
+    })
+    .onEnd(() => settle(x.value, y.value));
+  const at = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { translateY: y.value }] }));
+
+  // A ring that swells while they talk.
+  const talk = useSharedValue(0);
+  useEffect(() => {
+    if (state.phase !== 'connected') return;
+    const t = setInterval(() => {
+      void m.audioLevels().then((l) => {
+        talk.value = withTiming(Math.min(1, (l.them ?? 0) * 6), { duration: 180 });
+      });
+    }, 300);
+    return () => clearInterval(t);
+  }, [state.phase, m, talk]);
+  const ring = useAnimatedStyle(() => ({ transform: [{ scale: 1 + talk.value * 0.22 }], opacity: 0.35 + talk.value * 0.65 }));
+
+  if (hidden) return null;
+  const left = spot.side === 'left';
   return (
-    <Animated.View
-      entering={FadeIn.duration(220)}
-      pointerEvents="box-none"
-      style={{ position: 'absolute', top: insets.top + 6, left: 12, right: 12 }}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Call with ${partner.display_name}, ${status}. Return to call`}
-        onPress={onExpand}
-        className="flex-row items-center gap-3 rounded-full bg-sage-600 py-1.5 pl-4 pr-1.5 shadow-lg active:bg-sage-700"
-        style={{ elevation: 8 }}
-      >
-        <View className="h-2 w-2 rounded-full bg-white" />
-        <View className="flex-1">
-          <Text className="font-sans-semibold text-small text-white" numberOfLines={1}>
-            {partner.display_name}
-          </Text>
-          <Text className="text-micro text-white/80">{`${status} · tap to return`}</Text>
+    <Animated.View entering={FadeIn.duration(220)} pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0 }, at]}>
+      <GestureDetector gesture={drag}>
+        <View className="items-center" style={{ width: SIZE }}>
+          <Animated.View className="absolute rounded-full bg-sage-500" style={[{ width: SIZE, height: SIZE }, ring]} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Call with ${partner.display_name}, ${status}. Tap for the call's controls`}
+            onPress={() => setOpen((o) => !o)}
+            className="items-center justify-center rounded-full border-2 border-white bg-sage-600 shadow-lg"
+            style={{ width: SIZE, height: SIZE, elevation: 8 }}
+          >
+            <Avatar name={partner.display_name} slot={partnerSlot} size="md" />
+            {!state.local.mic ? (
+              <View className="absolute -bottom-0.5 -right-0.5 rounded-full bg-ink p-1">
+                <MicOff size={11} color="#fff" />
+              </View>
+            ) : null}
+          </Pressable>
+          <View className="mt-1 rounded-full bg-black/55 px-2 py-0.5">
+            <Text className="text-micro text-white">{status}</Text>
+          </View>
         </View>
-        <IconButton
-          label={state.local.mic ? 'Mute' : 'Unmute'}
-          size="sm"
-          tone={state.local.mic ? 'night' : 'nightOff'}
-          onPress={() => m.toggleMic()}
-        >
-          {state.local.mic ? <Mic size={18} color="#fff" /> : <MicOff size={18} color="#241933" />}
-        </IconButton>
-        <IconButton label="End call" size="sm" tone="end" onPress={() => void m.hangup()}>
-          <PhoneOff size={18} color="#fff" />
-        </IconButton>
-      </Pressable>
+      </GestureDetector>
+      {open ? (
+        <Animated.View entering={FadeIn.duration(150)} className="absolute flex-row gap-2 rounded-full bg-black/75 p-1.5" style={left ? { left: SIZE + 8, top: 8 } : { right: 8, top: 8, transform: [{ translateX: -SIZE }] }}>
+          <IconButton label="Back to the call" size="sm" tone="night" onPress={() => (setOpen(false), onExpand())}>
+            <Maximize size={16} color="#fff" />
+          </IconButton>
+          <IconButton label={state.local.mic ? 'Mute' : 'Unmute'} size="sm" tone={state.local.mic ? 'night' : 'nightOff'} onPress={() => m.toggleMic()}>
+            {state.local.mic ? <Mic size={16} color="#fff" /> : <MicOff size={16} color="#241933" />}
+          </IconButton>
+          <IconButton label="Put the bubble away" size="sm" tone="night" onPress={() => (setOpen(false), setCallBubbleHidden(true))}>
+            <EyeOff size={16} color="#fff" />
+          </IconButton>
+          <IconButton label="End call" size="sm" tone="end" onPress={() => void m.hangup()}>
+            <PhoneOff size={16} color="#fff" />
+          </IconButton>
+        </Animated.View>
+      ) : null}
     </Animated.View>
   );
 }

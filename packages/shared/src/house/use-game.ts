@@ -4,7 +4,7 @@ import { notifyPartner } from '../api/push';
 import { listCountdowns, upcoming } from '../api/together';
 import { useCallManager, useCallState } from '../react/call-provider';
 import { useChatKey } from '../react/chat-key-provider';
-import { minimiseCallScreen } from '../react/call-ui';
+import { minimiseCallScreen, setCallBubbleHidden, useCallBubbleHidden } from '../react/call-ui';
 import { useCouple } from '../react/couple-provider';
 import { avatarKey, MUSIC_KEY, NOTE_KEY, SKY_KEY, type ItemModel, type LookState } from './items';
 import { isNight } from './sky';
@@ -120,11 +120,13 @@ export function useHouseGame() {
   // The speaker: the same bar for both of us.
   const toggleMusic = useCallback(() => store?.set(MUSIC_KEY, music ? { on: false } : { on: true, at: new Date().toISOString() }), [store, music]);
   // Talk: a voice call, kept as a small bar so the house stays on screen.
+  const bubbleHidden = useCallBubbleHidden();
   const toggleTalk = useCallback(() => {
+    if (inCall && bubbleHidden) return setCallBubbleHidden(false);
     if (inCall) return void calls.hangup();
     void calls.startCall('audio').catch(() => onMoment('Couldn’t start the call'));
     minimiseCallScreen();
-  }, [calls, inCall, onMoment]);
+  }, [calls, inCall, bubbleHidden, onMoment]);
   // The note on the fridge: leave one, or read theirs (and they see I did).
   const leaveNote = useCallback((text: string) => store?.set(NOTE_KEY, { text: text.trim(), by: me.id, at: new Date().toISOString() }), [store, me.id]);
   const readNote = useCallback(() => {
@@ -213,7 +215,7 @@ export function useHouseGame() {
     notify,
   };
 
-  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
+  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, bubbleHidden, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
 }
 
 export type HouseGame = ReturnType<typeof useHouseGame>;

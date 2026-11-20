@@ -269,7 +269,7 @@ export function HouseView() {
         <HudButton label="Things to do together (T)" onClick={game.actions.fun} on={!!hud.fun.panel && !hud.fun.panel.side}>
           <Sparkles size={18} />
         </HudButton>
-        <HudButton label={game.inCall ? 'Stop talking' : `Talk to ${game.partnerName}`} onClick={game.toggleTalk} on={game.inCall}>
+        <HudButton label={game.inCall ? (game.bubbleHidden ? 'Show the call' : 'Stop talking') : `Talk to ${game.partnerName}`} onClick={game.toggleTalk} on={game.inCall}>
           {game.inCall ? <PhoneOff size={18} /> : <Phone size={18} />}
         </HudButton>
         {game.talking ? (

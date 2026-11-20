@@ -124,6 +124,7 @@ export class HousePresence {
   private off: () => void;
   private timer: ReturnType<typeof setInterval>;
   private mine: Pose | null = null;
+  private disposed = false;
 
   constructor(
     readonly me: string,
@@ -199,8 +200,10 @@ export class HousePresence {
   }
 
   dispose() {
+    if (this.disposed) return;
     clearInterval(this.timer);
     this.send({ op: 'bye' });
+    this.disposed = true;
     this.off();
     this.emotes.clear();
     this.items.clear();
@@ -226,6 +229,8 @@ export class HousePresence {
   }
 
   private send(op: HouseOp) {
+    // Closed: a late frame of the house must not keep talking on the couple channel.
+    if (this.disposed) return;
     this.transport.send({ ...op, from: this.me } as HouseEvent);
   }
 

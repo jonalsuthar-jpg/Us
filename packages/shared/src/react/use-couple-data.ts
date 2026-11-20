@@ -8,6 +8,18 @@ const inflight = new Map<string, Promise<unknown>>();
 /** When each key last loaded, so a screen mounting right after another doesn't load it again. */
 const loadedAt = new Map<string, number>();
 const FRESH_MS = 10_000;
+/** A write that hasn't answered by now isn't going to: the button comes back with a message. */
+export const WRITE_TIMEOUT_MS = 20_000;
+export const WRITE_TIMEOUT_MESSAGE = 'Couldn’t send. Check your connection and try again.';
+
+/** The write, or a rejection once it's taken too long. */
+export function withTimeout<R>(p: Promise<R>, ms = WRITE_TIMEOUT_MS): Promise<R> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    t = setTimeout(() => reject(new Error(WRITE_TIMEOUT_MESSAGE)), ms);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(t));
+}
 
 function shared<T>(key: string, load: () => Promise<T>, join: boolean): Promise<T> {
   const running = inflight.get(key) as Promise<T> | undefined;
@@ -32,8 +44,10 @@ export interface CoupleData<T> {
   /**
    * Run a write, then refetch and ping my partner's open clients so their
    * view refreshes too. Rethrows (with friendly copy) so forms can show it.
+   * A write that takes longer than WRITE_TIMEOUT_MS (or opts.timeoutMs, for
+   * uploads) gives up with a message instead of spinning for ever.
    */
-  mutate: <R>(write: () => Promise<R>) => Promise<R>;
+  mutate: <R>(write: () => Promise<R>, opts?: { timeoutMs?: number }) => Promise<R>;
 }
 
 /**
@@ -109,15 +123,17 @@ export function useCoupleData<T>(
   }, [channel, me.id, topic, load_]);
 
   const mutate = useCallback(
-    async <R,>(write: () => Promise<R>): Promise<R> => {
+    async <R,>(write: () => Promise<R>, opts?: { timeoutMs?: number }): Promise<R> => {
+      let result: R;
       try {
-        const result = await write();
-        channel.sendChanged(topic);
-        await load_(true);
-        return result;
+        result = await withTimeout(write(), opts?.timeoutMs);
       } catch (e) {
-        throw new Error(friendlyError(e));
+        throw new Error(e instanceof Error && e.message === WRITE_TIMEOUT_MESSAGE ? e.message : friendlyError(e));
       }
+      channel.sendChanged(topic);
+      // It's in: the fresh view follows, without holding the button.
+      void load_(true);
+      return result;
     },
     [channel, topic, load_],
   );

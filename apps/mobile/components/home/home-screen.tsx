@@ -128,7 +128,7 @@ export function HomeScreen() {
     try {
       const photo = await readyPicked(asset);
       const bytes = await (await fetch(photo.uri)).arrayBuffer();
-      await home.mutate(() => setCouplePhoto(sb, d.couple, bytes, photo.mimeType));
+      await home.mutate(() => setCouplePhoto(sb, d.couple, bytes, photo.mimeType), { timeoutMs: 120_000 });
     } catch (e) {
       setPhotoError((e as Error).message);
     } finally {
