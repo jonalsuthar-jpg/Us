@@ -243,7 +243,8 @@ export function HouseWorld(props: WorldProps) {
   // Shadows: everything catches them, solid things cast them. Exterior walls cut away in the dollhouse.
   const walls = useRef<{ obj: THREE.Object3D; nx: number; nz: number; upper: boolean }[]>([]);
   useLayoutEffect(() => {
-    const shadows = quality !== 'low';
+    // Phones: no shadows for now; on expo-gl they speckle the picture.
+    const shadows = quality !== 'low' && !ON_PHONE;
     gl.shadowMap.enabled = shadows;
     // On phones the shadows are redrawn every other frame (see the frame); the house itself never moves.
     gl.shadowMap.autoUpdate = !ON_PHONE;
@@ -947,7 +948,7 @@ export function HouseWorld(props: WorldProps) {
   return (
     <>
       <hemisphereLight ref={hemi} args={['#DCEBFF', '#5F7F45', quality === 'low' ? 1.1 : 0.7]} />
-      <directionalLight ref={sun} position={[12, 20, 14]} intensity={quality === 'low' ? 1.6 : 2.4} color="#FFF1DC" castShadow={quality !== 'low'} />
+      <directionalLight ref={sun} position={[12, 20, 14]} intensity={quality === 'low' ? 1.6 : 2.4} color="#FFF1DC" castShadow={quality !== 'low' && !ON_PHONE} />
       <mesh position={[0, -0.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[240, 240]} />
         <meshLambertMaterial color={night ? '#22351F' : '#6E9650'} />
