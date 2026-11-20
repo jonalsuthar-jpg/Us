@@ -168,6 +168,11 @@ export function RealAvatar({ base, look, rigRef, ringColor }: { base: string; lo
           aim(B.upperarm_l, V(0.35, 0.15, 1), rq, 0.8);
           aim(B.lowerarm_l, V(-0.6, 0.3, 0.6), rq, 0.8);
         }
+        if (d.act === 'kiss') {
+          // Lean in.
+          aim(B.spine_03, V(0, 1, 0.35), rq, 0.8);
+          aim(B.neck_01, V(0, 1, 0.45), rq, 0.8);
+        }
         if (d.act === 'hug' || d.act === 'kiss') {
           aim(B.upperarm_r, V(-0.3, 0.05, 1), rq);
           aim(B.lowerarm_r, V(0.9, 0.05, 0.4), rq);

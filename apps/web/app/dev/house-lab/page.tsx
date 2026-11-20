@@ -198,6 +198,25 @@ export default function HouseLab() {
         [1400, () => cb.cmds.push({ t: 'walkTo', x: -3.5, y: 3, z: 5.0 })],
         [14000, () => ((ca.yaw = 1.1), (ca.pitch = 0.6), (cb.yaw = Math.PI), (cb.pitch = 0.25))],
       ]);
+    if (scene === 'together')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: -3.0, y: 0, z: 8.2 })],
+        [800, () => cb.cmds.push({ t: 'walkTo', x: -3.0, y: 0, z: 7.4 })],
+        [7000, () => ca.cmds.push({ t: 'use' })],
+        [11000, () => ca.cmds.push({ t: 'invite', kind: 'kiss' })],
+        [12000, () => cb.cmds.push({ t: 'answer', yes: true })],
+        [17000, () => ca.cmds.push({ t: 'invite', kind: 'hands' })],
+        [18000, () => cb.cmds.push({ t: 'answer', yes: true })],
+        [19000, () => (ca.move = [0, -0.6])],
+        [23000, () => (ca.move = [0, 0])],
+      ]);
+    if (scene === 'slow')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: -3.0, y: 0, z: 8.2 })],
+        [800, () => cb.cmds.push({ t: 'walkTo', x: -3.0, y: 0, z: 7.4 })],
+        [7000, () => ca.cmds.push({ t: 'invite', kind: 'slow' })],
+        [8000, () => cb.cmds.push({ t: 'answer', yes: true })],
+      ]);
     if (scene === 'pool')
       run([
         [800, () => ca.cmds.push({ t: 'walkTo', x: 5, y: -1, z: 9 })],

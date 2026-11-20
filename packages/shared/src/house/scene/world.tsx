@@ -208,7 +208,7 @@ interface Me {
   /** cook, water or hug, until when (seconds on the clock). */
   doing: { act: 'cook' | 'water' | 'hug' | 'kiss' | 'slow'; until: number; key?: string } | null;
   /** Hand in hand: I lead (my right hand) or follow beside them (my left). */
-  hands: { lead: boolean } | null;
+  hands: { lead: boolean; since: number } | null;
   /** Metres walked since the last footstep. */
   stride: number;
 }
@@ -405,7 +405,7 @@ export function HouseWorld(props: WorldProps) {
       moment(`slow:${Math.floor(now / 60)}`, 'Slow dancing');
       if (!music) save(MUSIC_KEY, { on: true, at: new Date().toISOString() });
     } else {
-      me.hands = { lead: asked };
+      me.hands = { lead: asked, since: now };
       moment(`hands:${Math.floor(now / 60)}`, 'Hand in hand', false);
     }
   }
@@ -685,7 +685,7 @@ export function HouseWorld(props: WorldProps) {
       me.path = [];
       me.pending = null;
       me.doing = null;
-      me.hands = null;
+      if (!me.hands?.lead) me.hands = null;
       const swim = me.at === 'pool';
       const speed = (mag > 0.85 ? 3.6 : 1.0 + 1.9 * mag) * (swim ? 0.55 : 1);
       me.speed = speed;
@@ -783,17 +783,21 @@ export function HouseWorld(props: WorldProps) {
         me.heading += angleDiff(me.heading, p.h) * Math.min(1, dt * 10);
         moving = p.m === 1;
         me.speed = p.s ?? 1.4;
-      } else me.hands = null;
+      } else if (now - me.hands.since > 2) me.hands = null; // their answer to lead is a moment behind mine
     }
     if (me.hands?.lead && (!p || Math.hypot(p.x - me.pos.x, p.z - me.pos.z) > 3)) me.hands = null;
     // A kiss or a slow dance: turn to each other (and step close for the dance).
-    if (p && (me.doing?.act === 'kiss' || me.doing?.act === 'slow')) {
+    // They hug me: I hug back.
+    if (p && p.a === 'hug' && !me.doing && !me.seat && !moving && Math.hypot(p.x - me.pos.x, p.z - me.pos.z) < 1.4) me.doing = { act: 'hug', until: now + HUG_S };
+    const gap = me.doing?.act === 'kiss' ? 0.35 : me.doing?.act === 'hug' ? 0.45 : me.doing?.act === 'slow' ? 0.55 : 0;
+    if (p && gap && Math.hypot(p.x - me.pos.x, p.z - me.pos.z) < 2.5) {
       const dx = p.x - me.pos.x;
       const dz = p.z - me.pos.z;
       me.heading += angleDiff(me.heading, Math.atan2(dx, dz)) * Math.min(1, dt * 8);
       const d = Math.hypot(dx, dz);
-      if (d > 0.6) {
-        const k = Math.min(d - 0.6, dt * 1.2) / d;
+      if (d > gap) {
+        // Each of us covers half the way.
+        const k = Math.min((d - gap) / 2, dt * 1.4) / d;
         const next = walkStep(me.at, me.pos.x, me.pos.z, me.pos.x + dx * k, me.pos.z + dz * k);
         me.pos.x = next.x;
         me.pos.z = next.z;
