@@ -28,6 +28,8 @@ export interface Pose {
   h: number;
   /** Walking (1) or standing (0). */
   m: 0 | 1;
+  /** How fast, m/s, while moving: walk, jog or run. */
+  s?: number;
   /** What I'm doing: sit:<item>:<seat>, lie:<item>:<seat>, cook, water, hug, swim. */
   a?: string;
   /** What I'm carrying, and since when (ms). */
@@ -71,6 +73,7 @@ export function readPose(e: unknown): Pose | null {
   if (Math.abs(p.x!) > 40 || Math.abs(p.z!) > 40 || p.y! < -5 || p.y! > 12) return null;
   const out: Pose = { x: p.x!, y: p.y!, z: p.z!, h: p.h!, m: p.m ? 1 : 0 };
   if (typeof p.a === 'string' && ACT.test(p.a)) out.a = p.a;
+  if (typeof p.s === 'number' && Number.isFinite(p.s) && p.s >= 0 && p.s <= 10) out.s = p.s;
   if (typeof p.hk === 'string' && KEY.test(p.hk) && finite(p.hs)) {
     out.hk = p.hk;
     out.hs = p.hs;
@@ -185,6 +188,7 @@ export class HousePresence {
     const round = (n: number) => Math.round(n * 100) / 100;
     const out: Pose = { x: round(p.x), y: round(p.y), z: round(p.z), h: round(p.h), m: p.m };
     if (p.a) out.a = p.a;
+    if (p.s !== undefined) out.s = p.s;
     if (p.hk) {
       out.hk = p.hk;
       out.hs = p.hs;

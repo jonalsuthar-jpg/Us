@@ -11,6 +11,7 @@
  *   node scripts/fetch-house-assets.mjs
  *   D:\blender.exe -b --factory-startup -P scripts/blender/build_house.py -- --samples 256 --size 1024
  *   D:\blender.exe -b --factory-startup -P scripts/blender/convert_models.py -- <ids in scene/furniture.ts>
+ *   D:\blender.exe -b --factory-startup -P scripts/blender/build_characters.py   (Quaternius zips unpacked in assets-src/house/characters)
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -35,6 +36,8 @@ for (const sky of ['day', 'night']) {
   files.push(`sky_${sky}.hdr`);
 }
 for (const f of readdirSync(join(built, 'models'))) if (used.has(f.replace(/\.glb$/, ''))) files.push(`models/${f}`);
+// The two of us (scripts/blender/build_characters.py).
+for (const f of ['body_m.glb', 'body_f.glb', 'moves.glb']) files.push(`characters/${f}`);
 for (const id of used) if (!files.includes(`models/${id}.glb`)) throw new Error(`models/${id}.glb not built: run convert_models.py`);
 
 const manifest = { version, bytes: 0, files: [] };

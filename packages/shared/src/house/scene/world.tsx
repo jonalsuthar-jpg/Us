@@ -19,12 +19,14 @@ import {
   water,
   type ItemModel,
   type ItemState,
+  type LookState,
   type PlacedItem,
 } from '../items';
 import { findPath, FLOOR_H, floorY, region, regionAt, SPAWN, walkStep, type RegionId, type Waypoint } from '../layout';
 import { holdLoses, type Emote, type HousePresence, type Pose } from '../presence';
 import type { HouseStore } from '../store';
-import { animateAvatar, Avatar, bodyAct, DANCE_S, HAND, HEART_S, newMotion, WAVE_S, type AvatarLook, type AvatarParts } from './avatar';
+import { Avatar, bodyAct, DANCE_S, HEART_S, newMotion, WAVE_S, type AvatarRig } from './avatar';
+import { RealAvatar } from './avatar-real';
 import { Items, type HousePhoto } from './items';
 import { makeMaterials, type Quality } from './materials';
 import { HouseModel, type HouseGroups } from './model';
@@ -116,8 +118,8 @@ export interface WorldProps {
   meId: string;
   partnerId: string;
   partnerName: string;
-  mine: AvatarLook;
-  theirs: AvatarLook;
+  mine: LookState;
+  theirs: LookState;
   /** Where I am ('Kitchen'), when it changes. */
   onPlace?: (label: string) => void;
   /** Where my partner is, or null when they aren't in, when it changes. */
@@ -158,7 +160,9 @@ interface Me {
   /** Walk there, then use it. */
   pending: string | null;
   motion: ReturnType<typeof newMotion>;
-  parts: AvatarParts | null;
+  rig: AvatarRig | null;
+  /** How fast I moved this frame, m/s. */
+  speed: number;
   place: string;
   seat: { key: string; i: number; lie: boolean } | null;
   hold: { key: string; since: number } | null;
@@ -254,13 +258,14 @@ export function HouseWorld(props: WorldProps) {
     path: [],
     pending: null,
     motion: newMotion(),
-    parts: null,
+    rig: null,
+    speed: 0,
     place: '',
     seat: null,
     hold: null,
     doing: null,
   }).current;
-  const them = useRef({ pos: new THREE.Vector3(), heading: 0, shown: false, motion: newMotion(), parts: null as AvatarParts | null, place: null as string | null, pose: null as Pose | null }).current;
+  const them = useRef({ pos: new THREE.Vector3(), heading: 0, shown: false, motion: newMotion(), rig: null as AvatarRig | null, place: null as string | null, pose: null as Pose | null }).current;
   const target = useRef(new THREE.Vector3(SPAWN.x, 1.1, SPAWN.z)).current;
   const marker = useRef<THREE.Mesh>(null);
   const markerLife = useRef(0);
@@ -274,8 +279,8 @@ export function HouseWorld(props: WorldProps) {
   const hemi = useRef<THREE.HemisphereLight>(null);
   const stars = useRef<THREE.Points>(null);
 
-  const setMine = useCallback((p: AvatarParts | null) => void (me.parts = p), [me]);
-  const setTheirs = useCallback((p: AvatarParts | null) => void (them.parts = p), [them]);
+  const setMine = useCallback((r: AvatarRig | null) => void (me.rig = r), [me]);
+  const setTheirs = useCallback((r: AvatarRig | null) => void (them.rig = r), [them]);
 
   useEffect(() => {
     if (!presence) return;
@@ -551,6 +556,7 @@ export function HouseWorld(props: WorldProps) {
       me.doing = null;
       const swim = me.at === 'pool';
       const speed = (mag > 0.85 ? 3.6 : 1.0 + 1.9 * mag) * (swim ? 0.55 : 1);
+      me.speed = speed;
       const len = Math.hypot(wx, wz) || 1;
       const step = speed * dt;
       const was = me.at;
@@ -565,6 +571,7 @@ export function HouseWorld(props: WorldProps) {
 
     // A tapped walk: through the doors and up the stairs.
     let budget = 2.6 * dt * (me.at === 'pool' ? 0.55 : 1);
+    if (me.path.length) me.speed = 2.6;
     while (budget > 0 && me.path.length && !me.seat) {
       const wp = me.path[0]!;
       // Each leg of the walk crosses one region: that's where I am.
@@ -628,17 +635,17 @@ export function HouseWorld(props: WorldProps) {
     }
 
     const act = me.seat ? `${me.seat.lie ? 'lie' : 'sit'}:${me.seat.key}:${me.seat.i}` : me.doing ? me.doing.act : me.at === 'pool' ? 'swim' : undefined;
-    if (me.parts) {
-      me.parts.root.position.copy(me.pos);
-      me.parts.root.rotation.y = me.heading;
-      animateAvatar(me.parts, me.motion, dt, { moving, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold });
+    if (me.rig) {
+      me.rig.root.position.copy(me.pos);
+      me.rig.root.rotation.y = me.heading;
+      me.rig.update(dt, { moving, speed: me.speed, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold }, me.motion);
     }
     const label = region(me.at).label;
     if (label !== me.place) {
       me.place = label;
       onPlace?.(label);
     }
-    presence?.update({ x: me.pos.x, y: me.pos.y, z: me.pos.z, h: me.heading, m: moving ? 1 : 0, a: act, hk: me.hold?.key, hs: me.hold?.since });
+    presence?.update({ x: me.pos.x, y: me.pos.y, z: me.pos.z, h: me.heading, m: moving ? 1 : 0, s: moving ? Math.round(me.speed * 10) / 10 : undefined, a: act, hk: me.hold?.key, hs: me.hold?.since });
 
     // What's cut away in the dollhouse: inside, the floor above and the roof,
     // and the walls between the camera and me drop to a low strip.
@@ -655,20 +662,20 @@ export function HouseWorld(props: WorldProps) {
     }
 
     // My partner, eased between the poses they send.
-    if (them.parts) {
+    if (them.rig) {
       if (p) {
         const to = tmp.to.set(p.x, p.y, p.z);
         if (!them.shown || them.pos.distanceTo(to) > 6) them.pos.copy(to);
         else them.pos.lerp(to, Math.min(1, dt * 9));
         them.heading += angleDiff(them.heading, p.h) * Math.min(1, dt * 10);
         them.shown = true;
-        them.parts.root.visible = !(view === 'ground' && them.pos.y > FLOOR_H / 2);
-        them.parts.root.position.copy(them.pos);
-        them.parts.root.rotation.y = them.heading;
-        animateAvatar(them.parts, them.motion, dt, { moving: p.m === 1, swimming: p.a === 'swim', act: bodyAct(p.a), carrying: !!p.hk });
+        them.rig.root.visible = !(view === 'ground' && them.pos.y > FLOOR_H / 2);
+        them.rig.root.position.copy(them.pos);
+        them.rig.root.rotation.y = them.heading;
+        them.rig.update(dt, { moving: p.m === 1, speed: p.s, swimming: p.a === 'swim', act: bodyAct(p.a), carrying: !!p.hk }, them.motion);
       } else {
         them.shown = false;
-        them.parts.root.visible = false;
+        them.rig.root.visible = false;
       }
     }
     const theirPlace = p ? (regionAt(p.x, p.y + 0.1, p.z)?.label ?? 'Garden') : null;
@@ -684,10 +691,9 @@ export function HouseWorld(props: WorldProps) {
       const mineHeld = me.hold?.key === it.key;
       const theirsHeld = !mineHeld && p?.hk === it.key && them.shown;
       if (mineHeld || theirsHeld) {
-        const pos = mineHeld ? me.pos : them.pos;
-        const h = mineHeld ? me.heading : them.heading;
-        o.position.set(pos.x + Math.cos(h) * HAND.x + Math.sin(h) * HAND.z, pos.y + HAND.y, pos.z - Math.sin(h) * HAND.x + Math.cos(h) * HAND.z);
-        o.rotation.y = h;
+        const rig = mineHeld ? me.rig : them.rig;
+        if (rig) rig.hand(o.position);
+        o.rotation.y = mineHeld ? me.heading : them.heading;
       } else if (decor.key === it.key && decor.draft) {
         o.position.set(decor.draft.x, it.y, decor.draft.z);
         o.rotation.y = decor.draft.ry;
@@ -925,8 +931,8 @@ export function HouseWorld(props: WorldProps) {
         ground={<Items items={shownItems} mats={mats} quality={quality} night={night} photos={photos} objects={objects} selected={decor.key} floor={0} carried={carried} assets={houseUrl} />}
         upper={<Items items={shownItems} mats={mats} quality={quality} night={night} photos={photos} objects={objects} selected={decor.key} floor={1} carried={carried} assets={houseUrl} />}
       />
-      <Avatar look={mine} quality={quality} partsRef={setMine} ringColor="#FFFFFF" />
-      <Avatar look={theirs} quality={quality} partsRef={setTheirs} ringColor="#FF8FB0" />
+      <Person look={mine} quality={quality} rigRef={setMine} ringColor="#FFFFFF" base={houseUrl} />
+      <Person look={theirs} quality={quality} rigRef={setTheirs} ringColor="#FF8FB0" base={houseUrl} />
       <mesh ref={marker} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
         <ringGeometry args={[0.18, 0.26, 32]} />
         <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} />
@@ -939,6 +945,19 @@ export function HouseWorld(props: WorldProps) {
 function solid(o: THREE.Object3D): boolean {
   const m = (o as THREE.Mesh).material as THREE.Material | undefined;
   return !!m && (!m.transparent || m.opacity < 0.5);
+}
+
+/** One of us: a real person once the pack is here (and loaded), the simple figure until then or if it fails. */
+function Person({ base, ...p }: { look: LookState; quality: Quality; rigRef: (r: AvatarRig | null) => void; ringColor: string; base?: string }) {
+  const simple = <Avatar look={p.look} quality={p.quality} rigRef={p.rigRef} ringColor={p.ringColor} />;
+  if (!base) return simple;
+  return (
+    <Optional fallback={simple}>
+      <Suspense fallback={simple}>
+        <RealAvatar base={base} look={p.look} rigRef={p.rigRef} ringColor={p.ringColor} />
+      </Suspense>
+    </Optional>
+  );
 }
 
 /** Seen on screen: it and everything it sits in are visible. */

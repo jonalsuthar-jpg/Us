@@ -1,7 +1,7 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
-import { ADDABLE, HAIRS, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SKINS, tapAt, useHouseGame, zoomBy, type HouseGame, type LookState, type Quality } from '@us/shared/house';
+import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SHOES, SKINS, tapAt, useHouseGame, zoomBy, type HouseGame, type Quality } from '@us/shared/house';
 import { Check, Eye, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Plus, RotateCcw, RotateCw, Shirt, Sun, Trash2, X } from 'lucide-react';
 import { housePackBase } from '@us/shared/house/light';
 import { useCouple } from '@us/shared/react';
@@ -40,6 +40,14 @@ export function HouseView() {
   const [visible, setVisible] = useState(true);
   const [panel, setPanel] = useState<'look' | 'add' | null>(null);
   const [touch, setTouch] = useState(false);
+  // The first time in, make yourself first.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (game.needsLook && !asked.current) {
+      asked.current = true;
+      setPanel('look');
+    }
+  }, [game.needsLook]);
   const stepped = useRef(false);
 
   useEffect(() => setTouch(window.matchMedia('(pointer: coarse)').matches), []);
@@ -352,20 +360,45 @@ function DecorTools({ game, onAdd }: { game: HouseGame; onAdd: () => void }) {
 }
 
 function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) {
-  const rows: { key: keyof LookState; label: string; colors: string[] }[] = [
+  const look = game.look;
+  const body = look.body ?? 'f';
+  const rows: { key: 'skin' | 'hair' | 'shirt' | 'pants' | 'shoes'; label: string; colors: string[] }[] = [
     { key: 'skin', label: 'Skin', colors: SKINS },
     { key: 'hair', label: 'Hair', colors: HAIRS },
     { key: 'shirt', label: 'Top', colors: SHIRTS },
     { key: 'pants', label: 'Trousers', colors: PANTS },
+    { key: 'shoes', label: 'Shoes', colors: SHOES },
   ];
+  const chip = (on: boolean) => cn('rounded-full px-3 py-1.5 text-small', on ? 'bg-white text-ink' : 'bg-white/15 text-white hover:bg-white/25');
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <div className="pointer-events-auto flex flex-col gap-3 rounded-3xl bg-black/70 p-4 text-white">
-        <div className="flex items-center justify-between">
+      <div className="pointer-events-auto flex max-h-[92%] flex-col gap-3 overflow-y-auto rounded-3xl bg-black/75 p-4 text-white">
+        <div className="flex items-center justify-between gap-6">
           <span className="font-bold">My look</span>
-          <button type="button" aria-label="Close" onClick={onClose}>
+          <button type="button" aria-label="Done" onClick={onClose}>
             <X size={20} />
           </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-20 text-small text-white/80">Body</span>
+          {(['f', 'm'] as const).map((b) => (
+            <button key={b} type="button" onClick={() => game.setLook({ body: b, style: b === 'm' ? 'Hair_SimpleParted' : 'Hair_Long', beard: false })} className={chip(body === b)}>
+              {b === 'f' ? 'Woman' : 'Man'}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-20 text-small text-white/80">Hairstyle</span>
+          {HAIRSTYLES.map((h) => (
+            <button key={h} type="button" onClick={() => game.setLook({ style: h })} className={chip(look.style === h)}>
+              {HAIRSTYLE_LABEL[h]}
+            </button>
+          ))}
+          {body === 'm' ? (
+            <button type="button" onClick={() => game.setLook({ beard: !look.beard })} className={chip(!!look.beard)}>
+              Beard
+            </button>
+          ) : null}
         </div>
         {rows.map((r) => (
           <div key={r.key} className="flex items-center gap-2">
@@ -376,7 +409,7 @@ function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) 
                 type="button"
                 aria-label={`${r.label} ${c}`}
                 onClick={() => game.setLook({ [r.key]: c })}
-                className={cn('h-8 w-8 rounded-full', game.look[r.key] === c ? 'border-[3px] border-white' : 'border border-white/40')}
+                className={cn('h-8 w-8 rounded-full', (look[r.key] ?? (r.key === 'shoes' ? SHOES[0] : '')) === c ? 'border-[3px] border-white' : 'border border-white/40')}
                 style={{ backgroundColor: c }}
               />
             ))}

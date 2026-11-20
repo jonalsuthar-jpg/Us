@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Canvas, events as touchEvents } from '@react-three/fiber/native';
-import { ADDABLE, HAIRS, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SKINS, tapAt, useHouseGame, zoomBy, type HouseGame, type LookState, type Quality } from '@us/shared/house';
+import { ADDABLE, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, orbitBy, PAINTS, PANTS, QUALITIES, SHIRTS, SHOES, SKINS, tapAt, useHouseGame, zoomBy, type HouseGame, type Quality } from '@us/shared/house';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { Check, Eye, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Plus, RotateCcw, RotateCw, Shirt, Sun, Trash2, X } from 'lucide-react-native';
@@ -41,6 +41,14 @@ export function HouseView() {
   const [fps, setFps] = useState(0);
   const [panel, setPanel] = useState<'look' | 'add' | null>(null);
   const [problem, setProblem] = useState<Error | null>(null);
+  // The first time in, make yourself first.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (game.needsLook && !asked.current) {
+      asked.current = true;
+      setPanel('look');
+    }
+  }, [game.needsLook]);
   const stepped = useRef(false);
 
   useEffect(() => {
@@ -356,20 +364,46 @@ function AddPanel({ onAdd, bottom }: { onAdd: (m: (typeof ADDABLE)[number]['mode
 }
 
 function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) {
-  const rows: { key: keyof LookState; label: string; colors: string[] }[] = [
+  const look = game.look;
+  const body = look.body ?? 'f';
+  const rows: { key: 'skin' | 'hair' | 'shirt' | 'pants' | 'shoes'; label: string; colors: string[] }[] = [
     { key: 'skin', label: 'Skin', colors: SKINS },
     { key: 'hair', label: 'Hair', colors: HAIRS },
     { key: 'shirt', label: 'Top', colors: SHIRTS },
     { key: 'pants', label: 'Trousers', colors: PANTS },
+    { key: 'shoes', label: 'Shoes', colors: SHOES },
   ];
+  const chip = (on: boolean) => (on ? 'rounded-full bg-white px-3 py-1.5' : 'rounded-full bg-white/15 px-3 py-1.5');
+  const chipText = (on: boolean) => (on ? 'text-small text-ink' : 'text-small text-white');
   return (
     <View className="absolute inset-0 items-center justify-center" pointerEvents="box-none">
-      <View className="gap-3 rounded-3xl bg-black/70 p-4">
-        <View className="flex-row items-center justify-between">
+      <ScrollView className="max-h-[92%] rounded-3xl bg-black/75" contentContainerClassName="gap-3 p-4">
+        <View className="flex-row items-center justify-between gap-6">
           <Text className="font-sans-bold text-white">My look</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={8}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Done" onPress={onClose} hitSlop={8}>
             <X size={20} color="#fff" />
           </Pressable>
+        </View>
+        <View className="flex-row items-center gap-2">
+          <Text className="w-20 text-small text-white/80">Body</Text>
+          {(['f', 'm'] as const).map((b) => (
+            <Pressable key={b} accessibilityRole="button" onPress={() => game.setLook({ body: b, style: b === 'm' ? 'Hair_SimpleParted' : 'Hair_Long', beard: false })} className={chip(body === b)}>
+              <Text className={chipText(body === b)}>{b === 'f' ? 'Woman' : 'Man'}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View className="flex-row flex-wrap items-center gap-2">
+          <Text className="w-20 text-small text-white/80">Hairstyle</Text>
+          {HAIRSTYLES.map((h) => (
+            <Pressable key={h} accessibilityRole="button" onPress={() => game.setLook({ style: h })} className={chip(look.style === h)}>
+              <Text className={chipText(look.style === h)}>{HAIRSTYLE_LABEL[h]}</Text>
+            </Pressable>
+          ))}
+          {body === 'm' ? (
+            <Pressable accessibilityRole="button" onPress={() => game.setLook({ beard: !look.beard })} className={chip(!!look.beard)}>
+              <Text className={chipText(!!look.beard)}>Beard</Text>
+            </Pressable>
+          ) : null}
         </View>
         {rows.map((r) => (
           <View key={r.key} className="flex-row items-center gap-2">
@@ -380,13 +414,13 @@ function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) 
                 accessibilityRole="button"
                 accessibilityLabel={`${r.label} ${c}`}
                 onPress={() => game.setLook({ [r.key]: c })}
-                className={game.look[r.key] === c ? 'h-8 w-8 rounded-full border-[3px] border-white' : 'h-8 w-8 rounded-full border border-white/40'}
+                className={(look[r.key] ?? (r.key === 'shoes' ? SHOES[0] : '')) === c ? 'h-8 w-8 rounded-full border-[3px] border-white' : 'h-8 w-8 rounded-full border border-white/40'}
                 style={{ backgroundColor: c }}
               />
             ))}
           </View>
         ))}
-      </View>
+      </ScrollView>
     </View>
   );
 }

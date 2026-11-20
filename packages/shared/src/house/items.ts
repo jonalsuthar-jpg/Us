@@ -306,11 +306,29 @@ export const HAIRS = ['#1E1612', '#3B2416', '#6B4423', '#A8743A', '#D9B26B', '#B
 export const SHIRTS = ['#D94F70', '#3E8E8A', '#4E6E8E', '#E3A13B', '#6B4E8E', '#F4F1EA', '#2E2E38', '#7C9A3A'];
 export const PANTS = ['#33415C', '#2E2E38', '#6B5A45', '#4F6D4A', '#8E8E99', '#B5524A'];
 
+/** How the real skin texture is tinted for each skin tone above (it's the light one; tinting can only darken). */
+export const SKIN_TINTS = ['#FFFFFF', '#F2DCCB', '#D6A98A', '#AF7F5E', '#86593E', '#5E3D2A'];
+/** The hairstyles on the real bodies (scripts/blender/build_characters.py). */
+export const HAIRSTYLES = ['Hair_SimpleParted', 'Hair_Long', 'Hair_Buns', 'Hair_Buzzed', 'Hair_BuzzedFemale'] as const;
+export const HAIRSTYLE_LABEL: Record<(typeof HAIRSTYLES)[number], string> = {
+  Hair_SimpleParted: 'Parted',
+  Hair_Long: 'Long',
+  Hair_Buns: 'Buns',
+  Hair_Buzzed: 'Short',
+  Hair_BuzzedFemale: 'Cropped',
+};
+export const SHOES = ['#F2F0EA', '#2E2E38', '#6B4423', '#B5524A', '#4E6E8E'];
+
 export interface LookState {
   skin: string;
   hair: string;
   shirt: string;
   pants: string;
+  /** The real person: which body, hairstyle, a beard, shoes. Older looks have none of these. */
+  body?: 'm' | 'f';
+  style?: (typeof HAIRSTYLES)[number];
+  beard?: boolean;
+  shoes?: string;
 }
 
 export const avatarKey = (userId: string) => `avatar:${userId.toLowerCase()}`;
@@ -319,7 +337,12 @@ export function cleanLook(s: unknown): LookState | null {
   const o = s as Partial<LookState> | null;
   const ok = (v: unknown, list: string[]) => typeof v === 'string' && list.includes(v);
   if (!o || !ok(o.skin, SKINS) || !ok(o.hair, HAIRS) || !ok(o.shirt, SHIRTS) || !ok(o.pants, PANTS)) return null;
-  return { skin: o.skin!, hair: o.hair!, shirt: o.shirt!, pants: o.pants! };
+  const out: LookState = { skin: o.skin!, hair: o.hair!, shirt: o.shirt!, pants: o.pants! };
+  if (o.body === 'm' || o.body === 'f') out.body = o.body;
+  if (HAIRSTYLES.includes(o.style as (typeof HAIRSTYLES)[number])) out.style = o.style;
+  if (typeof o.beard === 'boolean') out.beard = o.beard;
+  if (ok(o.shoes, SHOES)) out.shoes = o.shoes;
+  return out;
 }
 
 /** Day or night, for both of us. */

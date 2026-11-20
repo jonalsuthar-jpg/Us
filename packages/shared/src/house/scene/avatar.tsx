@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import type { LookState } from '../items';
 import type { Quality } from './materials';
 
 /**
@@ -8,16 +9,12 @@ import type { Quality } from './materials';
  * parts here are what that model's bones will drive.
  */
 
-export interface AvatarLook {
-  skin: string;
-  shirt: string;
-  pants: string;
-  hair: string;
-}
+export type AvatarLook = LookState;
 
+/** Until we choose (My look), each of us starts as one of these. */
 export const LOOKS: AvatarLook[] = [
-  { skin: '#E8B48F', shirt: '#D94F70', pants: '#33415C', hair: '#3B2416' },
-  { skin: '#C98E66', shirt: '#3E8E8A', pants: '#2E2E38', hair: '#1E1612' },
+  { skin: '#E8B48F', shirt: '#D94F70', pants: '#33415C', hair: '#3B2416', body: 'f', style: 'Hair_Long', shoes: '#F2F0EA' },
+  { skin: '#C98E66', shirt: '#3E8E8A', pants: '#2E2E38', hair: '#1E1612', body: 'm', style: 'Hair_SimpleParted', shoes: '#2E2E38' },
 ];
 
 export interface AvatarParts {
@@ -31,7 +28,7 @@ export interface AvatarParts {
   ring: THREE.Object3D;
 }
 
-function heartShape() {
+export function heartShape() {
   const s = new THREE.Shape();
   s.moveTo(0, -0.1);
   s.bezierCurveTo(-0.02, -0.06, -0.12, -0.02, -0.12, 0.04);
@@ -41,7 +38,23 @@ function heartShape() {
   return s;
 }
 
-export function Avatar({ look, quality, partsRef, ringColor }: { look: AvatarLook; quality: Quality; partsRef: (p: AvatarParts | null) => void; ringColor: string }) {
+export function Avatar({ look, quality, rigRef, ringColor }: { look: AvatarLook; quality: Quality; rigRef: (r: AvatarRig | null) => void; ringColor: string }) {
+  const partsRef = useCallback(
+    (p: AvatarParts | null) =>
+      rigRef(
+        p
+          ? {
+              root: p.root,
+              update: (dt, d, m) => animateAvatar(p, m, dt, d),
+              hand: (out) => {
+                const h = p.root.rotation.y;
+                return out.set(p.root.position.x + Math.cos(h) * HAND.x + Math.sin(h) * HAND.z, p.root.position.y + HAND.y, p.root.position.z - Math.sin(h) * HAND.x + Math.cos(h) * HAND.z);
+              },
+            }
+          : null,
+      ),
+    [rigRef],
+  );
   const kit = useMemo(() => {
     const mat = (color: string, roughness = 0.8) => (quality === 'low' ? new THREE.MeshLambertMaterial({ color }) : new THREE.MeshStandardMaterial({ color, roughness }));
     return {
@@ -126,6 +139,10 @@ export const DANCE_S = 4;
 
 export interface Doing {
   moving: boolean;
+  /** How fast, in m/s, when moving: walk, jog or run. */
+  speed?: number;
+  /** Talking on a call in the house. */
+  talking?: boolean;
   swimming: boolean;
   /** sit, lie, cook, water, hug, or nothing. */
   act: 'sit' | 'lie' | 'cook' | 'water' | 'hug' | null;
@@ -201,18 +218,33 @@ export function animateAvatar(p: AvatarParts, m: AvatarMotion, dt: number, d: Do
     p.armR.rotation.x = Math.PI;
     p.armR.rotation.z = -0.35 + Math.sin(m.wave * 12) * 0.35;
   }
-  const heart = p.heart as THREE.Mesh;
+  animateHeart(p.heart as THREE.Mesh, m, dt);
+}
+
+/** The heart that floats up from us for a moment. */
+export function animateHeart(heart: THREE.Mesh, m: AvatarMotion, dt: number, from = 1.95) {
   const mat = heart.material as THREE.MeshBasicMaterial;
   if (m.heart > 0) {
     m.heart = Math.max(0, m.heart - dt);
     const t = 1 - m.heart / HEART_S;
     heart.visible = true;
-    heart.position.y = 1.95 + t * 0.7;
+    heart.position.y = from + t * 0.7;
     heart.rotation.y += dt * 2;
     mat.opacity = Math.min(1, t * 6, m.heart * 2);
   } else if (heart.visible) {
     heart.visible = false;
   }
+}
+
+/**
+ * What the world drives each frame, whichever body draws us: the simple
+ * one below or a real person (avatar-real.tsx).
+ */
+export interface AvatarRig {
+  root: THREE.Object3D;
+  update(dt: number, d: Doing, m: AvatarMotion): void;
+  /** Where the right hand is in the world, for carrying things. */
+  hand(out: THREE.Vector3): THREE.Vector3;
 }
 
 /** Where the right hand is, in the avatar's own frame, for carrying things. */

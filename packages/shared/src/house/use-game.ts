@@ -73,6 +73,8 @@ export function useHouseGame() {
   const toggleNight = useCallback(() => store?.set(SKY_KEY, { on: !night }), [store, night]);
 
   const setLook = useCallback((patch: Partial<LookState>) => store?.set(myKey, { ...mine, ...patch }), [store, myKey, mine]);
+  // No look of mine saved yet, once we know: the house invites me to make one.
+  const needsLook = !!store?.loaded && !store.look(myKey);
 
   const world: WorldProps = {
     quality: 'medium',
@@ -92,7 +94,7 @@ export function useHouseGame() {
     onMoment,
   };
 
-  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, toggleView, night, toggleNight, look: mine, setLook, actions, partnerName: partner.display_name };
+  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, toggleView, night, toggleNight, look: mine, setLook, needsLook, actions, partnerName: partner.display_name };
 }
 
 export type HouseGame = ReturnType<typeof useHouseGame>;
