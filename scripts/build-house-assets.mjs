@@ -62,10 +62,19 @@ if (process.argv.includes('--upload')) {
   const type = (p) => (p.endsWith('.glb') ? 'model/gltf-binary' : p.endsWith('.png') ? 'image/png' : p.endsWith('.hdr') ? 'image/vnd.radiance' : 'application/json');
   for (const path of [...files, 'manifest.json']) {
     const abs = join(built, path);
-    execFileSync('npx', ['--yes', 'wrangler@4', 'r2', 'object', 'put', `us-media/house/v${version}/${path}`, '--file', abs, '--content-type', type(path), '--remote'], {
-      stdio: 'inherit',
-      shell: process.platform === 'win32',
-    });
+    // R2 now and then answers a 500: try again a few times before giving up.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        execFileSync('npx', ['--yes', 'wrangler@4', 'r2', 'object', 'put', `us-media/house/v${version}/${path}`, '--file', abs, '--content-type', type(path), '--remote'], {
+          stdio: 'inherit',
+          shell: process.platform === 'win32',
+        });
+        break;
+      } catch (e) {
+        if (attempt >= 4) throw e;
+        console.log(`  retrying ${path} (${attempt})`);
+      }
+    }
     console.log(`↑ house/v${version}/${path} (${(statSync(abs).size / 1e6).toFixed(1)} MB)`);
   }
 }
