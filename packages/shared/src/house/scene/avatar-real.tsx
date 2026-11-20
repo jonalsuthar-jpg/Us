@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { HAIRSTYLES, SKINS, SKIN_TINTS, type LookState } from '../items';
 import { animateHeart, heartShape, type AvatarMotion, type AvatarRig, type Doing } from './avatar';
+import { plainGlass } from './real-house';
 
 /**
  * One of us as a real person (Quaternius Universal Base Characters, CC0,
@@ -79,7 +80,7 @@ export function RealAvatar({ base, look, rigRef, ringColor }: { base: string; lo
       if (o.name.startsWith('Hair_')) {
         o.visible = o.name === style || (o.name === 'Hair_Beard' && !!look.beard);
       }
-      const src = mesh.material as THREE.MeshStandardMaterial;
+      const src = plainGlass(mesh.material as THREE.MeshStandardMaterial);
       const mat = src.clone();
       mats.push(mat);
       const name = src.name;

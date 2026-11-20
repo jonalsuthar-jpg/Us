@@ -6,7 +6,7 @@ import { isOn, isOpen, type ItemModel, type PlacedItem } from '../items';
 import type { Materials, Quality } from './materials';
 import { REAL_MODELS, type RealModel } from './furniture';
 import { B, KitContext, useKit, type MatKey } from './model';
-import { Optional } from './real-house';
+import { Optional, plainGlass } from './real-house';
 
 /**
  * The things in the house, drawn from boxes like the house itself. Each
@@ -442,6 +442,7 @@ function Real({ base, real, color }: { base: string; real: RealModel; color?: st
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      plainGlass(mesh.material as THREE.Material);
       if (color) {
         const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
         mat.color.set(color);

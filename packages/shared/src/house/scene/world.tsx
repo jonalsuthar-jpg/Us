@@ -790,6 +790,22 @@ export function HouseWorld(props: WorldProps) {
     }
   };
   const failed = useRef(false);
+  // three.js's own drawing can fail too (a GL feature the phone lacks): stop and say so, rather than closing the app.
+  useEffect(() => {
+    const draw = gl.render.bind(gl);
+    gl.render = (scene3d, cam) => {
+      if (failed.current) return;
+      try {
+        draw(scene3d, cam);
+      } catch (e) {
+        failed.current = true;
+        onError?.(e instanceof Error ? e : new Error(String(e)));
+      }
+    };
+    return () => {
+      gl.render = draw;
+    };
+  }, [gl, onError]);
   useFrame((_, rawDt) => {
     if (failed.current) return;
     try {

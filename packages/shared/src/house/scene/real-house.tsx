@@ -52,7 +52,7 @@ export function RealHouse({ base, light, into, onReady }: RealHouseProps) {
         scene.traverse((o) => {
           const mesh = o as THREE.Mesh;
           if (!mesh.isMesh) return;
-          const mat = mesh.material as THREE.MeshStandardMaterial;
+          const mat = plainGlass(mesh.material as THREE.MeshStandardMaterial);
           if (mesh.geometry.attributes.uv1 && !mat.transparent) {
             mat.lightMap = map;
             mat.lightMapIntensity = light / STORED_AT;
@@ -92,6 +92,24 @@ export function RealHouse({ base, light, into, onReady }: RealHouseProps) {
   }, [layers, into, onReady]);
 
   return null;
+}
+
+/**
+ * Glass from Blender comes as "transmission" glass, which three.js draws with
+ * an extra pass over the whole scene: costly everywhere, and on phones it
+ * needs multisampled render buffers expo-gl doesn't have (it crashed opening
+ * the house). Plain see-through glass looks the same here.
+ */
+export function plainGlass<T extends THREE.Material>(mat: T): T {
+  const m = mat as unknown as THREE.MeshPhysicalMaterial;
+  if (m.transmission > 0) {
+    m.transmission = 0;
+    m.transparent = true;
+    m.opacity = Math.min(m.opacity, 0.3);
+    m.depthWrite = false;
+    m.needsUpdate = true;
+  }
+  return mat;
 }
 
 /**
