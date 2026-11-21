@@ -37,7 +37,9 @@ import { LightPool, LightPools, lightSources, poolSize } from './lights';
 import { makeMaterials, type Quality } from './materials';
 import { HouseColliders, HouseModel, type HouseGroups } from './model';
 import { Optional, RealHouse } from './real-house';
-import { Sky, Water } from './sky';
+import { Sky, useWaterMaterial, Water } from './sky';
+import { RealVillage } from './village';
+import { Villagers } from './villagers';
 
 /** What a button press asks the house to do. */
 export type HouseCmd =
@@ -85,11 +87,15 @@ const VIEWS = {
   above: { pitch: 0.82, dist: 13, minPitch: 0.3, maxPitch: 1.4, minDist: 4, maxDist: 22 },
 } as const;
 
-/** The camera button goes round these. */
-export const CAMERA_VIEWS = ['first', 'close', 'far', 'above'] as const;
-export type CameraView = (typeof CAMERA_VIEWS)[number];
-export const CAMERA_LABEL: Record<CameraView, string> = { first: 'My eyes', close: 'Close', far: 'Far', above: 'Whole house' };
-export const nextCameraView = (v: CameraView): CameraView => CAMERA_VIEWS[(CAMERA_VIEWS.indexOf(v) + 1) % CAMERA_VIEWS.length]!;
+export type CameraView = keyof typeof VIEWS;
+/**
+ * The camera button: through my eyes, or behind me (like a game). The view
+ * from above is only for decorating (it comes by itself), since out in the
+ * village it would have to draw everything at once.
+ */
+export const CAMERA_VIEWS = ['first', 'close'] as const satisfies readonly CameraView[];
+export const CAMERA_LABEL: Record<CameraView, string> = { first: 'My eyes', close: 'Behind me', far: 'Far', above: 'From above' };
+export const nextCameraView = (v: CameraView): CameraView => (v === 'first' ? 'close' : 'first');
 
 export const createControls = (): HouseControls => ({ yaw: 0, pitch: VIEWS.close.pitch, dist: VIEWS.close.dist, move: [0, 0], view: 'close', decorate: false, taps: [], emotes: [], cmds: [] });
 
@@ -260,7 +266,11 @@ export function HouseWorld(props: WorldProps) {
   // The realistic house, once it has loaded into the groups.
   const [real, setReal] = useState(false);
   const onRealReady = useCallback(() => setReal(true), []);
-  const opened = useRef({ frames: 0, told: false });
+  // The village loads with the house, so walking out into it never waits.
+  const [village, setVillage] = useState(false);
+  const onVillageReady = useCallback(() => setVillage(true), []);
+  const waterMat = useWaterMaterial(quality);
+  const opened = useRef({ frames: 0, told: false, waited: 0 });
   const objects = useRef(new Map<string, THREE.Object3D>()).current;
   // The world's clock decides day and night (and the moon button, for half an hour); checked every 10 s (a world minute).
   const [minute, setMinute] = useState(() => Date.now());
@@ -1013,7 +1023,7 @@ export function HouseWorld(props: WorldProps) {
       const daylight = night ? 0 : Math.max(s.daylight, 0.35);
       const dim = weather === 'rain' ? 0.4 : weather === 'cloudy' ? 0.65 : weather === 'fog' ? 0.55 : 1;
       lightNow.current = { daylight, golden: night ? 0 : s.golden, dim, sun: s.sun };
-      if (sun.current) sun.current.position.set(night ? 12 : s.sun[0], night ? 20 : s.sun[1], night ? 14 : s.sun[2]);
+      lightNow.current.sun = night ? [12, 20, 14] : s.sun;
       const sky = night ? SKY_NIGHT : SKY_DAY.clone().lerp(GOLDEN, s.golden * 0.6).lerp(GREY, 1 - dim);
       if (!skyReady) scene.background = sky;
       if (scene.fog instanceof THREE.Fog) {
@@ -1024,6 +1034,14 @@ export function HouseWorld(props: WorldProps) {
       if (skyReady) scene.backgroundIntensity = (night ? 0.6 : 0.5 + 0.5 * s.daylight) * dim;
     }
     const L = lightNow.current;
+    // The sun (and its shadows) follow me, so the village has shadows wherever I am; on a 2 m grid, so they don't shimmer.
+    if (sun.current) {
+      const gx = Math.round(me.pos.x / 2) * 2;
+      const gz = Math.round(me.pos.z / 2) * 2;
+      sun.current.position.set(gx + L.sun[0], L.sun[1], gz + L.sun[2] - 3);
+      sun.current.target.position.set(gx, 0, gz);
+      sun.current.target.updateMatrixWorld();
+    }
 
     // Rain falls round us, and never inside the house.
     if (rain.current) {
@@ -1171,7 +1189,9 @@ export function HouseWorld(props: WorldProps) {
 
     if (ON_PHONE && gl.shadowMap.enabled && pace.current.frames % 2 === 0) gl.shadowMap.needsUpdate = true;
     const sh = opened.current;
-    if (!sh.told && (real || !houseUrl) && ++sh.frames > 8) {
+    // Ready once the house and the village are both in (or the village has had its chance: 10 s).
+    if (real && !village) sh.waited += rawDt;
+    if (!sh.told && (!houseUrl || (real && (village || sh.waited > 10))) && ++sh.frames > 8) {
       sh.told = true;
       onReady?.();
     }
@@ -1403,7 +1423,15 @@ export function HouseWorld(props: WorldProps) {
         </Suspense>
         </Optional>
       ) : null}
-      {real ? <Water quality={quality} /> : null}
+      {real ? <Water material={waterMat} /> : null}
+      {houseUrl ? (
+        <Optional>
+          <Suspense fallback={null}>
+            <RealVillage base={houseUrl} light={night ? (quality === 'low' ? 0.65 : 0.55) : 1} near={me.pos} water={waterMat} onReady={onVillageReady} />
+          </Suspense>
+        </Optional>
+      ) : null}
+      {houseUrl && village ? <Villagers base={houseUrl} near={me.pos} coupleId={coupleId ?? ''} say={(t) => onMoment?.(t)} /> : null}
       {houseUrl && !ON_PHONE ? (
         <Optional>
           <Suspense fallback={null}>

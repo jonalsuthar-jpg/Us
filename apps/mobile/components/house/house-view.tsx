@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Canvas, events as touchEvents } from '@react-three/fiber/native';
-import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
+import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, nextCameraView, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
 import { useCouple } from '@us/shared/react';
 import { GLView } from 'expo-gl';
 import { phoneHouseSound } from '@/lib/house-sound';
@@ -96,8 +96,7 @@ export function HouseView() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const nextView = () => {
     game.nextView();
-    const order = CAMERA_VIEWS;
-    void AsyncStorage.setItem('us.house.view', order[(order.indexOf(game.view) + 1) % order.length]!).catch(() => {});
+    void AsyncStorage.setItem('us.house.view', nextCameraView(game.view)).catch(() => {});
   };
   // The loading screen stays until the house is in and drawing (or 25 s, whatever happens).
   const [ready, setReady] = useState(false);

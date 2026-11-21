@@ -10,7 +10,9 @@ describe('house layout', () => {
     expect(regionAt(-3, 2.5, 0)?.id).toBe('living');
     expect(regionAt(3, 0.5, 1)?.id).toBe('kitchen');
     expect(regionAt(5, SWIM_Y, 9)?.id).toBe('pool');
-    expect(regionAt(30, 0, 30)).toBeNull();
+    // Off the map (out past the village).
+    expect(regionAt(90, 0, 90)).toBeNull();
+    expect(regionAt(30, 0, 30)?.id).toBe('street');
   });
 
   it('climbs the stairs as a ramp', () => {

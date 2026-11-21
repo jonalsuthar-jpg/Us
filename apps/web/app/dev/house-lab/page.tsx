@@ -312,6 +312,31 @@ export default function HouseLab() {
         [700, () => sa.set(SKY_KEY, { on: true, at: new Date().toISOString() })],
         [800, () => ca.cmds.push({ t: 'pick', id: 'stars' })],
       ]);
+    // The village: out through the gate, to the square, the café and the park.
+    if (scene === 'gate')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 5, y: 0, z: 22 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 5.6, y: 0, z: 20 })],
+        [14000, () => ((ca.yaw = 0.15), (ca.pitch = 0.28), (cb.yaw = Math.PI), (cb.pitch = 0.3))],
+      ]);
+    if (scene === 'square')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: -1, y: 0, z: 40, use: 'bench_2' })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: -6, y: 0, z: 40 })],
+        [30000, () => ((ca.yaw = 0.2), (ca.pitch = 0.3), (cb.yaw = -2.2), (cb.pitch = 0.22))],
+      ]);
+    if (scene === 'cafe')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 14.3, y: 0, z: 41, use: 'cafe_chair_0_a' })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 15.7, y: 0, z: 41, use: 'cafe_chair_0_b' })],
+        [40000, () => ((ca.yaw = -Math.PI / 2 - 0.6), (ca.pitch = 0.3), (cb.yaw = Math.PI / 2 + 0.5), (cb.pitch = 0.25))],
+      ]);
+    if (scene === 'park')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 35, y: 0, z: 56, use: 'bench_4' })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 42, y: 0, z: 48 })],
+        [55000, () => ((ca.yaw = -Math.PI / 2 + 0.3), (ca.pitch = 0.25), (cb.yaw = 0.4), (cb.pitch = 0.3))],
+      ]);
     if (scene === 'pool')
       run([
         [800, () => ca.cmds.push({ t: 'walkTo', x: 5, y: -1, z: 9 })],

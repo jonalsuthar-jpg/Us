@@ -76,7 +76,8 @@ function rippleTexture(size = 128): THREE.DataTexture {
 }
 
 /** The pool's water: clear, reflecting the sky, with ripples that drift. */
-export function Water({ quality }: { quality: 'low' | 'medium' | 'high' }) {
+/** The water's look: rippling, see-through; shared by the pool, the fountain and the pond. */
+export function useWaterMaterial(quality: 'low' | 'medium' | 'high'): THREE.Material {
   const { normal, mat } = useMemo(() => {
     const normal = rippleTexture();
     const mat =
@@ -96,8 +97,12 @@ export function Water({ quality }: { quality: 'low' | 'medium' | 'high' }) {
     normal.offset.x += dt * 0.012;
     normal.offset.y += dt * 0.007;
   });
+  return mat;
+}
+
+export function Water({ material }: { material: THREE.Material }) {
   return (
-    <mesh position={[5, -0.175, 9]} material={mat}>
+    <mesh position={[5, -0.175, 9]} material={material}>
       <boxGeometry args={[5.96, 0.05, 3.96]} />
     </mesh>
   );

@@ -357,7 +357,9 @@ for x in (-2.4, -1.4, -0.4):
 box("ground", (-5.95, 0, 5.55), (-5.75, 2.8, 5.75), "trim", name="post")
 box("ground", (-1.25, 0, 5.55), (-1.05, 2.8, 5.75), "trim", name="post")
 box("ground", (-3.8, 0, 4.0), (-2.2, 0.06, 4.45), "paving", name="step_front")
-box("ground", (-15.5, 0, 15), (15.5, 1.1, 15.8), "hedge", name="hedge")
+# The south hedge has a gap for the garden gate (packages/shared/src/house/village.ts GATE): out to the village.
+box("ground", (-15.5, 0, 15), (3.25, 1.1, 15.8), "hedge", name="hedge")
+box("ground", (6.75, 0, 15), (15.5, 1.1, 15.8), "hedge", name="hedge")
 box("ground", (-15.8, 0, -7.5), (-15, 1.1, 15.8), "hedge", name="hedge")
 box("ground", (15, 0, -7.5), (15.8, 1.1, 15.8), "hedge", name="hedge")
 box("ground", (-15.5, 0, -7.8), (15.5, 1.1, -7), "hedge", name="hedge")

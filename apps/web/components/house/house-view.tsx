@@ -1,7 +1,7 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
-import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
+import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, nextCameraView, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
 import type * as THREE from 'three';
 import { webHouseSound } from '@/lib/house-sound';
 import { Aperture, Check, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Video, VideoOff, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react';
@@ -98,7 +98,7 @@ export function HouseView() {
   const nextView = () => {
     game.nextView();
     try {
-      localStorage.setItem('us.house.view', CAMERA_VIEWS[(CAMERA_VIEWS.indexOf(game.view) + 1) % CAMERA_VIEWS.length]!);
+      localStorage.setItem('us.house.view', nextCameraView(game.view));
     } catch {
       // As above.
     }

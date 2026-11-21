@@ -64,6 +64,45 @@ export const TEXTURES = {
   poolTile: 'granite_tile',
 };
 
+/** The village's surfaces → Poly Haven textures (scripts/blender/build_village.py). */
+export const VILLAGE_TEXTURES = {
+  cobble: 'cobblestone_floor_04',
+  squarePaving: 'patterned_cobblestone',
+  parkPath: 'stony_dirt_path',
+  lanePath: 'grass_path_3',
+  plasterYellow: 'yellow_plaster',
+  plasterWhite: 'white_stucco',
+  plasterRed: 'red_plaster_weathered',
+  plasterBlue: 'blue_plaster_weathered',
+  plasterClay: 'patterned_clay_plaster',
+  stoneBase: 'plaster_stone_wall_01',
+  stoneWall: 'old_stone_wall',
+  roofSlate: 'red_slate_roof_tiles_01',
+  roofGrey: 'grey_roof_tiles',
+  shutter: 'wood_shutter',
+  door: 'rough_pine_door',
+  cafeFloor: 'oak_wood_planks',
+  siding: 'weathered_plank_siding',
+  pondEdge: 'mossy_cobblestone',
+  pondBed: 'brown_mud',
+};
+
+/** The village's props → Poly Haven models. */
+export const VILLAGE_MODELS = {
+  bench: 'painted_wooden_bench',
+  picnicTable: 'wooden_picnic_table',
+  coffeeCart: 'CoffeeCart_01',
+  cafeTable: 'round_wooden_table_02',
+  cafeChair: 'painted_wooden_chair_01',
+  planter: 'planter_box_01',
+  crate: 'wooden_crate_01',
+  barrel: 'Barrel_01',
+  basket: 'wicker_basket_01',
+  shrub: 'shrub_03',
+  lantern: 'wooden_lantern_01',
+  bin: 'metal_trash_can',
+};
+
 /** Surface → ambientCG texture, where Poly Haven has nothing right (a green lawn). */
 export const AMBIENTCG = {
   lawn: 'Grass001',
@@ -110,7 +149,7 @@ const note = (what, r) => {
   console.log(`${r === 'kept' ? '·' : '↓'} ${what}`);
 };
 
-for (const id of new Set(Object.values(MODELS))) {
+for (const id of new Set([...Object.values(MODELS), ...Object.values(VILLAGE_MODELS)])) {
   const g = (await files(id)).gltf?.[RES]?.gltf;
   if (!g) throw new Error(`${id}: no ${RES} glTF`);
   const dir = join(out, 'models', id);
@@ -118,7 +157,7 @@ for (const id of new Set(Object.values(MODELS))) {
   for (const [rel, f] of Object.entries(g.include ?? {})) note(`  ${rel}`, await fetchTo(join(dir, rel), f.url, f.md5));
 }
 
-for (const id of new Set(Object.values(TEXTURES))) {
+for (const id of new Set([...Object.values(TEXTURES), ...Object.values(VILLAGE_TEXTURES)])) {
   const f = await files(id);
   const dir = join(out, 'textures', id);
   for (const [map, key] of [['diff', 'Diffuse'], ['nor_gl', 'nor_gl'], ['arm', 'arm']]) {
@@ -164,6 +203,8 @@ writeFileSync(
     '',
     ...Object.entries(MODELS).map(([k, id]) => `- ${k}: https://polyhaven.com/a/${id}`),
     ...Object.entries(TEXTURES).map(([k, id]) => `- ${k}: https://polyhaven.com/a/${id}`),
+    ...Object.entries(VILLAGE_MODELS).map(([k, id]) => `- village ${k}: https://polyhaven.com/a/${id}`),
+    ...Object.entries(VILLAGE_TEXTURES).map(([k, id]) => `- village ${k}: https://polyhaven.com/a/${id}`),
     ...Object.entries(SKIES).map(([k, id]) => `- sky ${k}: https://polyhaven.com/a/${id}`),
     '',
     'From ambientCG (https://ambientcg.com), CC0:',

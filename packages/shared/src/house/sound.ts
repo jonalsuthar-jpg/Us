@@ -26,8 +26,8 @@ export interface HouseSound {
 /** What a step sounds like, by where it lands. */
 export function stepSound(at: RegionId): OneShot {
   if (at === 'kitchen' || at === 'stairFoot') return 'step_tile';
-  if (at.startsWith('garden')) return 'step_grass';
-  if (at === 'pool') return 'step_stone';
+  if (at.startsWith('garden') || at === 'lane' || at.startsWith('park')) return 'step_grass';
+  if (at === 'pool' || at === 'gate' || at === 'street' || at.startsWith('square')) return 'step_stone';
   return 'step_wood';
 }
 

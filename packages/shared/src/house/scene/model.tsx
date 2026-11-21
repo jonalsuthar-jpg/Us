@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { FLOOR_H, HOUSE, POOL, STAIRS, WALL_T } from '../layout';
+import { BUILDINGS } from '../village';
 import type { Materials } from './materials';
 
 /**
@@ -254,6 +255,20 @@ export function HouseColliders({ mats, into }: { mats: Materials; into: (g: THRE
         <B a={[STAIRS.x1, FLOOR_H - 0.15, HOUSE.z0]} b={[HOUSE.x1, FLOOR_H, -2.7]} m="wood" />
         <Floor y={FLOOR_H} upper />
         <Roof />
+        {BUILDINGS.map((b) =>
+          b.inside ? (
+            // The café: its walls and ceiling, not the room inside.
+            <group key={b.id}>
+              <B a={[b.x0, 0, b.z0]} b={[b.x0 + 0.3, b.h, b.z1]} m="wood" />
+              <B a={[b.x1 - 0.3, 0, b.z0]} b={[b.x1, b.h, b.z1]} m="wood" />
+              <B a={[b.x0, 0, b.z0]} b={[b.x1, b.h, b.z0 + 0.3]} m="wood" />
+              <B a={[b.x0, 0, b.z1 - 0.3]} b={[b.x1, b.h, b.z1]} m="wood" />
+              <B a={[b.x0, b.h - 0.1, b.z0]} b={[b.x1, b.h, b.z1]} m="wood" />
+            </group>
+          ) : (
+            <B key={b.id} a={[b.x0, 0, b.z0]} b={[b.x1, b.h + 1.5, b.z1]} m="wood" />
+          ),
+        )}
       </group>
     </KitContext.Provider>
   );

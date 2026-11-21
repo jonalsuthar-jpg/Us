@@ -416,6 +416,7 @@ function Model({ look }: { look: Look }): ReactNode {
         </>
       );
   }
+  if (item.model === 'villageSeat') return null;
   if (item.model === 'ceilingLight') {
     // The switch by the door, and the light it works, up on the ceiling.
     const [lx, ly, lz] = item.light ?? [0, 2.8, 0];

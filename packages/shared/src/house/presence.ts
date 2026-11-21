@@ -77,7 +77,8 @@ const finite = (...v: unknown[]) => v.every((n) => typeof n === 'number' && Numb
 export function readPose(e: unknown): Pose | null {
   const p = e as Partial<Pose> | null;
   if (!p || !finite(p.x, p.y, p.z, p.h)) return null;
-  if (Math.abs(p.x!) > 40 || Math.abs(p.z!) > 40 || p.y! < -5 || p.y! > 12) return null;
+  // Anywhere in the house, the garden or the village (it reaches about 80 m out).
+  if (Math.abs(p.x!) > 120 || Math.abs(p.z!) > 120 || p.y! < -5 || p.y! > 12) return null;
   const out: Pose = { x: p.x!, y: p.y!, z: p.z!, h: p.h!, m: p.m ? 1 : 0 };
   if (typeof p.a === 'string' && ACT.test(p.a)) out.a = p.a;
   if (typeof p.s === 'number' && Number.isFinite(p.s) && p.s >= 0 && p.s <= 10) out.s = p.s;

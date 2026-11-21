@@ -60,7 +60,7 @@ function aim(bone: THREE.Object3D | undefined, dir: THREE.Vector3, rootQ: THREE.
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
-export function RealAvatar({ base, look, rigRef, ringColor }: { base: string; look: LookState; rigRef: (r: AvatarRig | null) => void; ringColor: string }) {
+export function RealAvatar({ base, look, rigRef, ringColor, ring = true }: { base: string; look: LookState; rigRef: (r: AvatarRig | null) => void; ringColor: string; ring?: boolean }) {
   const body = look.body === 'm' ? 'm' : 'f';
   const [person, moves] = useLoader(GLTFLoader, [`${base}/characters/body_${body}.glb`, `${base}/characters/moves.glb`]);
 
@@ -216,7 +216,7 @@ export function RealAvatar({ base, look, rigRef, ringColor }: { base: string; lo
         <primitive object={made.scene} />
       </group>
       <mesh ref={heart} geometry={heartKit.geo} material={heartKit.mat} position={[0, 2.1, 0]} scale={1.6} visible={false} />
-      <mesh geometry={heartKit.ring} material={heartKit.ringMat} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} />
+      {ring ? <mesh geometry={heartKit.ring} material={heartKit.ringMat} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} /> : null}
     </group>
   );
 }

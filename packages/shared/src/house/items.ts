@@ -19,6 +19,7 @@
  * while a date is on (the picnic blanket, the candles): see placeItems.
  */
 import { FLOOR_H, type RegionId } from './layout';
+import { BENCHES, CAFE_TABLES, LAMPS } from './village';
 
 export type ItemKind = 'light' | 'door' | 'tv' | 'frame' | 'carry' | 'furniture' | 'stove' | 'plant' | 'fun';
 
@@ -29,7 +30,9 @@ export type ItemModel =
   | 'balconyTable' | 'lounger' | 'umbrella' | 'frontDoor' | 'balconyDoor' | 'mug' | 'book' | 'pillow' | 'ball' | 'teddy'
   | 'vase' | 'wateringCan' | 'frame' | 'gardenPlant' | 'beanbag' | 'dish'
   | 'firePit' | 'logBench' | 'hotTub' | 'telescope' | 'gardenBed' | 'swing' | 'mailbox' | 'fairyLights' | 'picnic' | 'popcorn'
-  | 'blanket' | 'candles' | 'balloons' | 'cake' | 'ceilingLight' | 'gardenLamp';
+  | 'blanket' | 'candles' | 'balloons' | 'cake' | 'ceilingLight' | 'gardenLamp'
+  /** A seat in the village whose look is in the village art (a bench, a café chair): nothing more to draw. */
+  | 'villageSeat';
 
 export interface Seat {
   /** From the item's centre, in its own frame (before it's turned). */
@@ -165,6 +168,15 @@ export const ITEMS: ItemDef[] = [
   { key: 'candles', kind: 'furniture', model: 'candles', label: 'Candles', x: 3.1, y: 0.78, z: 1.25, ry: 0, hw: 0.1, hd: 0.1, unlock: 'candles' },
   { key: 'balloons', kind: 'furniture', model: 'balloons', label: 'Balloons', x: 0.2, y: 0, z: -3.2, ry: 0, hw: 0.1, hd: 0.1, unlock: 'party' },
   { key: 'cake', kind: 'furniture', model: 'cake', label: 'Cake', x: 3.1, y: 0.78, z: 2.0, ry: 0, hw: 0.1, hd: 0.1, unlock: 'party' },
+
+  // The village: lamp posts along the street, round the square and the park.
+  ...LAMPS.map(([x, z], i): ItemDef => ({ key: `village_lamp_${i}`, kind: 'light', model: 'gardenLamp', label: 'Lamp post', x, y: 0, z, ry: 0, hw: 0.15, hd: 0.15, light: [0, 2.3, 0] })),
+  // Benches (two each) and the café's chairs, all in the village art.
+  ...BENCHES.map(([x, z, ry], i): ItemDef => ({ key: `bench_${i}`, kind: 'furniture', model: 'villageSeat', label: 'Bench', x, y: 0, z, ry, hw: 0.85, hd: 0.3, seats: [{ x: -0.4, z: 0.05, y: 0.45 }, { x: 0.4, z: 0.05, y: 0.45 }] })),
+  ...CAFE_TABLES.flatMap(([x, z], i): ItemDef[] => [
+    { key: `cafe_chair_${i}_a`, kind: 'furniture', model: 'villageSeat', label: 'Chair', x: x - 0.7, y: 0, z, ry: T / 2, hw: 0.22, hd: 0.22, seats: [{ x: 0, z: 0, y: 0.47 }] },
+    { key: `cafe_chair_${i}_b`, kind: 'furniture', model: 'villageSeat', label: 'Chair', x: x + 0.7, y: 0, z, ry: -T / 2, hw: 0.22, hd: 0.22, seats: [{ x: 0, z: 0, y: 0.47 }] },
+  ]),
 ];
 
 const byKey = new Map(ITEMS.map((i) => [i.key, i]));
@@ -329,7 +341,7 @@ export function cleanState(s: unknown): ItemState | null {
   for (const k of ['on', 'open'] as const) if (typeof o[k] === 'boolean') out[k] = o[k] as boolean;
   for (const k of ['x', 'y', 'z', 'ry'] as const) {
     const v = o[k];
-    if (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 60) out[k] = Math.round(v * 1000) / 1000;
+    if (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 120) out[k] = Math.round(v * 1000) / 1000;
   }
   if (typeof o.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(o.color)) out.color = o.color;
   if (typeof o.photo === 'string' && o.photo.length <= 300) out.photo = o.photo;

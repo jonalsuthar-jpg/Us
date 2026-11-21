@@ -639,7 +639,7 @@ export function useFun(h: FunHost) {
     }
     if (id === 'picnic') {
       shut();
-      if (!h.me.at.startsWith('garden')) return h.say('Go out into the garden for a picnic');
+      if (!h.me.at.startsWith('garden') && !h.me.at.startsWith('park')) return h.say('Go out into the garden or the park for a picnic');
       set('picnic', { x: h.me.pos.x, z: h.me.pos.z, ry: h.me.heading });
       set(DATE_KEY, { kind: 'picnic', at: new Date().toISOString() });
       return h.moment(`picnic:${Date.now()}`, 'A picnic for two 🧺', false);

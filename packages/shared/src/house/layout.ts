@@ -8,7 +8,11 @@
  * the stairs. Neighbouring regions meet at a portal: a point you pass through
  * (a doorway, the foot of the stairs). A walk is the fewest regions from here
  * to there, through their portals. No physics: furniture doesn't block you.
+ *
+ * Out through the garden gate, the village (village.ts) adds its own regions:
+ * one network, so a walk from the bedroom to the pond is one walk.
  */
+import { obstacles, VILLAGE_PORTALS, VILLAGE_REGIONS, type VillageRegionId } from './village';
 
 export const FLOOR_H = 3;
 export const WALL_T = 0.2;
@@ -20,7 +24,8 @@ export const SWIM_Y = -1.05;
 
 export type RegionId =
   | 'living' | 'kitchen' | 'stairFoot' | 'stairs' | 'stairHead' | 'landing' | 'bedroom' | 'balcony'
-  | 'gardenN' | 'gardenW' | 'gardenE' | 'gardenS' | 'pool';
+  | 'gardenN' | 'gardenW' | 'gardenE' | 'gardenS' | 'pool'
+  | VillageRegionId;
 
 export interface Region {
   id: RegionId;
@@ -46,6 +51,8 @@ export const REGIONS: Region[] = [
   { id: 'gardenW', x0: -14, x1: 2, z0: 7, z1: 15, floor: 0, inside: false, label: 'Garden' },
   { id: 'gardenE', x0: 8, x1: 14, z0: 7, z1: 15, floor: 0, inside: false, label: 'Garden' },
   { id: 'gardenS', x0: 2, x1: 8, z0: 11, z1: 15, floor: 0, inside: false, label: 'Garden' },
+  // The village. (Inside the café isn't 'inside' here: that's the house's own cutaway.)
+  ...VILLAGE_REGIONS.map((r): Region => ({ ...r, floor: 0, inside: false })),
 ];
 
 const byId = new Map(REGIONS.map((r) => [r.id, r]));
@@ -68,6 +75,7 @@ const PORTALS: [RegionId, RegionId, number, number][] = [
   ['gardenE', 'gardenS', 8, 13],
   // Down the pool steps.
   ['gardenW', 'pool', 2.0, 9.0],
+  ...(VILLAGE_PORTALS as [RegionId, RegionId, number, number][]),
 ];
 
 /** Height of the floor under (x, z) in a region. The stairs are a ramp. */
@@ -151,6 +159,10 @@ function touching(a: RegionId, b: RegionId) {
 
 const near = (x: number, z: number, px: number, pz: number, r = PORTAL_R) => (x - px) ** 2 + (z - pz) ** 2 <= r * r;
 
+/** Tree trunks and lamp posts standing where you walk: you go round them. */
+export const OBSTACLES = obstacles((x, z) => REGIONS.some((r) => within(r, x, z)));
+const blocked = (x: number, z: number) => OBSTACLES.some(([ox, oz, r]) => (x - ox) ** 2 + (z - oz) ** 2 < r * r);
+
 /** The portals out of a region: [neighbour, x, z]. */
 export function portalsOf(id: RegionId): [RegionId, number, number][] {
   const out: [RegionId, number, number][] = [];
@@ -169,6 +181,8 @@ export function portalsOf(id: RegionId): [RegionId, number, number][] {
  */
 export function walkStep(at: RegionId, x: number, z: number, nx: number, nz: number): { at: RegionId; x: number; z: number } {
   const ok = (tx: number, tz: number): RegionId | null => {
+    // Into a trunk or a post (unless already in one: then out is fine).
+    if (blocked(tx, tz) && !blocked(x, z)) return null;
     if (within(region(at), tx, tz)) return at;
     for (const [next, px, pz] of portalsOf(at)) {
       // In the doorway itself you're still where you came from.
