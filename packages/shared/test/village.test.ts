@@ -123,3 +123,17 @@ describe('the village: its people', () => {
       }
   });
 });
+
+describe('the village: the temple', () => {
+  it('can be walked to from home, up into the hall', () => {
+    const path = findPath('living', { region: 'templeHall', x: -52, z: 55 });
+    expect(path.map((w) => w.via)).toEqual(expect.arrayContaining(['street', 'templePath', 'templeCourt', 'templeHall']));
+  });
+
+  it('keeps the sanctum out of reach, and walks you round Nandi', async () => {
+    const { TEMPLE } = await import('../src/house/village');
+    expect(regionAt(TEMPLE.lingam.x, 0, TEMPLE.lingam.z)).toBeNull();
+    const n = OBSTACLES.find(([x, z]) => x === TEMPLE.nandi.x && z === TEMPLE.nandi.z);
+    expect(n).toBeTruthy();
+  });
+});

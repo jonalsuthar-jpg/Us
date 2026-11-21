@@ -9,8 +9,8 @@
  * Through a gate in the garden's south hedge, a grassy lane runs down to the
  * village street. Off the street: the square with its fountain, the café
  * (you can go in), the bakery and a flower stall; cottages; and the park
- * with its pond. Trees all round frame it, and the world fades into haze
- * beyond.
+ * with its pond; at the west end, up a path, a small Shiva temple. Trees
+ * all round frame it, and the world fades into haze beyond.
  */
 
 export interface Rect {
@@ -27,7 +27,7 @@ export const GATE = { x0: 3.6, x1: 6.4, z0: 15, z1: 15.8 } as const;
 export const VILLAGE_REGIONS = [
   { id: 'gate', x0: 3.8, x1: 6.2, z0: 15, z1: 16, label: 'Garden gate' },
   { id: 'lane', x0: 3.5, x1: 6.5, z0: 16, z1: 30, label: 'The lane' },
-  { id: 'street', x0: -52, x1: 58, z0: 30, z1: 36, label: 'Village street' },
+  { id: 'street', x0: -58, x1: 58, z0: 30, z1: 36, label: 'Village street' },
   // The square goes round the fountain.
   { id: 'squareW', x0: -12, x1: -3, z0: 36, z1: 58, label: 'The square' },
   { id: 'squareE', x0: 3, x1: 12, z0: 36, z1: 58, label: 'The square' },
@@ -39,6 +39,10 @@ export const VILLAGE_REGIONS = [
   { id: 'parkE', x0: 48, x1: 58, z0: 36, z1: 76, label: 'The park' },
   { id: 'parkN', x0: 36, x1: 48, z0: 36, z1: 50, label: 'The park' },
   { id: 'parkS', x0: 36, x1: 48, z0: 62, z1: 76, label: 'The park' },
+  // The temple: the path up to its gateway, the courtyard, the pillared hall (shoes off here).
+  { id: 'templePath', x0: -57, x1: -53.5, z0: 36, z1: 46, label: 'The temple path' },
+  { id: 'templeCourt', x0: -61, x1: -47, z0: 46, z1: 53, label: 'The temple' },
+  { id: 'templeHall', x0: -58, x1: -50, z0: 53, z1: 57, label: 'The temple' },
 ] as const;
 
 export type VillageRegionId = (typeof VILLAGE_REGIONS)[number]['id'];
@@ -64,6 +68,11 @@ export const VILLAGE_PORTALS: [string, string, number, number][] = [
   ['parkE', 'parkN', 48, 43],
   ['parkW', 'parkS', 36, 69],
   ['parkE', 'parkS', 48, 69],
+  ['street', 'templePath', -55.2, 36],
+  // Through the gateway.
+  ['templePath', 'templeCourt', -55.2, 46],
+  // Up the hall's steps.
+  ['templeCourt', 'templeHall', -54, 53],
 ];
 
 export type Wall = 'plasterYellow' | 'plasterWhite' | 'plasterRed' | 'plasterBlue' | 'plasterClay' | 'siding';
@@ -102,7 +111,7 @@ export const BUILDINGS: Building[] = [
 /** What the ground is made of; later entries are drawn over earlier ones. */
 export const GROUNDS: (Rect & { kind: 'lanePath' | 'cobble' | 'squarePaving' | 'parkPath' | 'cafeFloor' })[] = [
   { kind: 'lanePath', x0: 3.8, x1: 6.2, z0: 15, z1: 30 },
-  { kind: 'cobble', x0: -54, x1: 60, z0: 30, z1: 36 },
+  { kind: 'cobble', x0: -60, x1: 60, z0: 30, z1: 36 },
   { kind: 'squarePaving', x0: -12, x1: 12, z0: 36, z1: 58 },
   { kind: 'parkPath', x0: 26, x1: 29, z0: 36, z1: 76 },
   { kind: 'parkPath', x0: 55, x1: 58, z0: 36, z1: 76 },
@@ -116,12 +125,30 @@ export const POND: Rect = { x0: 36.5, x1: 47.5, z0: 50.5, z1: 61.5 };
 /** The flower stall on the square. */
 export const STALL = { x: -8, z: 53, ry: Math.PI / 2 } as const;
 
+/**
+ * The temple, for Shiva, small and South Indian: a gateway with a little
+ * tiered tower onto the courtyard, a pillared hall (mandapa) where Nandi
+ * sits facing the sanctum, and the sanctum (garbhagriha) with the lingam,
+ * under its stepped tower (vimana). Shoes come off at the hall's steps.
+ */
+export const TEMPLE = {
+  gateway: { x0: -57.6, x1: -52.9, z: 46 },
+  hall: { x0: -58, x1: -50, z0: 53, z1: 57 },
+  sanctum: { x0: -57, x1: -51, z0: 57, z1: 60.6 },
+  lingam: { x: -54, z: 59 },
+  nandi: { x: -54, z: 54.4 },
+  bell: { x: -54, z: 53.25, y: 2.55 },
+  diyas: { x: -51.6, z: 56.4 },
+  rack: { x: -59.2, z: 52.3 },
+} as const;
+
 /** Lamp posts: along both sides of the street, round the square, down the lane, round the park. */
 export const LAMPS: [number, number][] = [
   [3.2, 20], [6.8, 26],
   ...[-48, -36, -24, -12, 12, 24, 36, 48].flatMap((x): [number, number][] => [[x, 29.6], [x + 6, 36.4]]),
   [-12.4, 46], [12.4, 52], [-6, 58.4], [6, 58.4],
   [30, 50], [54, 50], [30, 66], [54, 66], [42, 76.4],
+  [-57.4, 40], [-53.1, 44.5],
 ];
 
 /** Benches you can sit on: [x, z, facing]. */
@@ -158,8 +185,10 @@ export const TREES: [number, number, number, number][] = [
   // The park.
   [31, 42, 0, 1.3], [31, 58, 1, 1.2], [32, 70, 0, 1.2], [53, 42, 2, 1.1], [52, 58, 0, 1.3], [52, 70, 1, 1.1], [39, 70, 0, 1], [45, 44, 2, 0.9],
   // The edges.
-  [-58, 33, 2, 1.3], [-58, 42, 0, 1.2], [64, 33, 2, 1.3], [64, 44, 0, 1.2], [62, 60, 2, 1.3], [62, 74, 0, 1.2], [0, 64, 0, 1.3], [-8, 66, 2, 1.2], [8, 66, 1, 1.2],
-  [24, 80, 0, 1.3], [40, 82, 2, 1.3], [56, 82, 0, 1.2], [-20, 70, 0, 1.3], [-40, 66, 2, 1.2], [-56, 56, 0, 1.3],
+  [-60.5, 29, 2, 1.3], [-59.5, 41, 0, 1.2], [64, 33, 2, 1.3], [64, 44, 0, 1.2], [62, 60, 2, 1.3], [62, 74, 0, 1.2], [0, 64, 0, 1.3], [-8, 66, 2, 1.2], [8, 66, 1, 1.2],
+  [24, 80, 0, 1.3], [40, 82, 2, 1.3], [56, 82, 0, 1.2], [-20, 70, 0, 1.3], [-40, 66, 2, 1.2], [-61.5, 58, 0, 1.3],
+  // The temple's peepal tree, beside the courtyard.
+  [-46.2, 57.5, 0, 1.6],
 ];
 
 /**
@@ -180,6 +209,8 @@ export function obstacles(inside: (x: number, z: number) => boolean): [number, n
   return [
     ...TREES.filter(([x, z]) => inside(x, z)).map(([x, z, , s]): [number, number, number] => [x, z, 0.45 * s]),
     ...LAMPS.filter(([x, z]) => inside(x, z)).map(([x, z]): [number, number, number] => [x, z, 0.22]),
+    // Nandi, seated in the temple hall.
+    [TEMPLE.nandi.x, TEMPLE.nandi.z, 0.7],
   ];
 }
 
