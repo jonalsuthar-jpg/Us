@@ -959,9 +959,17 @@ if ONLY:
     sys.exit(0)
 
 
+# Smaller downloads: everything at 512 but the colour of walls and roofs (1024).
+PROP_IMAGES = ("crate", "barrel", "basket", "planter", "chair", "table", "CoffeeCart", "bench", "shrub", "lantern", "trash")
 for img in bpy.data.images:
-    if img.source == "FILE" and img.colorspace_settings.name == "Non-Color" and max(img.size) > 512:
-        img.scale(512, 512)
+    if img.source != "FILE":
+        continue
+    w, h = img.size
+    # Walls and roofs fill the screen; everything else repeats small enough that 512 reads the same on a phone.
+    big = any(k in img.filepath for k in ("plaster", "stucco", "roof", "slate", "siding", "pine_door", "stone_wall"))
+    cap = 1024 if big and img.colorspace_settings.name != "Non-Color" and not any(k.lower() in img.name.lower() for k in PROP_IMAGES) else 512
+    if max(w, h) > cap:
+        img.scale(cap * w // max(w, h), cap * h // max(w, h))
 
 # One file for the whole village, so each texture is stored once; every mesh is named after its
 # zone ("square_roofSlate", "park_water_pond") so the app draws the zones near me and lights each with its own map.
@@ -987,7 +995,7 @@ bpy.ops.export_scene.gltf(
     export_normals=True,
     export_materials="EXPORT",
     export_image_format="JPEG",
-    export_jpeg_quality=78,
+    export_jpeg_quality=70,
     export_apply=True,
 )
 print("[village] wrote village.glb")
@@ -1004,7 +1012,7 @@ bpy.ops.export_scene.gltf(
     export_normals=True,
     export_materials="EXPORT",
     export_image_format="JPEG",
-    export_jpeg_quality=78,
+    export_jpeg_quality=70,
     export_apply=True,
 )
 print("[village] wrote village_trees.glb:", [o.name for o in PARTS["trees"]])
