@@ -8,9 +8,9 @@ Reads the map (assets-build/house/village_layout.json, from
 packages/shared/src/house/village.ts) and the CC0 source art in
 assets-src/house, and writes into assets-build/house/:
 
-    village_<zone>.glb         a zone's buildings, ground, fountain, pond,
+    village.glb                every zone's buildings, ground, fountain, pond,
                                stall, benches and café: one mesh per material
-                               (few draw calls)
+                               per zone (few draw calls), named <zone>_<material>
     village_<zone>_light.png   its baked sky and bounce light
     village_trees.glb          the tree kinds and a shrub, drawn instanced by the app
     village_preview.png        a render (with --preview)
@@ -847,26 +847,34 @@ for img in bpy.data.images:
     if img.source == "FILE" and img.colorspace_settings.name == "Non-Color" and max(img.size) > 512:
         img.scale(512, 512)
 
+# One file for the whole village, so each texture is stored once; every mesh is named after its
+# zone ("square_roofSlate", "park_water_pond") so the app draws the zones near me and lights each with its own map.
+bpy.ops.object.select_all(action="DESELECT")
 for zid in ZONES:
     merge_zone(zid)
-    bpy.ops.object.select_all(action="DESELECT")
+    for o in PARTS[zid]:
+        if o.name.startswith("water"):
+            o.name = f"{zid}_{o.name}"
+    tris = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in PARTS[zid])
+    print(f"[village] {zid}: {len(PARTS[zid])} meshes, {tris} triangles")
+bpy.ops.object.select_all(action="DESELECT")
+for zid in ZONES:
     for o in PARTS[zid]:
         o.select_set(True)
-    tris = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in PARTS[zid])
-    bpy.ops.export_scene.gltf(
-        filepath=os.path.join(OUT, f"village_{zid}.glb"),
-        export_format="GLB",
-        use_selection=True,
-        export_extras=True,
-        export_yup=True,
-        export_texcoords=True,
-        export_normals=True,
-        export_materials="EXPORT",
-        export_image_format="JPEG",
-        export_jpeg_quality=78,
-        export_apply=True,
-    )
-    print(f"[village] wrote village_{zid}.glb: {len(PARTS[zid])} meshes, {tris} triangles")
+bpy.ops.export_scene.gltf(
+    filepath=os.path.join(OUT, "village.glb"),
+    export_format="GLB",
+    use_selection=True,
+    export_extras=True,
+    export_yup=True,
+    export_texcoords=True,
+    export_normals=True,
+    export_materials="EXPORT",
+    export_image_format="JPEG",
+    export_jpeg_quality=78,
+    export_apply=True,
+)
+print("[village] wrote village.glb")
 
 bpy.ops.object.select_all(action="DESELECT")
 for o in PARTS["trees"]:

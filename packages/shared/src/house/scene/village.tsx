@@ -12,7 +12,7 @@ import { plainGlass } from './real-house';
  * just isn't drawn, and the haze hides where it stops.
  */
 
-export const VILLAGE_FILES = [...ZONES.flatMap((z) => [`village_${z.id}.glb`, `village_${z.id}_light.png`]), 'village_trees.glb'];
+export const VILLAGE_FILES = ['village.glb', ...ZONES.map((z) => `village_${z.id}_light.png`), 'village_trees.glb'];
 
 /** Stored at half strength, like the house's. */
 const STORED_AT = 0.5;
@@ -52,10 +52,7 @@ export interface RealVillageProps {
 }
 
 export function RealVillage({ base, light, near, water, onReady }: RealVillageProps) {
-  const gltfs = useLoader(
-    GLTFLoader,
-    ZONES.map((z) => `${base}/village_${z.id}.glb`),
-  );
+  const gltf = useLoader(GLTFLoader, `${base}/village.glb`);
   const maps = useLoader(
     THREE.TextureLoader,
     ZONES.map((z) => `${base}/village_${z.id}_light.png`),
@@ -65,7 +62,19 @@ export function RealVillage({ base, light, near, water, onReady }: RealVillagePr
   const zones = useMemo(
     () =>
       ZONES.map((zone, i) => {
-        const scene = gltfs[i]!.scene.clone(true);
+        // This zone's meshes (named <zone>_<material>), in a group of their own to show or hide.
+        const scene = new THREE.Group();
+        scene.name = zone.id;
+        const all = gltf.scene.clone(true);
+        all.updateMatrixWorld(true);
+        const mine: THREE.Mesh[] = [];
+        all.traverse((o) => {
+          if ((o as THREE.Mesh).isMesh && o.name.startsWith(`${zone.id}_`)) mine.push(o as THREE.Mesh);
+        });
+        for (const m of mine) {
+          m.applyMatrix4(m.parent ? m.parent.matrixWorld : new THREE.Matrix4());
+          scene.add(m);
+        }
         const map = maps[i]!;
         map.flipY = false;
         map.needsUpdate = true;
@@ -74,12 +83,14 @@ export function RealVillage({ base, light, near, water, onReady }: RealVillagePr
         scene.traverse((o) => {
           const mesh = o as THREE.Mesh;
           if (!mesh.isMesh) return;
-          if (mesh.name.startsWith('water')) {
+          if (mesh.name.includes('water')) {
             mesh.material = water;
             mesh.receiveShadow = true;
             return;
           }
-          const mat = plainGlass(mesh.material as THREE.MeshStandardMaterial);
+          // Each zone has its own light map, so its meshes get their own copy of a material they share with other zones.
+          const mat = plainGlass((mesh.material as THREE.MeshStandardMaterial).clone());
+          mesh.material = mat;
           if (mesh.geometry.attributes.uv1 && !mat.transparent) {
             mat.lightMap = map;
             mat.lightMapIntensity = light / STORED_AT;
@@ -91,7 +102,7 @@ export function RealVillage({ base, light, near, water, onReady }: RealVillagePr
         });
         return { zone, scene };
       }),
-    [gltfs, maps, water], // eslint-disable-line react-hooks/exhaustive-deps
+    [gltf, maps, water], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // Dusk and night turn the baked light down (with the house's).

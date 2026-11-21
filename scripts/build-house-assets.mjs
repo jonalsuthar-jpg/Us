@@ -33,8 +33,8 @@ for (const layer of ['ground', 'upper', 'roof']) files.push(`${layer}.glb`, `${l
 // The village (scripts/blender/build_village.py): its zones, their light, the trees.
 const zones = [...readFileSync(join(root, 'packages/shared/src/house/village.ts'), 'utf8').matchAll(/{ id: '(west|square|park)'/g)].map((m) => m[1]);
 if (!zones.length) throw new Error('village zones not found');
-for (const z of zones) files.push(`village_${z}.glb`, `village_${z}_light.png`);
-files.push('village_trees.glb');
+files.push('village.glb', 'village_trees.glb');
+for (const z of zones) files.push(`village_${z}_light.png`);
 // The real sky, straight from the downloaded HDRIs.
 for (const sky of ['day', 'night']) {
   cpSync(join(root, 'assets-src/house/hdri', `${sky}.hdr`), join(built, `sky_${sky}.hdr`));
