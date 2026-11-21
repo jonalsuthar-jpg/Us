@@ -41,6 +41,9 @@ SAMPLES = arg("--samples", 96)
 SIZE = arg("--size", 2048)
 PREVIEW = arg("--preview", False)
 NO_BAKE = arg("--no-bake", False)
+# Bake just this zone's light map and stop (a run per zone needs less GPU memory; the light-map
+# layout comes out the same every run, so a later --no-bake run exports matching meshes).
+ONLY = arg("--zone", "")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SRC = os.path.join(ROOT, "assets-src", "house")
@@ -778,7 +781,7 @@ def bake_zone(zid):
     bpy.ops.object.mode_set(mode="OBJECT")
     for o in objs:
         o.data.uv_layers.active = o.data.uv_layers[0]
-    if NO_BAKE:
+    if NO_BAKE or (ONLY and zid != ONLY):
         return
     img = bpy.data.images.new(f"{zid}_light", SIZE, SIZE, float_buffer=True)
     targets = []
@@ -817,6 +820,9 @@ def bake_zone(zid):
 bpy.ops.object.select_all(action="DESELECT")
 for zid in ZONES:
     bake_zone(zid)
+if ONLY:
+    print(f"[village] baked {ONLY}")
+    sys.exit(0)
 
 # --- one mesh per material per zone, then export --------------------------------------
 

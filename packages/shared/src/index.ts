@@ -57,3 +57,4 @@ export * from './modules';
 export * from './features';
 export * from './api/access';
 export * from './api/admin';
+export * from './api/wallet';

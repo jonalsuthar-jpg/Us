@@ -1,5 +1,6 @@
 'use client';
 
+import { PRICES } from '@us/shared';
 import { Canvas } from '@react-three/fiber';
 import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, nextCameraView, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
 import type * as THREE from 'three';
@@ -265,6 +266,9 @@ export function HouseView() {
         {game.place ? <Chip>{game.place}</Chip> : null}
         {/* The world's clock: a whole day passes in 4 hours. */}
         <Chip>{`${game.worldClock.time} · ${game.worldClock.next}`}</Chip>
+        <button type="button" aria-label={`Our money: ${game.coins} coins`} onClick={() => game.actions.pick('wallet')} className="pointer-events-auto rounded-full bg-gold-500/90 px-3.5 py-2 text-small font-bold text-white hover:bg-gold-500">
+          {`🪙 ${game.coins}`}
+        </button>
       </div>
 
       <div className="pointer-events-none absolute left-4 top-[72px] flex flex-col gap-2">
@@ -422,7 +426,7 @@ export function HouseView() {
                 }}
                 className="shrink-0 rounded-full bg-white/90 px-3.5 py-2 text-small font-medium text-ink hover:bg-white"
               >
-                {a.label}
+                {`${a.label} · ${PRICES[`furniture:${a.model}` as keyof typeof PRICES] ?? 0} 🪙`}
               </button>
             ))}
           </div>

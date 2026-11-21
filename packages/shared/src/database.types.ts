@@ -718,6 +718,18 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      wallets: {
+        Row: { couple_id: string; balance: number; updated_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      wallet_ledger: {
+        Row: { id: number; couple_id: string; user_id: string | null; delta: number; reason: string; ref: string; created_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -787,6 +799,8 @@ export type Database = {
       admin_set_note: { Args: { p_user: string; p_note: string }; Returns: undefined };
       admin_set_admin: { Args: { p_user: string; p_admin: boolean }; Returns: undefined };
       admin_set_feature: { Args: { p_key: string; p_enabled: boolean; p_message?: string | null }; Returns: Database['public']['Tables']['features']['Row'] };
+      earn: { Args: { p_reason: string; p_ref: string }; Returns: Json };
+      spend: { Args: { p_item: string; p_ref: string }; Returns: Json };
       admin_set_config: { Args: { p_key: string; p_value: Json }; Returns: Database['public']['Tables']['app_config']['Row'] };
       admin_stop_feature: { Args: { p_key: string; p_stopped: boolean; p_message?: string | null }; Returns: Database['public']['Tables']['features']['Row'] };
       admin_save_plan: {

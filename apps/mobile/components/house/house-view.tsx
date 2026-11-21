@@ -1,3 +1,4 @@
+import { PRICES } from '@us/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Canvas, events as touchEvents } from '@react-three/fiber/native';
 import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, nextCameraView, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
@@ -206,6 +207,9 @@ export function HouseView() {
         {game.place ? <Chip text={game.place} /> : null}
         {/* The world's clock: a whole day passes in 4 hours. */}
         <Chip text={`${game.worldClock.time} · ${game.worldClock.next}`} />
+        <Pressable accessibilityRole="button" accessibilityLabel={`Our money: ${game.coins} coins`} onPress={() => game.actions.pick('wallet')} className="rounded-full bg-gold-500/90 px-3.5 py-2">
+          <Text className="font-sans-bold text-small text-white">{`🪙 ${game.coins}`}</Text>
+        </Pressable>
       </View>
 
       {/* Left, under it: talk, the speaker, the sound. */}
@@ -637,7 +641,7 @@ function AddPanel({ onAdd, bottom }: { onAdd: (m: (typeof ADDABLE)[number]['mode
       <ScrollView horizontal contentContainerClassName="gap-2 px-3 py-2" className="max-w-[70%] rounded-2xl bg-black/55">
         {ADDABLE.map((a) => (
           <Pressable key={a.model} accessibilityRole="button" onPress={() => onAdd(a.model)} className="rounded-full bg-white/90 px-3.5 py-2 active:bg-white">
-            <Text className="font-sans-medium text-small">{a.label}</Text>
+            <Text className="font-sans-medium text-small">{`${a.label} · ${PRICES[`furniture:${a.model}` as keyof typeof PRICES] ?? 0} 🪙`}</Text>
           </Pressable>
         ))}
       </ScrollView>

@@ -55,6 +55,8 @@ import { FLOOR_H, POOL, regionAt, type RegionId } from '../layout';
 import type { Emote, Pose } from '../presence';
 import type { HouseSound } from '../sound';
 import type { HouseStore } from '../store';
+import { PRICES, walletLineText, walletRef, type Priced, type Reward } from '../../api/wallet';
+import { VILLAGERS, villagerAt } from '../villagers';
 import { DANCE_S, HEART_S } from './avatar';
 import { colour, FunBall, funSphere } from './fun-models';
 import type { HousePhoto } from './items';
@@ -91,6 +93,16 @@ export interface FunHud {
 export type FunCmd = { t: 'fun' } | { t: 'pick'; id: string; text?: string } | { t: 'closePanel' };
 
 /** Letters for each other (sealed time capsules, delivered into the chat on their day). */
+/** Our money (api/wallet.ts): the balance and history, and earning or spending through the server. */
+export interface HouseWallet {
+  balance: number;
+  recent: { delta: number; reason: string; at: string; mine: boolean }[];
+  /** Earn for something done (the server decides how much, once per ref). */
+  earn: (reason: Reward, ref: string) => void;
+  /** Buy something: true when it went through, false when we can't afford it. */
+  spend: (item: Priced, ref: string) => Promise<boolean>;
+}
+
 export interface HouseLetters {
   /** Sealed for me, not yet opened, and when the next one opens. */
   waiting: number;
@@ -121,6 +133,8 @@ export interface FunHost {
   /** Today's birthday or anniversary, if there is one ("Ana’s birthday"). */
   celebrate?: string | null;
   letters?: HouseLetters | null;
+  wallet?: HouseWallet | null;
+  coupleId?: string;
   /** What the house has now (useUnlocked). */
   unlocked: ReadonlySet<string>;
   now: () => number;
@@ -163,6 +177,13 @@ function readGame(v: Record<string, unknown> | null): Game | null {
 }
 
 const GAME_LABEL = { chess: 'Chess', ludo: 'Ludo', ttt: 'Tic-tac-toe' } as const;
+
+/** Where you buy things in the village, from whom, and what. */
+const SHOPS: { keeper: string; x: number; z: number; item: Priced; label: string; done: string }[] = [
+  { keeper: 'baker', x: -10.6, z: 43, item: 'bread', label: 'Buy fresh bread', done: 'Warm bread from Asha 🍞' },
+  { keeper: 'barista', x: 20.6, z: 44, item: 'coffee', label: 'Order two coffees', done: 'Two coffees, just how you like them ☕' },
+  { keeper: 'florist', x: -7.0, z: 53, item: 'bouquet', label: 'Buy flowers', done: 'Fresh flowers for the vase at home 💐' },
+];
 
 /** The two players of a game, first one first. */
 function playersOf(g: Game): [string, string] {
@@ -356,6 +377,7 @@ export function useFun(h: FunHost) {
     const w = winnerOf(g);
     if (w) {
       h.moment(`won:${g.at}`, w === 'draw' ? 'A draw' : w === meId ? 'You won! 🏆' : `${partnerName} won`, true);
+      h.wallet?.earn(w === 'draw' ? 'game' : 'game_win', walletRef('game', g.kind, g.at));
       return;
     }
     if (turnOf(before) === meId && turnOf(g) === partnerId && !partnerHere()) h.notify?.('turn');
@@ -489,7 +511,7 @@ export function useFun(h: FunHost) {
           id: p,
           title: `Leave something for ${partnerName}`,
           text: `${partnerName} finds it next time, with a little push.`,
-          options: [opt('leave:flowers', 'Flowers on the table', '💐'), opt('leave:box', 'A gift with a message', '🎁'), opt('leave:lamp', 'Leave the lamp on', '💡'), opt('leave:heart', 'A heart on the door', '❤️')],
+          options: [opt('leave:flowers', `Flowers on the table (${PRICES['gift:flowers']} 🪙)`, '💐'), opt('leave:box', `A gift with a message (${PRICES['gift:box']} 🪙)`, '🎁'), opt('leave:lamp', 'Leave the lamp on', '💡'), opt('leave:heart', 'A heart on the door', '❤️')],
         };
       case 'gift-text':
       case 'lamp-text':
@@ -540,6 +562,15 @@ export function useFun(h: FunHost) {
           options: [opt('close', 'Close')],
         };
       }
+      case 'wallet':
+        return {
+          id: p,
+          title: `Our money: ${h.wallet?.balance ?? 0} 🪙`,
+          text: h.wallet?.recent.length
+            ? h.wallet.recent.slice(0, 12).map((l) => `${walletLineText(l)}${l.mine ? '' : ` (${partnerName})`}`).join('\n')
+            : 'Earn coins by playing games, cooking together, the garden and coming home each day. Spend them in the village and on the house.',
+          options: [opt('close', 'Close')],
+        };
       case 'plant':
         return { id: p, title: 'What shall we plant?', text: 'Water it once a day and it grows. Vegetables go in the kitchen basket.', options: (Object.keys(CROPS) as Crop[]).map((c) => opt(`plant:${c}`, CROPS[c].label, CROPS[c].veg ? '🥕' : '🌷')) };
       default:
@@ -592,7 +623,7 @@ export function useFun(h: FunHost) {
     const shut = () => void (ui.panel = null);
     if (id === 'close') return shut();
     if (id === 'back') return void (ui.panel = ui.panel === 'wish' && ui.scope ? null : 'menu');
-    if (['games', 'dates', 'leave', 'mood', 'photos', 'letter', 'wishes'].includes(id)) {
+    if (['games', 'dates', 'leave', 'mood', 'photos', 'letter', 'wishes', 'wallet'].includes(id)) {
       if (id === 'photos') ui.photo = 0;
       return void (ui.panel = id);
     }
@@ -739,7 +770,17 @@ export function useFun(h: FunHost) {
     // Keep it tidy: opened or wilted ones of mine go.
     for (const { key, g } of gifts) if (g.by === meId && (g.opened || !giftFresh(g, new Date()))) set(key, null);
     if (gifts.filter(({ g }) => g.by === meId && !g.opened).length >= 6) return h.say('That’s a lot of gifts already');
-    set(`gift:${randomId()}`, { kind, by: meId, at: new Date().toISOString(), ...(text ? { text: text.slice(0, 280) } : {}) });
+    const id = randomId();
+    const price = kind === 'flowers' ? 'gift:flowers' : kind === 'box' ? 'gift:box' : null;
+    if (price && h.wallet) {
+      void h.wallet.spend(price, walletRef('gift', id)).then((ok) => (ok ? leaveGiftNow(kind, text, id) : h.say(`Not enough coins (${PRICES[price]} 🪙)`)));
+      return;
+    }
+    leaveGiftNow(kind, text, id);
+  }
+
+  function leaveGiftNow(kind: GiftKind, text: string, id: string) {
+    set(`gift:${id}`, { kind, by: meId, at: new Date().toISOString(), ...(text ? { text: text.slice(0, 280) } : {}) });
     if (kind === 'lamp') set('floor_lamp', { ...(raw('floor_lamp') ?? {}), on: true });
     h.sound?.play('chime', 0.4);
     h.say(`Left for ${partnerName}`);
@@ -815,6 +856,7 @@ export function useFun(h: FunHost) {
           ui.panel = 'treasure-open';
           h.sound?.play('pop', 0.6);
           h.moment(`found:${treasure.at}`, 'Treasure found!');
+          h.wallet?.earn('treasure', walletRef('treasure', treasure.at));
           setTimeout(() => set(TREASURE_KEY, null), 30_000);
         },
       };
@@ -836,6 +878,22 @@ export function useFun(h: FunHost) {
           };
         }
       }
+    }
+
+    for (const shop of SHOPS) {
+      const keeper = VILLAGERS.find((v) => v.id === shop.keeper);
+      if (!keeper || !close(shop.x, 0, shop.z, 1.8) || !villagerAt(keeper, Date.now(), h.coupleId)) continue;
+      return {
+        label: `${shop.label} (${PRICES[shop.item]} 🪙)`,
+        run: () => {
+          if (!h.wallet) return;
+          void h.wallet.spend(shop.item, walletRef(shop.item, meId, Date.now())).then((ok) => {
+            if (!ok) return h.say(`Not enough coins (${PRICES[shop.item]} 🪙)`);
+            h.sound?.play('chime', 0.4);
+            h.moment(`buy:${shop.item}:${Date.now()}`, shop.done, partnerHere());
+          });
+        },
+      };
     }
 
     for (const it of fresh()) {
@@ -864,6 +922,7 @@ export function useFun(h: FunHost) {
           run: () => {
             set(it.key, null);
             if (CROPS[crop].veg) set(BASKET_KEY, { n: basket() + 1 });
+            h.wallet?.earn('harvest', walletRef('harvest', it.key, today()));
             h.moment(`pick:${it.key}:${Date.now()}`, CROPS[crop].veg ? `${CROPS[crop].label} for the kitchen` : `${CROPS[crop].label} for the vase`);
           },
         };
@@ -912,7 +971,10 @@ export function useFun(h: FunHost) {
     const n = th.n + 1;
     set(THROW_KEY, { ...th, caught: meId, n } as unknown as Record<string, unknown>);
     h.sound?.play('catch', 0.8);
-    if (n >= 3) h.moment(`catch:${n}`, `${n} catches in a row!`, n % 5 === 0);
+    if (n >= 3) {
+      h.moment(`catch:${n}`, `${n} catches in a row!`, n % 5 === 0);
+      h.wallet?.earn('catch', walletRef('catch', th.at));
+    }
     else h.say('Caught it!');
   }
 
@@ -1066,6 +1128,7 @@ export function useFun(h: FunHost) {
       set('pendant', { ...(raw('pendant') ?? {}), on: false });
       if (basket()) set(BASKET_KEY, { n: basket() - 1 });
       h.moment(`dinner:${d.at}`, `${RECIPES[d.recipe].label} by candlelight 🕯️`);
+      h.wallet?.earn('dinner', walletRef('dinner', d.at));
     } else {
       set(DINNER_KEY, { ...next } as unknown as Record<string, unknown>);
       h.say(partnerHere() ? `${partnerName}’s turn: ${RECIPES[d.recipe].steps[next.step]!.toLowerCase()}` : `Next: ${RECIPES[d.recipe].steps[next.step]!.toLowerCase()}`);

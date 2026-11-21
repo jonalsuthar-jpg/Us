@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CAPSULE_TOPIC, capsuleProblem, capsulesWaiting, sealCapsule } from '../api/capsules';
 import { notifyPartner } from '../api/push';
+import { earn, getWallet, spend, WALLET_TOPIC, walletLineText, walletRef, type Wallet } from '../api/wallet';
 import { listCountdowns, upcoming } from '../api/together';
 import { useCallManager, useCallState } from '../react/call-provider';
 import { useChatKey } from '../react/chat-key-provider';
@@ -10,7 +11,7 @@ import { avatarKey, MUSIC_KEY, NOTE_KEY, SKY_KEY, type ItemModel, type LookState
 import { formatWorldTime, isNight, untilWorld, worldHours } from './sky';
 import type { Emote, Together } from './presence';
 import { LOOKS } from './scene/avatar';
-import type { HouseLetters } from './scene/fun';
+import type { HouseLetters, HouseWallet } from './scene/fun';
 import { createControls, nextCameraView, setView, type CameraView, type HouseControls, type HudState, type WorldProps } from './scene/world';
 import { useHouse, useHouseItems, useHousePhotos } from './use-house';
 
@@ -195,6 +196,47 @@ export function useHouseGame() {
     [waiting, sealer, sb, couple.id, me.id, channel],
   );
 
+  // Our money: loaded here, kept fresh when my partner earns or spends, a bonus for coming home each day.
+  const [purse, setPurse] = useState<Wallet>({ balance: 0, recent: [] });
+  const loadWallet = useCallback(() => void getWallet(sb, me.id).then(setPurse).catch(() => {}), [sb, me.id]);
+  useEffect(loadWallet, [loadWallet]);
+  useEffect(() => channel.changes.on((e) => void (e.topic === WALLET_TOPIC && loadWallet())), [channel, loadWallet]);
+  const wallet: HouseWallet = useMemo(
+    () => ({
+      balance: purse.balance,
+      recent: purse.recent,
+      earn: (reason, ref) =>
+        void earn(sb, reason, ref)
+          .then((r) => {
+            if (!r.added) return;
+            setPurse((w) => ({ ...w, balance: r.balance }));
+            onMoment(`+${r.added} 🪙 ${walletLineText({ reason, delta: r.added }).replace(/ \+\d+$/, '').toLowerCase()}`);
+            channel.sendChanged(WALLET_TOPIC);
+            loadWallet();
+          })
+          .catch(() => {}),
+      spend: async (item, ref) => {
+        try {
+          const r = await spend(sb, item, ref);
+          setPurse((w) => ({ ...w, balance: r.balance }));
+          channel.sendChanged(WALLET_TOPIC);
+          loadWallet();
+          return true;
+        } catch {
+          return false;
+        }
+      },
+    }),
+    [purse, sb, channel, loadWallet, onMoment],
+  );
+  const welcomed = useRef(false);
+  useEffect(() => {
+    if (welcomed.current) return;
+    welcomed.current = true;
+    const d = new Date();
+    wallet.earn('daily', walletRef('daily', me.id, `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`));
+  }, [wallet, me.id]);
+
   const setLook = useCallback((patch: Partial<LookState>) => store?.set(myKey, { ...mine, ...patch }), [store, myKey, mine]);
   // No look of mine saved yet, once we know: the house invites me to make one.
   const needsLook = !!store?.loaded && !store.look(myKey);
@@ -222,9 +264,10 @@ export function useHouseGame() {
     celebrate,
     letters,
     notify,
+    wallet,
   };
 
-  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, bubbleHidden, worldClock, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
+  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, bubbleHidden, worldClock, coins: purse.balance, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
 }
 
 export type HouseGame = ReturnType<typeof useHouseGame>;

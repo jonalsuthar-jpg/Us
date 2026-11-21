@@ -30,7 +30,8 @@ import { isNight, skyAt, weatherFor, worldHours, type Weather } from '../sky';
 import { LOOPS, MUSIC_S, nearness, stepSound, type HouseSound } from '../sound';
 import type { HouseStore } from '../store';
 import { Avatar, bodyAct, DANCE_S, HEART_S, newMotion, WAVE_S, type AvatarRig } from './avatar';
-import { useFun, useUnlocked, withMailbox, type FunCmd, type FunHud, type HouseLetters } from './fun';
+import { useFun, useUnlocked, withMailbox, type FunCmd, type FunHud, type HouseLetters, type HouseWallet } from './fun';
+import { PRICES, walletRef } from '../../api/wallet';
 import { RealAvatar } from './avatar-real';
 import { Items, type HousePhoto } from './items';
 import { LightPool, LightPools, lightSources, poolSize } from './lights';
@@ -47,7 +48,7 @@ export type HouseCmd =
   | { t: 'rotate'; by: number }
   | { t: 'paint'; color: string }
   | { t: 'remove' }
-  | { t: 'add'; model: ItemModel }
+  | { t: 'add'; model: ItemModel; paid?: boolean }
   | { t: 'deselect' }
   /** Walk to a spot (through doors and up stairs), then use the thing there if given. */
   | { t: 'walkTo'; x: number; y: number; z: number; use?: string }
@@ -189,6 +190,8 @@ export interface WorldProps {
   letters?: HouseLetters | null;
   /** Tell my partner, with a push, when they're not here. */
   notify?: (event: 'gift' | 'turn' | 'in' | 'letter') => void;
+  /** Our money: earning and spending in the house and the village. */
+  wallet?: HouseWallet | null;
   /** On a call: how loud each of us is (0…1), kept current by the caller. */
   voice?: { me: number; them: number };
   /** On a call: how loud (0…1) and from which side (-1 left … 1 right) my partner's voice should be, from where they stand. */
@@ -252,7 +255,7 @@ interface Me {
 
 /** The house, the two of us, the things in it and the camera. Goes inside a Canvas. */
 export function HouseWorld(props: WorldProps) {
-  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl, coupleId, sound, talking, capture, pairedAt, celebrate, letters, notify, voice, onVoice, tvVideo } = props;
+  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl, coupleId, sound, talking, capture, pairedAt, celebrate, letters, notify, voice, onVoice, tvVideo, wallet } = props;
   const { gl, scene, camera, invalidate } = useThree();
   const mats = useMemo(() => makeMaterials(quality), [quality]);
   useEffect(() => () => mats.dispose(), [mats]);
@@ -499,6 +502,7 @@ export function HouseWorld(props: WorldProps) {
     if (hearts) {
       me.motion.heart = HEART_S;
       them.motion.heart = HEART_S;
+      if (them.shown) wallet?.earn('together', walletRef('together', id));
     }
   };
 
@@ -523,6 +527,8 @@ export function HouseWorld(props: WorldProps) {
     pairedAt,
     celebrate,
     letters,
+    wallet,
+    coupleId,
     unlocked,
     now: () => clock.elapsedTime,
     say: (text) => onMoment?.(text),
@@ -1320,6 +1326,14 @@ export function HouseWorld(props: WorldProps) {
       case 'add': {
         const count = fresh().filter((i) => i.key.startsWith('add:')).length;
         if (count >= 24) return onMoment?.('The house is full');
+        const item = `furniture:${cmd.model}` as keyof typeof PRICES;
+        if (wallet && item in PRICES && !cmd.paid) {
+          void wallet.spend(item, walletRef('furniture', cmd.model, Date.now())).then((ok) => {
+            if (ok) controls.cmds.push({ ...cmd, paid: true });
+            else onMoment?.(`Not enough coins (${PRICES[item]} 🪙)`);
+          });
+          return;
+        }
         const key = addedKey(cmd.model, Math.random().toString(36).slice(2, 10));
         const x = me.pos.x + Math.sin(me.heading) * 1.3;
         const z = me.pos.z + Math.cos(me.heading) * 1.3;
