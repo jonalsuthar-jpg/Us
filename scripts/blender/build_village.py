@@ -914,12 +914,6 @@ def bake_zone(zid):
         m.node_tree.nodes.remove(uvn)
 
 
-bpy.ops.object.select_all(action="DESELECT")
-for zid in ZONES:
-    bake_zone(zid)
-if ONLY:
-    print(f"[village] baked {ONLY}")
-    sys.exit(0)
 
 # --- one mesh per material per zone, then export --------------------------------------
 
@@ -944,6 +938,18 @@ def merge_zone(zid):
         o["baked"] = 1 if is_baked else 0
         merged.append(o)
     PARTS[zid] = merged
+
+
+# Merge first, then bake: Cycles bakes one object at a time, so a few dozen merged meshes per
+# zone bake in minutes where thousands of little pieces took hours.
+for zid in ZONES:
+    merge_zone(zid)
+bpy.ops.object.select_all(action="DESELECT")
+for zid in ZONES:
+    bake_zone(zid)
+if ONLY:
+    print(f"[village] baked {ONLY}")
+    sys.exit(0)
 
 
 for img in bpy.data.images:
