@@ -9,34 +9,34 @@ import type { UsClient } from '../supabase';
 
 /** What things pay, and how many times a day. */
 export const REWARDS = {
-  daily: { amount: 25, perDay: 2 },
-  together: { amount: 20, perDay: 3 },
-  game: { amount: 15, perDay: 8 },
-  game_win: { amount: 30, perDay: 8 },
-  dinner: { amount: 40, perDay: 3 },
-  harvest: { amount: 20, perDay: 6 },
-  catch: { amount: 5, perDay: 10 },
-  treasure: { amount: 25, perDay: 3 },
-  fish: { amount: 10, perDay: 8 },
-  shells: { amount: 5, perDay: 8 },
+  daily: { amount: 250, perDay: 2 },
+  together: { amount: 200, perDay: 3 },
+  game: { amount: 150, perDay: 8 },
+  game_win: { amount: 300, perDay: 8 },
+  dinner: { amount: 400, perDay: 3 },
+  harvest: { amount: 200, perDay: 6 },
+  catch: { amount: 50, perDay: 10 },
+  treasure: { amount: 250, perDay: 3 },
+  fish: { amount: 100, perDay: 8 },
+  shells: { amount: 50, perDay: 8 },
 } as const;
 export type Reward = keyof typeof REWARDS;
 
 /** What things cost. */
 export const PRICES = {
-  'gift:flowers': 20,
-  'gift:box': 30,
-  bread: 8,
-  coffee: 12,
-  bouquet: 25,
-  'furniture:plantPot': 25,
-  'furniture:armchair': 60,
-  'furniture:beanbag': 45,
-  'furniture:floorLamp': 40,
-  'furniture:rug': 50,
-  'furniture:bookshelf': 70,
-  'furniture:coffeeTable': 35,
-  bus_ticket: 15,
+  'gift:flowers': 200,
+  'gift:box': 300,
+  bread: 80,
+  coffee: 120,
+  bouquet: 250,
+  'furniture:plantPot': 250,
+  'furniture:armchair': 600,
+  'furniture:beanbag': 450,
+  'furniture:floorLamp': 400,
+  'furniture:rug': 500,
+  'furniture:bookshelf': 700,
+  'furniture:coffeeTable': 350,
+  bus_ticket: 150,
 } as const;
 export type Priced = keyof typeof PRICES;
 
@@ -110,5 +110,14 @@ export function walletLineText(l: Pick<WalletLine, 'reason' | 'delta'>): string 
     'spend:furniture': 'Furniture',
     'spend:bus_ticket': 'Bus tickets',
   };
-  return `${words[l.reason] ?? l.reason} ${l.delta > 0 ? '+' : '−'}${Math.abs(l.delta)}`;
+  return `${words[l.reason] ?? l.reason} ${l.delta > 0 ? '+' : '−'}${formatRupees(Math.abs(l.delta))}`;
+}
+
+/** Money as it's written in India: ₹1,250 (₹1,25,000 past a lakh). */
+export function formatRupees(n: number): string {
+  const sign = n < 0 ? '−' : '';
+  const digits = String(Math.round(Math.abs(n)));
+  const last = digits.slice(-3);
+  const rest = digits.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  return `${sign}₹${rest ? `${rest},${last}` : last}`;
 }

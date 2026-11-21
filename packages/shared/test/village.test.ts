@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findPath, floorY, OBSTACLES, region, regionAt, REGIONS, walkStep, type RegionId } from '../src/house/layout';
-import { BENCHES, BUILDINGS, CAFE_TABLES, FOUNTAIN, LAMPS, POND, TREES, VILLAGE_PORTALS, VILLAGE_REGIONS, ZONES } from '../src/house/village';
+import { BENCHES, BUILDINGS, CAFE_TABLES, FOUNTAIN, GO_TO, LAMPS, POND, TREES, VILLAGE_PORTALS, VILLAGE_REGIONS, ZONES } from '../src/house/village';
 
 const inRect = (r: { x0: number; x1: number; z0: number; z1: number }, x: number, z: number, pad = 0) => x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad;
 
@@ -200,6 +200,18 @@ describe('the village: the boat and the shells', () => {
     for (const [x, z] of shellsOn(5)) {
       expect(inRect(LAKE.shells, x, z)).toBe(true);
       expect(regionAt(x, 0, z)?.id).toBe('beach');
+    }
+  });
+});
+
+describe('the village: go to…', () => {
+  it('every place can be walked to from home, and its spot is clear', () => {
+    for (const g of GO_TO) {
+      const r = regionAt(g.x, g.y + 0.1, g.z);
+      expect(r, g.id).not.toBeNull();
+      expect(Math.abs(floorY(r!.id, g.x) - g.y), g.id).toBeLessThan(0.5);
+      for (const [x, z, rad] of OBSTACLES) expect(Math.hypot(x - g.x, z - g.z), `${g.id} hits an obstacle`).toBeGreaterThan(rad + 0.3);
+      if (r!.id !== 'living') expect(findPath('living', { region: r!.id, x: g.x, z: g.z }).length, g.id).toBeGreaterThan(0);
     }
   });
 });

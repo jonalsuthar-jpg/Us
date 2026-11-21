@@ -1,11 +1,11 @@
 'use client';
 
-import { PRICES } from '@us/shared';
+import { formatRupees, PRICES } from '@us/shared';
 import { Canvas } from '@react-three/fiber';
 import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, nextCameraView, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
 import type * as THREE from 'three';
 import { webHouseSound } from '@/lib/house-sound';
-import { Aperture, Check, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Video, VideoOff, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react';
+import { Aperture, Check, Ellipsis, Gauge, Hand, Heart, House, Maximize, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Video, VideoOff, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { housePackBase } from '@us/shared/house/light';
 import { setCallVoiceVolume, useCouple } from '@us/shared/react';
 import { useRouter } from 'next/navigation';
@@ -80,7 +80,7 @@ export function HouseView() {
   const box = useRef<HTMLDivElement>(null);
   const [quality, setQuality] = useState<Quality>(savedQuality);
   const [visible, setVisible] = useState(true);
-  const [panel, setPanel] = useState<'look' | 'add' | 'note' | null>(null);
+  const [panel, setPanel] = useState<'look' | 'add' | 'note' | 'more' | null>(null);
   const [touch, setTouch] = useState(false);
   // Their voice goes back to full when we stop talking or leave.
   useEffect(() => {
@@ -259,18 +259,17 @@ export function HouseView() {
 
       {touch ? <Joystick game={game} /> : null}
 
-      <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-3">
-        <HudButton label="Leave the house" onClick={() => router.back()}>
+      {/* Top left: out, then where I am and the world's time (click it: how long till night). */}
+      <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2">
+        <HudButton label="Back to the app" onClick={() => router.back()}>
           <X size={22} />
         </HudButton>
-        {game.place ? <Chip>{game.place}</Chip> : null}
-        {/* The world's clock: a whole day passes in 4 hours. */}
-        <Chip>{`${game.worldClock.time} · ${game.worldClock.next}`}</Chip>
-        <button type="button" aria-label={`Our money: ${game.coins} coins`} onClick={() => game.actions.pick('wallet')} className="pointer-events-auto rounded-full bg-gold-500/90 px-3.5 py-2 text-small font-bold text-white hover:bg-gold-500">
-          {`🪙 ${game.coins}`}
+        <button type="button" title={game.worldClock.next} onClick={() => game.say(game.worldClock.next)} className="pointer-events-auto rounded-full bg-black/35 px-3.5 py-2 text-small font-medium text-white backdrop-blur-sm hover:bg-black/50">
+          {`${game.place ? `${game.place} · ` : ''}${game.worldClock.night ? '🌙' : '☀️'} ${game.worldClock.time}`}
         </button>
       </div>
 
+      {/* Left, under it: things to do and talking (the camera while we talk). */}
       <div className="pointer-events-none absolute left-4 top-[72px] flex flex-col gap-2">
         <HudButton label="Things to do together (T)" onClick={game.actions.fun} on={!!hud.fun.panel && !hud.fun.panel.side}>
           <Sparkles size={18} />
@@ -283,50 +282,88 @@ export function HouseView() {
             {game.myVideo ? <Video size={18} /> : <VideoOff size={18} />}
           </HudButton>
         ) : null}
-        <HudButton label={game.music ? 'Turn the speaker off' : 'Play the speaker'} onClick={game.toggleMusic} on={game.music}>
-          <Radio size={18} />
-        </HudButton>
-        <HudButton label={muted ? 'Sound on' : 'Sound off'} onClick={toggleMute}>
-          {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-        </HudButton>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-4 flex flex-col items-center gap-2">
+      {/* Middle, under the top row: where my partner is, then anything going on. */}
+      <div className="pointer-events-none absolute inset-x-0 top-[72px] flex flex-col items-center gap-2">
         <Chip>
           <span className={game.partnerPlace ? 'h-2 w-2 rounded-full bg-sage-400' : 'h-2 w-2 rounded-full bg-white/50'} />
-          {game.partnerPlace ? `${game.partnerName} · ${game.partnerPlace}${hud.fun.partnerMood ? ` · ${hud.fun.partnerMood}` : ''}` : `${game.partnerName} isn’t in the house`}
+          {game.partnerPlace ? `${game.partnerName} · ${game.partnerPlace}${hud.fun.partnerMood ? ` · ${hud.fun.partnerMood}` : ''}` : `${game.partnerName} isn’t here right now`}
         </Chip>
-        {hud.fun.banner ? <span className="rounded-full bg-gold-500/90 px-4 py-2 text-small font-bold text-white">{hud.fun.banner}</span> : null}
+        {hud.fun.banner ? <span className="max-w-[60%] rounded-full bg-gold-500/90 px-4 py-2 text-center text-small font-bold text-white">{hud.fun.banner}</span> : null}
         {game.decorate ? <Chip>{hud.selected ? 'Use WASD to slide it' : 'Click something to move it'}</Chip> : null}
-        {game.moment ? <span className="rounded-full bg-rose-600/90 px-4 py-2 text-small font-bold text-white">{game.moment}</span> : null}
+        {game.moment ? <span className="max-w-[60%] rounded-full bg-rose-600/90 px-4 py-2 text-center text-small font-bold text-white">{game.moment}</span> : null}
       </div>
 
-      <div className="pointer-events-none absolute right-4 top-4 flex gap-2">
+      {/* Top right: our money, the camera, and the rest in a menu. */}
+      <div className="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+        <button type="button" aria-label={`Our money: ${formatRupees(game.coins)}`} onClick={() => game.actions.pick('wallet')} className="pointer-events-auto rounded-full bg-gold-500/90 px-3.5 py-2 text-small font-bold text-white hover:bg-gold-500">
+          {formatRupees(game.coins)}
+        </button>
         <HudButton label={`Camera: ${CAMERA_LABEL[game.view]}. Click for the next view (C)`} onClick={nextView}>
           <span className="flex flex-col items-center leading-none">
             <SwitchCamera size={17} />
             <span className="text-[8px]">{CAMERA_LABEL[game.view]}</span>
           </span>
         </HudButton>
-        <HudButton label={game.night ? 'Make it day' : 'Make it night'} onClick={game.toggleNight}>
-          {game.night ? <Sun size={20} /> : <Moon size={20} />}
-        </HudButton>
-        <HudButton label={game.decorate ? 'Done decorating' : 'Decorate'} onClick={() => game.setDecorate(!game.decorate)} on={game.decorate}>
-          <Paintbrush size={20} />
-        </HudButton>
-        <HudButton label="Take a photo (saved to Memories)" onClick={actions.photo}>
-          <Aperture size={19} />
-        </HudButton>
-        <HudButton label="My look" onClick={() => setPanel(panel === 'look' ? null : 'look')} on={panel === 'look'}>
-          <Shirt size={20} />
-        </HudButton>
-        <HudButton label={`Picture: ${QUALITY_LABEL[quality]}. Click to change`} onClick={() => chooseQuality(QUALITIES[(QUALITIES.indexOf(quality) + 1) % QUALITIES.length]!)}>
-          <Gauge size={18} />
-        </HudButton>
-        <HudButton label="Full screen" onClick={() => void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {})}>
-          <Maximize size={18} />
+        <HudButton label="More" onClick={() => setPanel(panel === 'more' ? null : 'more')} on={panel === 'more'}>
+          <Ellipsis size={20} />
         </HudButton>
       </div>
+
+      {panel === 'more' ? (
+        <div className="absolute right-4 top-[72px] flex w-60 flex-col gap-1 rounded-2xl bg-black/75 p-2 backdrop-blur-sm" onPointerDown={(e) => e.stopPropagation()}>
+          <MoreRow
+            label={game.night ? 'Make it day' : 'Make it night'}
+            onClick={() => {
+              game.toggleNight();
+              setPanel(null);
+            }}
+          >
+            {game.night ? <Sun size={18} /> : <Moon size={18} />}
+          </MoreRow>
+          <MoreRow
+            label={game.decorate ? 'Done decorating' : 'Decorate'}
+            on={game.decorate}
+            onClick={() => {
+              game.setDecorate(!game.decorate);
+              setPanel(null);
+            }}
+          >
+            <Paintbrush size={18} />
+          </MoreRow>
+          <MoreRow
+            label="Take a photo"
+            onClick={() => {
+              setPanel(null);
+              actions.photo();
+            }}
+          >
+            <Aperture size={18} />
+          </MoreRow>
+          <MoreRow label="My look" onClick={() => setPanel('look')}>
+            <Shirt size={18} />
+          </MoreRow>
+          <MoreRow label={game.music ? 'Speaker: on' : 'Speaker: off'} on={game.music} onClick={game.toggleMusic}>
+            <Radio size={18} />
+          </MoreRow>
+          <MoreRow label={muted ? 'Sound: off' : 'Sound: on'} on={!muted} onClick={toggleMute}>
+            {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </MoreRow>
+          <MoreRow label={`Picture: ${QUALITY_LABEL[quality]}`} onClick={() => chooseQuality(QUALITIES[(QUALITIES.indexOf(quality) + 1) % QUALITIES.length]!)}>
+            <Gauge size={18} />
+          </MoreRow>
+          <MoreRow
+            label="Full screen"
+            onClick={() => {
+              setPanel(null);
+              void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
+            }}
+          >
+            <Maximize size={18} />
+          </MoreRow>
+        </div>
+      ) : null}
 
       <div className="pointer-events-none absolute bottom-4 right-4 flex items-end gap-3">
         {game.decorate ? (
@@ -426,7 +463,7 @@ export function HouseView() {
                 }}
                 className="shrink-0 rounded-full bg-white/90 px-3.5 py-2 text-small font-medium text-ink hover:bg-white"
               >
-                {`${a.label} · ${PRICES[`furniture:${a.model}` as keyof typeof PRICES] ?? 0} 🪙`}
+                {`${a.label} · ${formatRupees(PRICES[`furniture:${a.model}` as keyof typeof PRICES] ?? 0)}`}
               </button>
             ))}
           </div>
@@ -649,6 +686,16 @@ function useHousePackUrl(): string | undefined {
     };
   }, [sb]);
   return url;
+}
+
+/** A line in the ⋯ menu: an icon and what it does (lit when it's on). */
+function MoreRow({ label, onClick, children, on }: { label: string; onClick: () => void; children: ReactNode; on?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-small font-medium text-white', on ? 'bg-rose-600/80 hover:bg-rose-700' : 'hover:bg-white/15')}>
+      {children}
+      {label}
+    </button>
+  );
 }
 
 function Chip({ children }: { children: ReactNode }) {

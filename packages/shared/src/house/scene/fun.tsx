@@ -53,11 +53,11 @@ import {
 import { DISH_KEY, isOn, MUSIC_KEY, placeItems, restingY, today, type PlacedItem } from '../items';
 import { FLOOR_H, POOL, regionAt, type RegionId } from '../layout';
 import { WORLD_DAY_MS, worldHours } from '../sky';
-import { TEMPLE } from '../village';
+import { GO_TO, TEMPLE } from '../village';
 import type { Emote, Pose } from '../presence';
 import type { HouseSound } from '../sound';
 import type { HouseStore } from '../store';
-import { PRICES, walletLineText, walletRef, type Priced, type Reward } from '../../api/wallet';
+import { formatRupees, PRICES, walletLineText, walletRef, type Priced, type Reward } from '../../api/wallet';
 import { VILLAGERS, villagerAt } from '../villagers';
 import { DANCE_S, HEART_S } from './avatar';
 import { colour, FunBall, FunFlames, funSphere, Near } from './fun-models';
@@ -164,6 +164,11 @@ const BASKET_KEY = 'basket';
 const moodKey = (id: string) => `mood:${id.toLowerCase()}`;
 const NEAR = 1.3;
 const DATE_H = 3;
+/** An unfinished dinner is forgotten after this many hours; an unfound treasure after this many days. */
+const DINNER_H = 3;
+const TREASURE_DAYS = 2;
+/** The end of hide and seek shows this long, then the game is cleared. */
+const SEEK_END_S = 8;
 
 type Game = { kind: 'chess'; s: ChessGame; at: string } | { kind: 'ludo'; s: Ludo; at: string } | { kind: 'ttt'; s: TicTacToe; at: string };
 type DateOn = { kind: 'movie' | 'picnic'; at: string };
@@ -253,7 +258,7 @@ export function useFun(h: FunHost) {
   const raw = (k: string) => store?.get(k) ?? null;
   const set = (k: string, v: Record<string, unknown> | null) => store?.set(k, v);
 
-  const ui = useRef<{ panel: string | null; photo: number; draft: string; sel: string | null; board: boolean; scope: boolean; rolledAt: number; told: Set<string>; moodAt: number; lastBall: string }>({
+  const ui = useRef<{ panel: string | null; photo: number; draft: string; sel: string | null; board: boolean; scope: boolean; rolledAt: number; told: Set<string>; moodAt: number; lastBall: string; moodShown: string; cosy: string; hunting: string; foundText: string; seekDone: Record<string, number>; dinnerTurn: string }>({
     panel: null,
     photo: 0,
     draft: '',
@@ -264,6 +269,12 @@ export function useFun(h: FunHost) {
     told: new Set(),
     moodAt: 0,
     lastBall: '',
+    moodShown: '',
+    cosy: '',
+    hunting: '',
+    foundText: '',
+    seekDone: {},
+    dinnerTurn: '',
   }).current;
   const boardGroup = useRef<THREE.Group>(null);
   const bellSwing = useRef(0);
@@ -277,14 +288,18 @@ export function useFun(h: FunHost) {
   };
   const readTreasure = (): Treasure | null => {
     const v = raw(TREASURE_KEY);
-    return v && isStr(v.by) && num(v.x) && num(v.y) && num(v.z) && isStr(v.at) ? ({ text: '', ...v } as unknown as Treasure) : null;
+    if (!(v && isStr(v.by) && num(v.x) && num(v.y) && num(v.z) && isStr(v.at))) return null;
+    return Date.now() - Date.parse(v.at) < TREASURE_DAYS * 86_400_000 ? ({ text: '', ...v } as unknown as Treasure) : null;
   };
   const game = readGame(raw(GAME_KEY));
   const seek = readSeek();
   const treasure = readTreasure();
   const readDinner = (): (Dinner & { at: string; done?: boolean }) | null => {
     const v = raw(DINNER_KEY);
-    return v && isStr(v.recipe) && v.recipe in RECIPES && num(v.step) && isStr(v.first) && isStr(v.second) && isStr(v.at) ? (v as unknown as Dinner & { at: string }) : null;
+    if (!(v && isStr(v.recipe) && v.recipe in RECIPES && num(v.step) && isStr(v.first) && isStr(v.second) && isStr(v.at))) return null;
+    // Left unfinished for hours: forgotten (a finished one stays, for the candles).
+    if (v.done !== true && Date.now() - Date.parse(v.at) > DINNER_H * 3600_000) return null;
+    return v as unknown as Dinner & { at: string };
   };
   const dinner = readDinner();
   const dateOn = ((): DateOn | null => {
@@ -466,6 +481,7 @@ export function useFun(h: FunHost) {
           title: 'Things to do together',
           text: next ? `Coming to the house: ${next.label.toLowerCase()} in ${next.inDays} ${next.inDays === 1 ? 'day' : 'days'}` : undefined,
           options: [
+            opt('goto', 'Go to…', '🧭'),
             opt('games', 'Play a game', '🎲'),
             opt('dates', 'A date', '🕯️'),
             opt('leave', `Leave something for ${partnerName}`, '🎁'),
@@ -475,6 +491,8 @@ export function useFun(h: FunHost) {
             ...(wishes.length ? [opt('wishes', 'Our wishes', '🌠')] : []),
           ],
         };
+      case 'goto':
+        return { id: p, title: 'Go to…', text: 'Walks you there by the paths. Touch the stick to stop.', options: [...GO_TO.map((g) => opt(`go:${g.id}`, g.label, g.emoji)), opt('back', 'Back')] };
       case 'games':
         return {
           id: p,
@@ -486,6 +504,7 @@ export function useFun(h: FunHost) {
             opt('ludo', 'Ludo', '🎲'),
             opt('ttt', 'Tic-tac-toe', '⭕'),
             opt('seek', `Hide and seek (you hide)`, '🙈'),
+            ...(treasure && treasure.by !== meId ? [opt('hunt', ui.hunting === treasure.at ? 'Stop looking for the treasure' : `Look for ${partnerName}’s treasure`, '🔎')] : []),
             opt('treasure', treasure?.by === meId ? 'Move your treasure here' : 'Hide a treasure here', '🗺️'),
             opt('ball', 'Throw the ball', '⚽'),
           ],
@@ -524,7 +543,7 @@ export function useFun(h: FunHost) {
           id: p,
           title: `Leave something for ${partnerName}`,
           text: `${partnerName} finds it next time, with a little push.`,
-          options: [opt('leave:flowers', `Flowers on the table (${PRICES['gift:flowers']} 🪙)`, '💐'), opt('leave:box', `A gift with a message (${PRICES['gift:box']} 🪙)`, '🎁'), opt('leave:lamp', 'Leave the lamp on', '💡'), opt('leave:heart', 'A heart on the door', '❤️')],
+          options: [opt('leave:flowers', `Flowers on the table (${formatRupees(PRICES['gift:flowers'])})`, '💐'), opt('leave:box', `A gift with a message (${formatRupees(PRICES['gift:box'])})`, '🎁'), opt('leave:lamp', 'Leave the lamp on', '💡'), opt('leave:heart', 'A heart on the door', '❤️')],
         };
       case 'gift-text':
       case 'lamp-text':
@@ -578,10 +597,10 @@ export function useFun(h: FunHost) {
       case 'wallet':
         return {
           id: p,
-          title: `Our money: ${h.wallet?.balance ?? 0} 🪙`,
+          title: `Our money: ${formatRupees(h.wallet?.balance ?? 0)}`,
           text: h.wallet?.recent.length
             ? h.wallet.recent.slice(0, 12).map((l) => `${walletLineText(l)}${l.mine ? '' : ` (${partnerName})`}`).join('\n')
-            : 'Earn coins by playing games, cooking together, the garden and coming home each day. Spend them in the village and on the house.',
+            : 'Earn money by playing games, cooking together, the garden and coming home each day. Spend them in the village and on the house.',
           options: [opt('close', 'Close')],
         };
       case 'plant':
@@ -593,7 +612,7 @@ export function useFun(h: FunHost) {
           const from = g.by === meId ? 'You' : partnerName;
           return { id: p, title: `${GIFT_LABEL[g.kind]} from ${from}`, text: g.text || (g.kind === 'flowers' ? 'Just because 💐' : g.kind === 'heart' ? '❤️' : g.kind === 'lamp' ? 'Left on for you' : ''), options: [opt('thanks', 'Send a heart back', '❤️'), opt('close', 'Close')] };
         }
-        if (p === 'treasure-open' && treasure) return { id: p, title: `You found ${partnerName}’s treasure!`, text: treasure.text || '✨', options: [opt('close', 'Yay')] };
+        if (p === 'treasure-open') return { id: p, title: `You found ${partnerName}’s treasure!`, text: ui.foundText || '✨', options: [opt('close', 'Yay')] };
         return null;
     }
   }
@@ -637,7 +656,13 @@ export function useFun(h: FunHost) {
     if (outdoors.pick(id, t, ui.panel)) return;
     if (id === 'close') return shut();
     if (id === 'back') return void (ui.panel = ui.panel === 'wish' && ui.scope ? null : 'menu');
-    if (['games', 'dates', 'leave', 'mood', 'photos', 'letter', 'wishes', 'wallet'].includes(id)) {
+    const go = id.startsWith('go:') ? GO_TO.find((g) => g.id === id.slice(3)) : undefined;
+    if (go) {
+      h.walkTo(go.x, go.y, go.z);
+      h.say(`Off to ${go.label === 'Home' ? 'home' : go.label.replace(/^The /, 'the ')}`);
+      return shut();
+    }
+    if (['goto', 'games', 'dates', 'leave', 'mood', 'photos', 'letter', 'wishes', 'wallet'].includes(id)) {
       if (id === 'photos') ui.photo = 0;
       return void (ui.panel = id);
     }
@@ -658,6 +683,11 @@ export function useFun(h: FunHost) {
       return h.say(`Hide! ${partnerName} counts to ${HIDE_S}`);
     }
     if (id === 'treasure') return void (ui.panel = 'treasure-text');
+    if (id === 'hunt' && treasure) {
+      ui.hunting = ui.hunting === treasure.at ? '' : treasure.at;
+      if (ui.hunting) h.say('“Warmer” and “colder” show at the top');
+      return shut();
+    }
     if (id === 'ball') {
       shut();
       const b = item('ball');
@@ -787,7 +817,7 @@ export function useFun(h: FunHost) {
     const id = randomId();
     const price = kind === 'flowers' ? 'gift:flowers' : kind === 'box' ? 'gift:box' : null;
     if (price && h.wallet) {
-      void h.wallet.spend(price, walletRef('gift', id)).then((ok) => (ok ? leaveGiftNow(kind, text, id) : h.say(`Not enough coins (${PRICES[price]} 🪙)`)));
+      void h.wallet.spend(price, walletRef('gift', id)).then((ok) => (ok ? leaveGiftNow(kind, text, id) : h.say(`Not enough money (${formatRupees(PRICES[price])})`)));
       return;
     }
     leaveGiftNow(kind, text, id);
@@ -869,11 +899,13 @@ export function useFun(h: FunHost) {
       return {
         label: 'Open the treasure',
         run: () => {
+          ui.foundText = treasure.text;
+          ui.hunting = '';
           ui.panel = 'treasure-open';
           h.sound?.play('pop', 0.6);
           h.moment(`found:${treasure.at}`, 'Treasure found!');
           h.wallet?.earn('treasure', walletRef('treasure', treasure.at));
-          setTimeout(() => set(TREASURE_KEY, null), 30_000);
+          set(TREASURE_KEY, null);
         },
       };
 
@@ -916,11 +948,11 @@ export function useFun(h: FunHost) {
       const keeper = VILLAGERS.find((v) => v.id === shop.keeper);
       if (!keeper || !close(shop.x, 0, shop.z, 1.8) || !villagerAt(keeper, Date.now(), h.coupleId)) continue;
       return {
-        label: `${shop.label} (${PRICES[shop.item]} 🪙)`,
+        label: `${shop.label} (${formatRupees(PRICES[shop.item])})`,
         run: () => {
           if (!h.wallet) return;
           void h.wallet.spend(shop.item, walletRef(shop.item, meId, Date.now())).then((ok) => {
-            if (!ok) return h.say(`Not enough coins (${PRICES[shop.item]} 🪙)`);
+            if (!ok) return h.say(`Not enough money (${formatRupees(PRICES[shop.item])})`);
             h.sound?.play('chime', 0.4);
             h.moment(`buy:${shop.item}:${Date.now()}`, shop.done, partnerHere());
             // Flowers from the stall go in the vase at home.
@@ -1108,10 +1140,17 @@ export function useFun(h: FunHost) {
       const phase = seekPhase(seek, now);
       const left = Math.max(0, Math.ceil((Date.parse(seek.at) + (phase === 'hide' ? HIDE_S : HIDE_S + SEEK_S) * 1000 - now.getTime()) / 1000));
       if (phase === 'done') {
-        if (Date.now() - Date.parse(seek.at) < (HIDE_S + SEEK_S + 8) * 1000 || seek.found) {
+        // A game that ended long ago (both of us away) is cleared without a word.
+        const long = Date.now() - Date.parse(seek.at) > (HIDE_S + SEEK_S + 60) * 1000;
+        const seen = (ui.seekDone[seek.at] ??= long ? 0 : Date.now());
+        if (Date.now() - seen > SEEK_END_S * 1000) {
+          if (!ui.told.has(`seek-clear:${seek.at}`)) {
+            ui.told.add(`seek-clear:${seek.at}`);
+            set(SEEK_KEY, null);
+          }
+        } else {
           hud.banner = seek.found ? (seek.seeker === meId ? 'Found them! 🎉' : `${partnerName} found you!`) : seek.hider === meId ? 'You win: never found! 🏆' : `${partnerName} wins this time`;
         }
-        if (seek.seeker === meId && Date.now() - Date.parse(seek.at) > (HIDE_S + SEEK_S + 10) * 1000) set(SEEK_KEY, null);
       } else if (seek.seeker === meId) {
         if (phase === 'hide') hud.cover = `Counting… ${left}\n${partnerName} is hiding`;
         else if (p) {
@@ -1121,23 +1160,32 @@ export function useFun(h: FunHost) {
             ui.told.add(`found:${seek.at}`);
             set(SEEK_KEY, { ...seek, found: true } as unknown as Record<string, unknown>);
             h.moment(`seek:${seek.at}`, 'Found you!');
-            setTimeout(() => set(SEEK_KEY, null), 6000);
           }
-        } else hud.banner = `${partnerName} left the house`;
+        } else hud.banner = `${partnerName} left`;
       } else hud.banner = phase === 'hide' ? `Hide! ${left}s` : `${partnerName} is looking… ${left}s`;
     }
 
     // The treasure: warmer, colder.
-    if (!hud.banner && treasure && treasure.by !== meId && !ui.panel) {
+    if (treasure && treasure.by !== meId && !ui.told.has(`treasure:${treasure.at}`)) {
+      ui.told.add(`treasure:${treasure.at}`);
+      h.say(`${partnerName} hid a treasure for you 🗺️ (Things to do → Play)`);
+    }
+    if (!hud.banner && treasure && treasure.by !== meId && ui.hunting === treasure.at && !ui.panel) {
       const d = Math.hypot(treasure.x - h.me.pos.x, treasure.z - h.me.pos.z) + Math.abs(treasure.y - h.me.pos.y) * 2;
-      if (d < 25) hud.banner = `Treasure: ${warmth(d)}`;
+      hud.banner = `Treasure: ${warmth(d)}`;
     }
 
     // Dinner: whose step.
     if (!hud.banner && dinner && !dinner.done) {
       const who = dinnerWho(dinner);
       const step = RECIPES[dinner.recipe].steps[dinner.step];
-      if (step) hud.banner = who === meId || !partnerHere() ? `Your turn at the stove: ${step.toLowerCase()}` : `${partnerName}’s turn: ${step.toLowerCase()}`;
+      const mine = who === meId || !partnerHere();
+      const stove = item('counter');
+      const atStove = h.me.at === 'kitchen' || (!!stove && dist2(stove.x, stove.z) < 4 && Math.abs(stove.y - h.me.pos.y) < 1.5);
+      if (step && atStove) hud.banner = mine ? `Your turn at the stove: ${step.toLowerCase()}` : `${partnerName}’s turn: ${step.toLowerCase()}`;
+      const turn = `${dinner.at}:${dinner.step}`;
+      if (step && mine && !atStove && ui.dinnerTurn !== turn) h.say('Your turn to cook 🍝 (in the kitchen)');
+      ui.dinnerTurn = turn;
     }
 
     // A ball in the air.
@@ -1154,7 +1202,10 @@ export function useFun(h: FunHost) {
     }
 
     // A mood shows a little: every half minute or so.
-    if (myMood && h.now() - ui.moodAt > 28) {
+    const moodNow = myMood ? `${myMood.key}:${partnerHere() ? 'with' : 'alone'}` : '';
+    const moodNew = moodNow !== ui.moodShown;
+    ui.moodShown = moodNow;
+    if (myMood && moodNew) {
       ui.moodAt = h.now();
       if (myMood.key === 'excited' || myMood.key === 'happy') h.emote('dance');
       else if (myMood.key === 'missing' || myMood.key === 'cosy') h.emote('heart');
@@ -1163,9 +1214,12 @@ export function useFun(h: FunHost) {
     // Close together somewhere cosy: hearts.
     const a = p?.a;
     const mine = h.me.seat;
+    const sitting = mine && a && a.split(':')[1] === mine.key ? mine.key : '';
+    if (!sitting) ui.cosy = '';
+    else if (!ui.cosy.startsWith(`${sitting}:`)) ui.cosy = `${sitting}:${Date.now()}`;
     if (mine && a && a.split(':')[1] === mine.key && ['sofa', 'swing', 'hot_tub', 'picnic', 'log_bench', 'bed', 'boat'].includes(mine.key)) {
       const names: Record<string, string> = { sofa: 'Cosy on the sofa', swing: 'On the swing together', hot_tub: 'Hot tub together', picnic: 'A picnic together', log_bench: 'By the fire together', bed: 'Lying together', boat: 'In the boat together' };
-      h.moment(`cosy:${mine.key}:${Math.floor(h.now() / 120)}`, names[mine.key]!);
+      h.moment(`cosy:${ui.cosy}`, names[mine.key]!);
     }
 
     // The aarti: the tune, a conch to begin, a line across the top, while we're at the temple.

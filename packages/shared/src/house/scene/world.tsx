@@ -31,7 +31,7 @@ import { LOOPS, MUSIC_S, nearness, stepSound, type HouseSound } from '../sound';
 import type { HouseStore } from '../store';
 import { Avatar, bodyAct, DANCE_S, HEART_S, newMotion, WAVE_S, type AvatarRig } from './avatar';
 import { useFun, useUnlocked, withMailbox, type FunCmd, type FunHud, type HouseLetters, type HouseWallet } from './fun';
-import { PRICES, walletRef } from '../../api/wallet';
+import { formatRupees, PRICES, walletRef } from '../../api/wallet';
 import { RealAvatar } from './avatar-real';
 import { Items, type HousePhoto } from './items';
 import { LampPosts } from './lamp-posts';
@@ -1353,7 +1353,7 @@ export function HouseWorld(props: WorldProps) {
         if (wallet && item in PRICES && !cmd.paid) {
           void wallet.spend(item, walletRef('furniture', cmd.model, Date.now())).then((ok) => {
             if (ok) controls.cmds.push({ ...cmd, paid: true });
-            else onMoment?.(`Not enough coins (${PRICES[item]} 🪙)`);
+            else onMoment?.(`Not enough money (${formatRupees(PRICES[item])})`);
           });
           return;
         }

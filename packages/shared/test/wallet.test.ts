@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { PRICES, REWARDS, walletLineText, walletRef } from '../src/api/wallet';
+import { formatRupees, PRICES, REWARDS, walletLineText, walletRef } from '../src/api/wallet';
 
 // The migration itself (Node's fs, loaded at run time: the shared package has no Node types).
 const { readFileSync } = (await import('node:fs' as string)) as { readFileSync: (p: URL, enc: 'utf8') => string };
-// The rewards as the latest migration defines them, the prices as the first.
-const sql = readFileSync(new URL('../../../supabase/migrations/20261122000500_wallet.sql', import.meta.url), 'utf8');
-const rewardsSql = readFileSync(new URL('../../../supabase/migrations/20261122000700_wallet_lake.sql', import.meta.url), 'utf8');
+// The rewards and the prices as the latest migration defines them.
+const sql = readFileSync(new URL('../../../supabase/migrations/20261122000800_rupees.sql', import.meta.url), 'utf8');
+const rewardsSql = readFileSync(new URL('../../../supabase/migrations/20261122000800_rupees.sql', import.meta.url), 'utf8');
 
 describe('our money', () => {
   it('shows the same rewards as the server pays', () => {
@@ -25,7 +25,15 @@ describe('our money', () => {
   });
 
   it('says what each line was', () => {
-    expect(walletLineText({ reason: 'dinner', delta: 40 })).toBe('Cooking dinner +40');
-    expect(walletLineText({ reason: 'spend:bread', delta: -8 })).toBe('Bread −8');
+    expect(walletLineText({ reason: 'dinner', delta: 400 })).toBe('Cooking dinner +₹400');
+    expect(walletLineText({ reason: 'spend:bread', delta: -80 })).toBe('Bread −₹80');
+  });
+
+  it('writes money the Indian way', () => {
+    expect(formatRupees(0)).toBe('₹0');
+    expect(formatRupees(120)).toBe('₹120');
+    expect(formatRupees(1250)).toBe('₹1,250');
+    expect(formatRupees(125000)).toBe('₹1,25,000');
+    expect(formatRupees(12345678)).toBe('₹1,23,45,678');
   });
 });

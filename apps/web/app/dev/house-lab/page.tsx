@@ -71,7 +71,7 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
   const [other, setOther] = useState<string | null>(null);
   const [hud, setHud] = useState<HudState | null>(null);
   const [moment, setMoment] = useState('');
-  const [fps, setFps] = useState(0);
+  const [fps, setFps] = useState('');
   return (
     <div
       ref={box}
@@ -118,13 +118,13 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
             setMoment(m);
             setTimeout(() => setMoment(''), 3000);
           }}
-          onFps={(f, calls) => setFps(`${Math.round(f)} · ${calls} calls` as unknown as number)}
+          onFps={(f, calls) => setFps(`${Math.round(f)} fps · ${calls} calls`)}
           houseUrl={houseUrl}
           pairedAt={PAIRED}
         />
       </Canvas>
       <div data-hud={who} className="pointer-events-none absolute left-3 top-3 rounded bg-black/50 px-2 py-1 font-mono text-[12px] text-white">
-        {who.toUpperCase()} · {place} · other: {other ?? '—'} · {fps} fps · action: {hud?.action ?? '—'}
+        {who.toUpperCase()} · {place} · other: {other ?? '—'} · {fps} · action: {hud?.action ?? '—'}
         {hud?.holding ? ` · holding ${hud.holding}` : ''}
         {hud?.selected ? ` · picked ${hud.selected.label}` : ''}
         {moment ? ` · ★ ${moment}` : ''}

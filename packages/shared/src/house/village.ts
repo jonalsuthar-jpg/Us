@@ -304,3 +304,15 @@ export function obstacles(inside: (x: number, z: number) => boolean): [number, n
 
 /** Beyond this distance from me a zone isn't drawn (the haze is thick by then). */
 export const ZONE_DRAW_DISTANCE = 70;
+
+/** Where "Go to…" (Things to do) walks you: a clear spot at each place, on the paths. */
+export const GO_TO: { id: string; label: string; emoji: string; x: number; y: number; z: number }[] = [
+  { id: 'home', label: 'Home', emoji: '🏡', x: -2.5, y: 0, z: 1.5 },
+  { id: 'cafe', label: 'The café', emoji: '☕', x: 14, y: 0, z: 44 },
+  { id: 'bakery', label: 'The bakery', emoji: '🥖', x: -10.5, y: 0, z: 43 },
+  { id: 'park', label: 'The park', emoji: '🦆', x: 42, y: 0, z: 46 },
+  { id: 'temple', label: 'The temple', emoji: '🛕', x: -54, y: 0, z: 48 },
+  { id: 'beach', label: 'The beach', emoji: '🏖️', x: 0, y: 0, z: 92 },
+  { id: 'jetty', label: 'The jetty', emoji: '🚣', x: 19.25, y: 0.3, z: 108 },
+  { id: 'hill', label: 'The hilltop', emoji: '⛰️', x: 82, y: 6, z: 57 },
+];

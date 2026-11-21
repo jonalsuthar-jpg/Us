@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CAPSULE_TOPIC, capsuleProblem, capsulesWaiting, sealCapsule } from '../api/capsules';
 import { notifyPartner } from '../api/push';
-import { earn, getWallet, spend, WALLET_TOPIC, walletLineText, walletRef, type Wallet } from '../api/wallet';
+import { earn, formatRupees, getWallet, spend, WALLET_TOPIC, walletLineText, walletRef, type Wallet } from '../api/wallet';
 import { listCountdowns, upcoming } from '../api/together';
 import { useCallManager, useCallState } from '../react/call-provider';
 import { useChatKey } from '../react/chat-key-provider';
@@ -39,11 +39,26 @@ export function useHouseGame() {
   const [view, setViewState] = useState<HouseControls['view']>('close');
   const momentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const onMoment = useCallback((text: string) => {
-    setMoment(text);
+  // Moments wait their turn (a few at most): each shows at least 2 s, the last one 3.2 s.
+  const queue = useRef<{ list: string[]; now: string | null; at: number }>({ list: [], now: null, at: 0 }).current;
+  const showNext = useCallback(() => {
     if (momentTimer.current) clearTimeout(momentTimer.current);
-    momentTimer.current = setTimeout(() => setMoment(null), 3200);
-  }, []);
+    queue.now = queue.list.shift() ?? null;
+    queue.at = Date.now();
+    setMoment(queue.now);
+    if (queue.now) momentTimer.current = setTimeout(showNext, queue.list.length ? 2000 : 3200);
+  }, [queue]);
+  const onMoment = useCallback(
+    (text: string) => {
+      if (text === queue.now || queue.list.includes(text)) return;
+      queue.list.push(text);
+      if (queue.list.length > 3) queue.list.shift();
+      if (!queue.now) return showNext();
+      if (momentTimer.current) clearTimeout(momentTimer.current);
+      momentTimer.current = setTimeout(showNext, Math.max(0, 2000 - (Date.now() - queue.at)));
+    },
+    [queue, showNext],
+  );
   useEffect(() => () => void (momentTimer.current && clearTimeout(momentTimer.current)), []);
 
   const myKey = avatarKey(me.id);
@@ -60,7 +75,7 @@ export function useHouseGame() {
   const night = isNight(items.get(SKY_KEY), new Date(tick), couple.id);
   const hoursNow = worldHours(tick, couple.id);
   const until = untilWorld(hoursNow);
-  const worldClock = { time: formatWorldTime(hoursNow), next: night ? `Morning in ${Math.ceil(until.dawn)} min` : `Night in ${Math.ceil(until.dusk)} min` };
+  const worldClock = { time: formatWorldTime(hoursNow), night, next: night ? `Morning comes in about ${Math.ceil(until.dawn)} minutes` : `Night falls in about ${Math.ceil(until.dusk)} minutes` };
   const music = items.get(MUSIC_KEY)?.on === true;
   const note = items.get(NOTE_KEY);
   const inCall = call.phase !== 'idle' && call.phase !== 'ended';
@@ -210,7 +225,7 @@ export function useHouseGame() {
           .then((r) => {
             if (!r.added) return;
             setPurse((w) => ({ ...w, balance: r.balance }));
-            onMoment(`+${r.added} 🪙 ${walletLineText({ reason, delta: r.added }).replace(/ \+\d+$/, '').toLowerCase()}`);
+            onMoment(`+${formatRupees(r.added)} · ${walletLineText({ reason, delta: r.added }).replace(/ \+₹[\d,]+$/, '').toLowerCase()}`);
             channel.sendChanged(WALLET_TOPIC);
             loadWallet();
           })
@@ -267,7 +282,7 @@ export function useHouseGame() {
     wallet,
   };
 
-  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, bubbleHidden, worldClock, coins: purse.balance, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
+  return { world, controls, hud, place, partnerPlace, partnerHere, moment, say: onMoment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, bubbleHidden, worldClock, coins: purse.balance, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
 }
 
 export type HouseGame = ReturnType<typeof useHouseGame>;

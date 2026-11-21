@@ -1,4 +1,4 @@
-import { PRICES } from '@us/shared';
+import { formatRupees, PRICES } from '@us/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Canvas, events as touchEvents } from '@react-three/fiber/native';
 import { ADDABLE, CAMERA_LABEL, CAMERA_VIEWS, HAIRS, nextCameraView, HAIRSTYLE_LABEL, HAIRSTYLES, HouseWorld, NOTE_MAX, orbitBy, PAINTS, PANTS, QUALITIES, saveHousePhoto, SHIRTS, SHOES, SKINS, tapAt, TOGETHER, TOGETHER_LABEL, useHouseGame, useHouseLoading, type FunPanel, type HouseGame, type HouseSound, type Quality } from '@us/shared/house';
@@ -7,7 +7,7 @@ import { GLView } from 'expo-gl';
 import { phoneHouseSound } from '@/lib/house-sound';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { Aperture, Check, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Video, VideoOff, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react-native';
+import { Aperture, Check, Ellipsis, Gauge, Hand, Heart, House, Moon, Music, Paintbrush, Phone, PhoneOff, Plus, Radio, RotateCcw, RotateCw, Shirt, Sparkles, StickyNote, Video, VideoOff, Sun, SwitchCamera, Trash2, Volume2, VolumeX, X } from 'lucide-react-native';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Image, PixelRatio, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -77,7 +77,7 @@ export function HouseView() {
   const [quality, setQuality] = useState<Quality | null>(null);
   const [active, setActive] = useState(AppState.currentState === 'active');
   const [fps, setFps] = useState(0);
-  const [panel, setPanel] = useState<'look' | 'add' | 'note' | null>(null);
+  const [panel, setPanel] = useState<'look' | 'add' | 'note' | 'more' | null>(null);
   const [problem, setProblem] = useState<Error | null>(null);
   // Their voice by how far apart we stand (the phone can't place it left or right): the call's own track volume.
   const remote = game.remoteStream;
@@ -199,21 +199,18 @@ export function HouseView() {
 
       <Joystick game={game} left={pad.left + 8} bottom={pad.bottom + 8} />
 
-      {/* Top left: out, and where I am. */}
-      <View className="absolute flex-row items-center gap-3" style={{ left: pad.left, top: pad.top }} pointerEvents="box-none">
-        <Round label="Leave the house" onPress={() => router.back()} size={44}>
+      {/* Top left: out, then where I am and the world's time (tap it: how long till night). */}
+      <View className="absolute flex-row items-center gap-2" style={{ left: pad.left, top: pad.top }} pointerEvents="box-none">
+        <Round label="Back to the app" onPress={() => router.back()} size={44}>
           <X size={22} color="#fff" />
         </Round>
-        {game.place ? <Chip text={game.place} /> : null}
-        {/* The world's clock: a whole day passes in 4 hours. */}
-        <Chip text={`${game.worldClock.time} · ${game.worldClock.next}`} />
-        <Pressable accessibilityRole="button" accessibilityLabel={`Our money: ${game.coins} coins`} onPress={() => game.actions.pick('wallet')} className="rounded-full bg-gold-500/90 px-3.5 py-2">
-          <Text className="font-sans-bold text-small text-white">{`🪙 ${game.coins}`}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${game.place || 'Here'}, ${game.worldClock.time}. ${game.worldClock.next}`} onPress={() => game.say(game.worldClock.next)} className="rounded-full bg-black/35 px-3.5 py-2 active:bg-black/50">
+          <Text className="font-sans-medium text-small text-white" numberOfLines={1}>{`${game.place ? `${game.place} · ` : ''}${game.worldClock.night ? '🌙' : '☀️'} ${game.worldClock.time}`}</Text>
         </Pressable>
       </View>
 
-      {/* Left, under it: talk, the speaker, the sound. */}
-      <View className="absolute gap-2" style={{ left: pad.left, top: pad.top + 56 }} pointerEvents="box-none">
+      {/* Left, under it: things to do and talking (the camera while we talk). */}
+      <View className="absolute gap-2" style={{ left: pad.left, top: pad.top + 54 }} pointerEvents="box-none">
         <Round label="Things to do together" onPress={game.actions.fun} size={44} on={!!hud.fun.panel && !hud.fun.panel.side}>
           <Sparkles size={19} color="#fff" />
         </Round>
@@ -225,57 +222,87 @@ export function HouseView() {
             {game.myVideo ? <Video size={18} color="#fff" /> : <VideoOff size={18} color="#fff" />}
           </Round>
         ) : null}
-        <Round label={game.music ? 'Turn the speaker off' : 'Play the speaker'} onPress={game.toggleMusic} size={44} on={game.music}>
-          <Radio size={18} color="#fff" />
-        </Round>
-        <Round label={muted ? 'Sound on' : 'Sound off'} onPress={toggleMute} size={44}>
-          {muted ? <VolumeX size={18} color="#fff" /> : <Volume2 size={18} color="#fff" />}
-        </Round>
       </View>
 
-      {/* Top middle: where my partner is, then anything we just did together. */}
-      <View className="absolute left-0 right-0 items-center gap-2" style={{ top: pad.top }} pointerEvents="none">
+      {/* Middle, under the top row: where my partner is, then anything going on. */}
+      <View className="absolute left-0 right-0 items-center gap-2" style={{ top: pad.top + 54 }} pointerEvents="none">
         <View className="flex-row items-center gap-2 rounded-full bg-black/35 px-3.5 py-2">
           <View className={game.partnerPlace ? 'h-2 w-2 rounded-full bg-sage-400' : 'h-2 w-2 rounded-full bg-white/50'} />
-          <Text className="text-small text-white">{game.partnerPlace ? `${game.partnerName} · ${game.partnerPlace}${hud.fun.partnerMood ? ` · ${hud.fun.partnerMood}` : ''}` : `${game.partnerName} isn’t in the house`}</Text>
+          <Text className="text-small text-white" numberOfLines={1}>{game.partnerPlace ? `${game.partnerName} · ${game.partnerPlace}${hud.fun.partnerMood ? ` · ${hud.fun.partnerMood}` : ''}` : `${game.partnerName} isn’t here right now`}</Text>
         </View>
         {hud.fun.banner ? (
-          <View className="rounded-full bg-gold-500/90 px-4 py-2">
-            <Text className="font-sans-bold text-small text-white">{hud.fun.banner}</Text>
+          <View className="max-w-[70%] rounded-full bg-gold-500/90 px-4 py-2">
+            <Text className="text-center font-sans-bold text-small text-white">{hud.fun.banner}</Text>
           </View>
         ) : null}
         {game.decorate ? <Chip text={hud.selected ? 'Use the stick to slide it' : 'Tap something to move it'} /> : null}
         {game.moment ? (
-          <View className="rounded-full bg-rose-600/90 px-4 py-2">
-            <Text className="font-sans-bold text-small text-white">{game.moment}</Text>
+          <View className="max-w-[70%] rounded-full bg-rose-600/90 px-4 py-2">
+            <Text className="text-center font-sans-bold text-small text-white">{game.moment}</Text>
           </View>
         ) : null}
       </View>
 
-      {/* Top right: how it looks. */}
-      <View className="absolute flex-row gap-2" style={{ right: pad.right, top: pad.top }} pointerEvents="box-none">
+      {/* Top right: our money, the camera, and the rest in a menu. */}
+      <View className="absolute flex-row items-center gap-2" style={{ right: pad.right, top: pad.top }} pointerEvents="box-none">
+        <Pressable accessibilityRole="button" accessibilityLabel={`Our money: ${formatRupees(game.coins)}`} onPress={() => game.actions.pick('wallet')} className="rounded-full bg-gold-500/90 px-3.5 py-2 active:bg-gold-500">
+          <Text className="font-sans-bold text-small text-white">{formatRupees(game.coins)}</Text>
+        </Pressable>
         <Round label={`Camera: ${CAMERA_LABEL[game.view]}. Tap for the next view`} onPress={nextView} size={44}>
           <SwitchCamera size={17} color="#fff" />
           <Text className="text-[8px] leading-[10px] text-white">{CAMERA_LABEL[game.view]}</Text>
         </Round>
-        <Round label={game.night ? 'Make it day' : 'Make it night'} onPress={game.toggleNight} size={44}>
-          {game.night ? <Sun size={20} color="#fff" /> : <Moon size={20} color="#fff" />}
+        <Round label="More" onPress={() => setPanel(panel === 'more' ? null : 'more')} size={44} on={panel === 'more'}>
+          <Ellipsis size={20} color="#fff" />
         </Round>
-        <Round label={game.decorate ? 'Done decorating' : 'Decorate'} onPress={() => game.setDecorate(!game.decorate)} size={44} on={game.decorate}>
-          <Paintbrush size={20} color="#fff" />
-        </Round>
-        <Round label="Take a photo (saved to Memories)" onPress={game.actions.photo} size={44}>
-          <Aperture size={19} color="#fff" />
-        </Round>
-        <Round label="My look" onPress={() => setPanel(panel === 'look' ? null : 'look')} size={44} on={panel === 'look'}>
-          <Shirt size={20} color="#fff" />
-        </Round>
-        {quality ? (
-          <Round label={`Picture: ${QUALITY_LABEL[quality]}. Tap to change`} onPress={() => chooseQuality(QUALITIES[(QUALITIES.indexOf(quality) + 1) % QUALITIES.length]!)} size={44}>
-            <Gauge size={18} color="#fff" />
-          </Round>
-        ) : null}
       </View>
+
+      {panel === 'more' ? (
+        <View className="absolute w-60 gap-1 rounded-2xl bg-black/75 p-2" style={{ right: pad.right, top: pad.top + 52 }}>
+          <MoreRow
+            label={game.night ? 'Make it day' : 'Make it night'}
+            onPress={() => {
+              game.toggleNight();
+              setPanel(null);
+            }}
+          >
+            {game.night ? <Sun size={18} color="#fff" /> : <Moon size={18} color="#fff" />}
+          </MoreRow>
+          <MoreRow
+            label={game.decorate ? 'Done decorating' : 'Decorate'}
+            on={game.decorate}
+            onPress={() => {
+              game.setDecorate(!game.decorate);
+              setPanel(null);
+            }}
+          >
+            <Paintbrush size={18} color="#fff" />
+          </MoreRow>
+          <MoreRow
+            label="Take a photo"
+            onPress={() => {
+              setPanel(null);
+              game.actions.photo();
+            }}
+          >
+            <Aperture size={18} color="#fff" />
+          </MoreRow>
+          <MoreRow label="My look" onPress={() => setPanel('look')}>
+            <Shirt size={18} color="#fff" />
+          </MoreRow>
+          <MoreRow label={game.music ? 'Speaker: on' : 'Speaker: off'} on={game.music} onPress={game.toggleMusic}>
+            <Radio size={18} color="#fff" />
+          </MoreRow>
+          <MoreRow label={muted ? 'Sound: off' : 'Sound: on'} on={!muted} onPress={toggleMute}>
+            {muted ? <VolumeX size={18} color="#fff" /> : <Volume2 size={18} color="#fff" />}
+          </MoreRow>
+          {quality ? (
+            <MoreRow label={`Picture: ${QUALITY_LABEL[quality]}`} onPress={() => chooseQuality(QUALITIES[(QUALITIES.indexOf(quality) + 1) % QUALITIES.length]!)}>
+              <Gauge size={18} color="#fff" />
+            </MoreRow>
+          ) : null}
+        </View>
+      ) : null}
 
       {/* Bottom right: the action button and emotes, or the decorating tools. */}
       <View className="absolute items-end gap-3" style={{ right: pad.right, bottom: pad.bottom }} pointerEvents="box-none">
@@ -641,7 +668,7 @@ function AddPanel({ onAdd, bottom }: { onAdd: (m: (typeof ADDABLE)[number]['mode
       <ScrollView horizontal contentContainerClassName="gap-2 px-3 py-2" className="max-w-[70%] rounded-2xl bg-black/55">
         {ADDABLE.map((a) => (
           <Pressable key={a.model} accessibilityRole="button" onPress={() => onAdd(a.model)} className="rounded-full bg-white/90 px-3.5 py-2 active:bg-white">
-            <Text className="font-sans-medium text-small">{`${a.label} · ${PRICES[`furniture:${a.model}` as keyof typeof PRICES] ?? 0} 🪙`}</Text>
+            <Text className="font-sans-medium text-small">{`${a.label} · ${formatRupees(PRICES[`furniture:${a.model}` as keyof typeof PRICES] ?? 0)}`}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -708,6 +735,24 @@ function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) 
         ))}
       </ScrollView>
     </View>
+  );
+}
+
+/** A line in the ⋯ menu: an icon and what it does (lit when it's on). */
+function MoreRow({ label, onPress, children, on }: { label: string; onPress: () => void; children: ReactNode; on?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={() => {
+        tick();
+        onPress();
+      }}
+      className={on ? 'flex-row items-center gap-3 rounded-xl bg-rose-600/80 px-3 py-2.5 active:bg-rose-700' : 'flex-row items-center gap-3 rounded-xl px-3 py-2.5 active:bg-white/15'}
+    >
+      {children}
+      <Text className="font-sans-medium text-small text-white">{label}</Text>
+    </Pressable>
   );
 }
 

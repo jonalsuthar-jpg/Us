@@ -1350,9 +1350,9 @@ await test('emergency stop: a feature off for everyone, the founders too, and th
 await test('our money: earned by doing things, spent on things, the server decides the amounts', async () => {
   const earn = (who, reason, ref) => as(who, () => one(`select public.earn($1, $2) as r`, [reason, ref])).then((x) => x.r);
   const spend = (who, item, ref) => as(who, () => one(`select public.spend($1, $2) as r`, [item, ref])).then((x) => x.r);
-  assert.deepEqual(await earn(jonal, 'dinner', 'dinner:1'), { balance: 40, added: 40 });
+  assert.deepEqual(await earn(jonal, 'dinner', 'dinner:1'), { balance: 400, added: 400 });
   assert.equal((await earn(parul, 'dinner', 'dinner:1')).added, 0, 'the same dinner never pays twice');
-  assert.equal((await earn(parul, 'daily', 'daily:parul:2026-11-22')).balance, 65, 'one balance for the two of us');
+  assert.equal((await earn(parul, 'daily', 'daily:parul:2026-11-22')).balance, 650, 'one balance for the two of us');
   // Caps: three dinners a day.
   await earn(jonal, 'dinner', 'dinner:2');
   await earn(jonal, 'dinner', 'dinner:3');
@@ -1360,13 +1360,13 @@ await test('our money: earned by doing things, spent on things, the server decid
   await rejects(earn(jonal, 'lottery', 'x:1'), /bad reason/, 'only what the list pays for');
   await rejects(earn(jonal, 'dinner', 'bad ref!'), /bad ref/, 'refs are plain');
   // Spending.
-  assert.deepEqual(await spend(parul, 'bread', 'bread:1'), { balance: 137, spent: 8 });
+  assert.deepEqual(await spend(parul, 'bread', 'bread:1'), { balance: 1370, spent: 80 });
   assert.equal((await spend(parul, 'bread', 'bread:1')).spent, 0, 'the same purchase never charges twice');
   await rejects(spend(parul, 'furniture:castle', 'f:1'), /bad item/, 'only what the list sells');
-  assert.equal((await spend(jonal, 'furniture:bookshelf', 'shelf:0')).balance, 67);
+  assert.equal((await spend(jonal, 'furniture:bookshelf', 'shelf:0')).balance, 670);
   await rejects(spend(jonal, 'furniture:bookshelf', 'shelf:9'), /not enough/, 'not more than we have');
   const ledger = await as(jonal, () => q(`select reason, delta from public.wallet_ledger order by id`));
-  assert.ok(ledger.some((r) => r.reason === 'spend:bread' && r.delta === -8), 'every change is written down');
+  assert.ok(ledger.some((r) => r.reason === 'spend:bread' && r.delta === -80), 'every change is written down');
   // Nobody else sees it or touches it.
   assert.equal((await as(erin, () => q(`select * from public.wallets`))).length, 0, 'outsider reads nothing');
   await rejects(as(jonal, () => q(`update public.wallets set balance = 99999`)), /permission denied/, 'no setting the balance');
