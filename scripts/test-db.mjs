@@ -1336,6 +1336,25 @@ await test('kill switch: pauses a feature for everyone but the founders', async 
   await as(jonal, () => q(`select public.admin_set_feature('chat', true)`));
 });
 
+await test('emergency stop: a feature off for everyone, the founders too, and the database refuses it', async () => {
+  await rejects(as(erin, () => q(`select public.admin_stop_feature('house', true)`)), /admin|permission|not allowed/i, 'not an admin');
+  await as(jonal, () => q(`select public.admin_stop_feature('house', true, 'Fixing something')`));
+  const me = (await as(jonal, () => one(`select public.my_access() as a`))).a;
+  assert.ok(!me.features.includes('house'), 'founders lose it too');
+  assert.equal(me.paused.house, 'Fixing something', 'and see why');
+  await rejects(as(jonal, () => q(`select public.set_house_item('tv', '{"on":true}'::jsonb, 0)`)), /feature off/, 'the database refuses old apps');
+  await as(jonal, () => q(`select public.admin_stop_feature('house', false)`));
+  assert.ok((await as(jonal, () => one(`select public.my_access() as a`))).a.features.includes('house'), 'back again');
+});
+
+await test('app settings: everyone reads, only admins change them', async () => {
+  await as(jonal, () => q(`select public.admin_set_config('required_update_after', '"2026-11-22T10:00:00Z"'::jsonb)`));
+  const row = await as(erin, () => one(`select value from public.app_config where key = 'required_update_after'`));
+  assert.equal(row.value, '2026-11-22T10:00:00Z');
+  await rejects(as(erin, () => q(`select public.admin_set_config('required_update_after', '"x"'::jsonb)`)), /admin|permission|not allowed/i, 'not an admin');
+  await rejects(as(erin, () => q(`update public.app_config set value = '"x"'`)), /permission denied/, 'direct write');
+});
+
 await test('protected: no admin action can touch the founders', async () => {
   await rejects(as(jonal, () => q(`select public.admin_decide($1, 'suspended')`, [parul])), /protected/, 'suspend');
   const founders = await one(`select id from public.couples where user_a_id = $1`, [jonal]);

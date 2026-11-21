@@ -55,6 +55,8 @@ export interface FeatureSwitch {
   sort: number;
   enabled: boolean;
   disabled_message: string | null;
+  /** The emergency stop: off for everyone, the founders and old app versions too. */
+  stopped: boolean;
 }
 
 export interface AnnouncementRow {
@@ -130,6 +132,32 @@ export async function adminDeleteUser(sb: UsClient, userId: string) {
 
 export async function adminFeatures(sb: UsClient): Promise<FeatureSwitch[]> {
   return unwrap(await sb.from('features').select('*').order('sort'));
+}
+
+/**
+ * Every app running an update older than now fetches the newest one and
+ * restarts at once (publish the fix first). See requiredUpdateAfter.
+ */
+export async function adminRequireLatestUpdate(sb: UsClient) {
+  unwrap(await sb.rpc('admin_set_config', { p_key: 'required_update_after', p_value: new Date().toISOString() }));
+}
+
+/** When the newest update became required, or null: apps running an older one update and restart at once. */
+export async function requiredUpdateAfter(sb: UsClient): Promise<Date | null> {
+  const { data } = await sb.from('app_config').select('value').eq('key', 'required_update_after').maybeSingle();
+  const at = typeof data?.value === 'string' ? new Date(data.value) : null;
+  return at && Number.isFinite(at.getTime()) ? at : null;
+}
+
+/** Whether the update this app is running is older than the required one. */
+export function updateIsRequired(runningSince: Date | null, required: Date | null): boolean {
+  if (!required) return false;
+  return !runningSince || runningSince.getTime() < required.getTime();
+}
+
+/** The emergency stop (or restart): off for everyone at once, the founders too; the database refuses it. */
+export async function adminStopFeature(sb: UsClient, key: FeatureKey, stopped: boolean, message?: string | null) {
+  unwrap(await sb.rpc('admin_stop_feature', { p_key: key, p_stopped: stopped, p_message: message ?? null }));
 }
 
 export async function adminSetFeature(sb: UsClient, key: FeatureKey, enabled: boolean, message?: string | null) {

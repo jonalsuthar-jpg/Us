@@ -5,7 +5,9 @@ import {
   adminFeatures,
   adminPlans,
   adminSavePlan,
+  adminRequireLatestUpdate,
   adminSetFeature,
+  adminStopFeature,
   featureLabel,
   FEATURE_GROUPS,
   friendlyError,
@@ -29,6 +31,18 @@ export default function FeaturesPage() {
   const [pausing, setPausing] = useState<FeatureSwitch | null>(null);
   const [editing, setEditing] = useState<Plan | 'new' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [requiring, setRequiring] = useState(false);
+  const [required, setRequired] = useState(false);
+
+  async function restart(f: FeatureSwitch) {
+    setError(null);
+    try {
+      await adminStopFeature(getSupabase(), f.key, false);
+      features.reload();
+    } catch (e) {
+      setError(friendlyError(e));
+    }
+  }
 
   async function resume(f: FeatureSwitch) {
     setError(null);
@@ -66,7 +80,15 @@ export default function FeaturesPage() {
                     .map((f) => (
                       <li key={f.key} className="flex items-center justify-between gap-3 py-1">
                         <span className="min-w-0">
-                          <span className={cn('block text-small', f.enabled ? 'text-ink' : 'text-ink-muted line-through')}>{f.label}</span>
+                          <span className={cn('block text-small', f.enabled && !f.stopped ? 'text-ink' : 'text-ink-muted line-through')}>{f.label}</span>
+                          {f.stopped && (
+                            <span className="mt-0.5 flex items-center gap-2 text-micro font-medium text-rose-700">
+                              Stopped for everyone
+                              <button type="button" className="underline" onClick={() => void restart(f)}>
+                                Restart
+                              </button>
+                            </span>
+                          )}
                           {!f.enabled && f.disabled_message && <span className="block truncate text-micro text-ink-muted">“{f.disabled_message}”</span>}
                         </span>
                         <Toggle on={f.enabled} label={f.label} onClick={() => (f.enabled ? setPausing(f) : void resume(f))} />
@@ -77,6 +99,37 @@ export default function FeaturesPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section aria-labelledby="updates" className="mt-12">
+        <h2 id="updates" className="font-display text-heading text-ink">
+          Phone updates
+        </h2>
+        <p className="mt-1 max-w-2xl text-small text-ink-soft">
+          After publishing an urgent fix, make it required: every phone running an older update downloads it and restarts at once, the next
+          time the app opens or comes back, instead of waiting until it's closed and reopened.
+        </p>
+        <Button
+          className="mt-4"
+          size="sm"
+          variant="secondary"
+          loading={requiring}
+          onClick={async () => {
+            setError(null);
+            setRequiring(true);
+            try {
+              await adminRequireLatestUpdate(getSupabase());
+              setRequired(true);
+            } catch (e) {
+              setError(friendlyError(e));
+            } finally {
+              setRequiring(false);
+            }
+          }}
+        >
+          Require the latest update now
+        </Button>
+        {required && <p className="mt-2 text-small text-sage-700">Done. Phones update the next time they open the app.</p>}
       </section>
 
       <section aria-labelledby="plans" className="mt-12">
@@ -154,14 +207,17 @@ function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: (
 
 function PauseDialog({ feature, onClose, onDone }: { feature: FeatureSwitch | null; onClose: () => void; onDone: () => void }) {
   const [message, setMessage] = useState('');
+  const [stopAll, setStopAll] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function pause() {
     if (!feature) return;
     setBusy(true);
     try {
-      await adminSetFeature(getSupabase(), feature.key, false, message);
+      if (stopAll) await adminStopFeature(getSupabase(), feature.key, true, message);
+      else await adminSetFeature(getSupabase(), feature.key, false, message);
       setMessage('');
+      setStopAll(false);
       onDone();
     } catch (e) {
       setError(friendlyError(e));
@@ -172,13 +228,20 @@ function PauseDialog({ feature, onClose, onDone }: { feature: FeatureSwitch | nu
   return (
     <Dialog open={!!feature} onOpenChange={(o) => !o && onClose()} title={`Pause ${feature?.label ?? ''} for everyone?`} description="It stops working straight away for every couple except yours.">
       <Field label="Message people will see (optional)" value={message} onChange={(e) => setMessage(e.target.value)} maxLength={140} placeholder="Taking a short break. Back soon." />
+      <label className="mt-4 flex items-start gap-2 text-small text-ink">
+        <input type="checkbox" className="mt-1" checked={stopAll} onChange={(e) => setStopAll(e.target.checked)} />
+        <span>
+          <span className="font-medium text-rose-700">Emergency stop:</span> off for us too, and the database refuses it from every app, old versions included.
+          For when something is hurting the service.
+        </span>
+      </label>
       {error && <p className="mt-3 text-small text-rose-700" role="alert">{error}</p>}
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="quiet" onClick={onClose}>
           Cancel
         </Button>
         <Button loading={busy} onClick={() => void pause()}>
-          Pause
+          {stopAll ? 'Stop for everyone' : 'Pause'}
         </Button>
       </div>
     </Dialog>

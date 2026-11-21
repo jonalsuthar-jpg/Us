@@ -49,3 +49,14 @@ describe('the house store, saving', () => {
     warn.mockRestore();
   });
 });
+
+describe('a required update', () => {
+  it('applies to apps running an older update (or none), and not to newer ones', async () => {
+    const { updateIsRequired } = await import('../src/api/admin');
+    const required = new Date('2026-11-22T10:00:00Z');
+    expect(updateIsRequired(new Date('2026-11-22T09:00:00Z'), required)).toBe(true);
+    expect(updateIsRequired(null, required)).toBe(true);
+    expect(updateIsRequired(new Date('2026-11-22T11:00:00Z'), required)).toBe(false);
+    expect(updateIsRequired(new Date('2026-11-22T09:00:00Z'), null)).toBe(false);
+  });
+});

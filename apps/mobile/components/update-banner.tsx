@@ -1,4 +1,6 @@
+import { requiredUpdateAfter, updateIsRequired } from '@us/shared';
 import * as Updates from 'expo-updates';
+import { supabase } from '@/lib/supabase';
 import { RefreshCw } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { AppState, Pressable, View } from 'react-native';
@@ -7,21 +9,35 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ABOVE_CHAT_FAB } from './chat/chat-fab';
 import { Text } from './ui/text';
 
-/** Look for a new version when the app comes back to the foreground (at most every 10 minutes). */
+/**
+ * Look for a new version on the way in and whenever the app comes back to the
+ * foreground (at most every 10 minutes). When the server says the newest one
+ * is required (a fix for something that hurts the service), it's fetched and
+ * the app restarts straight away, whatever the time since the last look.
+ */
 function useUpdateChecks() {
   useEffect(() => {
     if (!Updates.isEnabled) return;
     let last = 0;
+    let busy = false;
     const check = async () => {
-      if (Date.now() - last < 10 * 60_000) return;
-      last = Date.now();
+      if (busy) return;
+      busy = true;
       try {
+        const required = updateIsRequired(Updates.createdAt ?? null, await requiredUpdateAfter(supabase).catch(() => null));
+        if (!required && Date.now() - last < 10 * 60_000) return;
+        last = Date.now();
         const { isAvailable } = await Updates.checkForUpdateAsync();
-        if (isAvailable) await Updates.fetchUpdateAsync();
+        if (!isAvailable) return;
+        await Updates.fetchUpdateAsync();
+        if (required) await Updates.reloadAsync();
       } catch {
         // Offline or the update server is unreachable: try again next time.
+      } finally {
+        busy = false;
       }
     };
+    void check();
     const sub = AppState.addEventListener('change', (s) => s === 'active' && void check());
     return () => sub.remove();
   }, []);
