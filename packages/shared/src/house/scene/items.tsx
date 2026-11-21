@@ -24,8 +24,6 @@ interface Look {
   open: boolean;
   night: boolean;
   photos: HousePhoto[];
-  /** Things that glow may light the room (not on low). */
-  lights: boolean;
 }
 
 export interface HousePhoto {
@@ -418,7 +416,29 @@ function Model({ look }: { look: Look }): ReactNode {
         </>
       );
   }
-  return funModel(item, on, look.night, look.lights);
+  if (item.model === 'ceilingLight') {
+    // The switch by the door, and the light it works, up on the ceiling.
+    const [lx, ly, lz] = item.light ?? [0, 2.8, 0];
+    return (
+      <>
+        <B a={[-0.04, 1.15, -0.012]} b={[0.04, 1.27, 0.012]} m="trim" />
+        <group position={[lx, ly, lz]}>
+          <B a={[-0.22, -0.06, -0.22]} b={[0.22, 0.02, 0.22]} m={on ? 'lamp' : 'lampOff'} />
+          <B a={[-0.26, 0.02, -0.26]} b={[0.26, 0.05, 0.26]} m="trim" />
+        </group>
+      </>
+    );
+  }
+  if (item.model === 'gardenLamp')
+    return (
+      <>
+        <B a={[-0.12, 0, -0.12]} b={[0.12, 0.08, 0.12]} m="black" />
+        <B a={[-0.035, 0.08, -0.035]} b={[0.035, 2.15, 0.035]} m="black" />
+        <B a={[-0.12, 2.15, -0.12]} b={[0.12, 2.42, 0.12]} m={on && look.night ? 'lamp' : 'lampOff'} />
+        <B a={[-0.15, 2.42, -0.15]} b={[0.15, 2.48, 0.15]} m="black" />
+      </>
+    );
+  return funModel(item, on, look.night);
 }
 
 /** The TV itself, on its stand or on the real cabinet: our photos when it's on. */
@@ -515,14 +535,6 @@ export interface ItemsProps {
   assets?: string;
 }
 
-/** The lamps that light the rooms (others just glow): a fixed set, so switching one never recompiles shaders. */
-const ROOM_LIGHTS: Record<string, [number, number, number]> = {
-  floor_lamp: [0, 1.65, 0],
-  pendant: [0, 2.15, 0],
-  bed_lamp: [0, 0.35, 0],
-  desk_lamp: [0, 0.35, 0.1],
-};
-
 export function Items({ items, mats, quality, night, photos, objects, selected, floor, carried, assets }: ItemsProps) {
   const box = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   useEffect(() => () => box.dispose(), [box]);
@@ -560,10 +572,7 @@ export function Items({ items, mats, quality, night, photos, objects, selected, 
             else if (objects.get(it.key)?.userData.itemKey === it.key) objects.delete(it.key);
           }}
         >
-          <Drawn it={it} assets={assets} look={{ item: it, paint: paintFor(it.state.color), on: isOn(it), open: isOpen(it), night, photos, lights: quality !== 'low' }} />
-          {quality !== 'low' && ROOM_LIGHTS[it.key] && !carried.has(it.key) ? (
-            <pointLight position={ROOM_LIGHTS[it.key]} intensity={isOn(it) ? (night ? 3.2 : 1.1) : 0} distance={7} decay={2} color="#FFD9A0" />
-          ) : null}
+          <Drawn it={it} assets={assets} look={{ item: it, paint: paintFor(it.state.color), on: isOn(it), open: isOpen(it), night, photos }} />
           {selected === it.key ? <Selection hw={it.hw} hd={it.hd} /> : null}
         </group>
       ))}

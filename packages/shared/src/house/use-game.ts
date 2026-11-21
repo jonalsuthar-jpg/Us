@@ -7,7 +7,7 @@ import { useChatKey } from '../react/chat-key-provider';
 import { minimiseCallScreen, setCallBubbleHidden, useCallBubbleHidden } from '../react/call-ui';
 import { useCouple } from '../react/couple-provider';
 import { avatarKey, MUSIC_KEY, NOTE_KEY, SKY_KEY, type ItemModel, type LookState } from './items';
-import { isNight } from './sky';
+import { formatWorldTime, isNight, untilWorld, worldHours } from './sky';
 import type { Emote, Together } from './presence';
 import { LOOKS } from './scene/avatar';
 import type { HouseLetters } from './scene/fun';
@@ -50,7 +50,16 @@ export function useHouseGame() {
   // items changes whenever the store does, which is when a look could have.
   const mine: LookState = useMemo(() => store?.look(myKey) ?? LOOKS[mySlot === 'a' ? 0 : 1]!, [store, myKey, mySlot, items]); // eslint-disable-line react-hooks/exhaustive-deps
   const theirs: LookState = useMemo(() => store?.look(theirKey) ?? LOOKS[mySlot === 'a' ? 1 : 0]!, [store, theirKey, mySlot, items]); // eslint-disable-line react-hooks/exhaustive-deps
-  const night = isNight(items.get(SKY_KEY), new Date());
+  // The world's clock (a day in 4 hours), shown on screen; ticks every world minute.
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setTick(Date.now()), 10_000);
+    return () => clearInterval(t);
+  }, []);
+  const night = isNight(items.get(SKY_KEY), new Date(tick), couple.id);
+  const hoursNow = worldHours(tick, couple.id);
+  const until = untilWorld(hoursNow);
+  const worldClock = { time: formatWorldTime(hoursNow), next: night ? `Morning in ${Math.ceil(until.dawn)} min` : `Night in ${Math.ceil(until.dusk)} min` };
   const music = items.get(MUSIC_KEY)?.on === true;
   const note = items.get(NOTE_KEY);
   const inCall = call.phase !== 'idle' && call.phase !== 'ended';
@@ -215,7 +224,7 @@ export function useHouseGame() {
     notify,
   };
 
-  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, bubbleHidden, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
+  return { world, controls, hud, place, partnerPlace, partnerHere, moment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, bubbleHidden, worldClock, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
 }
 
 export type HouseGame = ReturnType<typeof useHouseGame>;

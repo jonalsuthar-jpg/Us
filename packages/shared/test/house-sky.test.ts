@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HousePresence, type HouseEvent } from '../src/house/presence';
-import { isNight, NIGHT_FOR_NOW_MS, skyAt, weatherFor } from '../src/house/sky';
+import { formatWorldTime, isNight, NIGHT_FOR_NOW_MS, skyAt, untilWorld, weatherFor, WORLD_DAY_MS, worldHours } from '../src/house/sky';
 import { nearness, stepSound } from '../src/house/sound';
 
 describe('house: the sky', () => {
@@ -17,8 +17,22 @@ describe('house: the sky', () => {
     expect(skyAt(12).sun[1]).toBeGreaterThan(skyAt(7).sun[1]);
   });
 
-  it('lets the moon button decide for a few hours, then the clock', () => {
-    const noon = new Date('2026-11-22T12:00:00');
+  it('runs a whole world day in 4 real hours, the same for both of us', () => {
+    const t = Date.parse('2026-11-22T12:00:00Z');
+    expect(worldHours(t + WORLD_DAY_MS, 'c1')).toBeCloseTo(worldHours(t, 'c1'), 6);
+    // An hour of real time is six world hours.
+    expect((worldHours(t + 3600_000, 'c1') - worldHours(t, 'c1') + 24) % 24).toBeCloseTo(6, 6);
+    // Both phones, whatever their time zones, read the same world hour.
+    expect(worldHours(new Date(t), 'c1')).toBe(worldHours(t, 'c1'));
+    expect(formatWorldTime(18 + 40 / 60)).toBe('6:40 pm');
+    expect(formatWorldTime(0.5)).toBe('12:30 am');
+    // From noon: dusk at 6:45 pm is 6¾ world hours away, 67½ real minutes.
+    expect(untilWorld(12).dusk).toBeCloseTo(67.5, 6);
+  });
+
+  it('lets the moon button decide for half an hour, then the world clock', () => {
+    // The moment the world (no couple offset) is at noon.
+    const noon = new Date(WORLD_DAY_MS / 2);
     const now = noon.toISOString();
     expect(isNight({ on: true, at: now }, noon)).toBe(true);
     expect(isNight({ on: true, at: now }, new Date(noon.getTime() + NIGHT_FOR_NOW_MS + 1000))).toBe(false);

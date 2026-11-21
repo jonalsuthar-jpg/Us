@@ -26,13 +26,14 @@ import {
 } from '../items';
 import { findPath, FLOOR_H, floorY, region, regionAt, SPAWN, walkStep, type RegionId, type Waypoint } from '../layout';
 import { holdLoses, type Emote, type HousePresence, type Pose, type Together } from '../presence';
-import { hoursNow, isNight, skyAt, weatherFor, type Weather } from '../sky';
+import { isNight, skyAt, weatherFor, worldHours, type Weather } from '../sky';
 import { LOOPS, MUSIC_S, nearness, stepSound, type HouseSound } from '../sound';
 import type { HouseStore } from '../store';
 import { Avatar, bodyAct, DANCE_S, HEART_S, newMotion, WAVE_S, type AvatarRig } from './avatar';
 import { useFun, useUnlocked, withMailbox, type FunCmd, type FunHud, type HouseLetters } from './fun';
 import { RealAvatar } from './avatar-real';
 import { Items, type HousePhoto } from './items';
+import { LightPool, LightPools, lightSources, poolSize } from './lights';
 import { makeMaterials, type Quality } from './materials';
 import { HouseColliders, HouseModel, type HouseGroups } from './model';
 import { Optional, RealHouse } from './real-house';
@@ -261,10 +262,10 @@ export function HouseWorld(props: WorldProps) {
   const onRealReady = useCallback(() => setReal(true), []);
   const opened = useRef({ frames: 0, told: false });
   const objects = useRef(new Map<string, THREE.Object3D>()).current;
-  // The clock decides day and night (and the moon button, for a few hours); checked every half minute.
+  // The world's clock decides day and night (and the moon button, for half an hour); checked every 10 s (a world minute).
   const [minute, setMinute] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setMinute(Date.now()), 30_000);
+    const t = setInterval(() => setMinute(Date.now()), 10_000);
     return () => clearInterval(t);
   }, []);
   // What our days together have unlocked, and what today's dates put out.
@@ -273,7 +274,7 @@ export function HouseWorld(props: WorldProps) {
   const placed = useMemo(() => withMailbox(placeItems(items, unlocked), lettersWaiting), [items, unlocked, lettersWaiting]);
   const placedRef = useRef(placed);
   placedRef.current = placed;
-  const night = isNight(items.get(SKY_KEY), new Date(minute));
+  const night = isNight(items.get(SKY_KEY), new Date(minute), coupleId);
   const weather: Weather = coupleId ? weatherFor(coupleId, today(new Date(minute))) : 'clear';
   const note = items.get(NOTE_KEY);
   const dish = items.get(DISH_KEY)?.on === true;
@@ -284,7 +285,6 @@ export function HouseWorld(props: WorldProps) {
 
   // Until then, reflections from a soft studio light, above low quality.
   useEffect(() => {
-    gl.toneMappingExposure = 1.05;
     if (quality === 'low' || sky || ON_PHONE) return;
     let env: THREE.WebGLRenderTarget | null = null;
     try {
@@ -305,6 +305,8 @@ export function HouseWorld(props: WorldProps) {
 
   // Day or night: the sky, the haze, how bright the world is.
   useEffect(() => {
+    // A little more exposure after dark, so lamplit rooms read warm, not murky.
+    gl.toneMappingExposure = night ? 1.2 : 1.05;
     const haze = night ? SKY_NIGHT : SKY_DAY;
     scene.fog = new THREE.Fog(haze.clone(), night ? 25 : 35, night ? 70 : 95);
     if (!sky) {
@@ -312,7 +314,7 @@ export function HouseWorld(props: WorldProps) {
       scene.environmentIntensity = night ? 0.08 : 0.35;
     }
     invalidate();
-  }, [scene, night, invalidate, sky]);
+  }, [gl, scene, night, invalidate, sky]);
 
   // Shadows: everything catches them, solid things cast them. Exterior walls cut away in the dollhouse.
   const walls = useRef<{ obj: THREE.Object3D; nx: number; nz: number; upper: boolean }[]>([]);
@@ -1006,7 +1008,7 @@ export function HouseWorld(props: WorldProps) {
     if (skyClock.current <= 0) {
       skyClock.current = 2;
       // Day by the moon button while the clock says night: a full midday sun.
-      const clockSky = skyAt(hoursNow());
+      const clockSky = skyAt(worldHours(Date.now(), coupleId));
       const s = !night && clockSky.night ? skyAt(12.5) : clockSky;
       const daylight = night ? 0 : Math.max(s.daylight, 0.35);
       const dim = weather === 'rain' ? 0.4 : weather === 'cloudy' ? 0.65 : weather === 'fog' ? 0.55 : 1;
@@ -1060,11 +1062,11 @@ export function HouseWorld(props: WorldProps) {
 
     // Night: the moon, the stars, the lamps doing the work.
     if (sun.current) {
-      sun.current.intensity += ((night ? 0.35 : (quality === 'low' ? 1.6 : 2.4) * L.daylight * L.dim) - sun.current.intensity) * Math.min(1, dt * 3);
+      sun.current.intensity += ((night ? 0.6 : (quality === 'low' ? 1.6 : 2.4) * L.daylight * L.dim) - sun.current.intensity) * Math.min(1, dt * 3);
       sun.current.color.set(night ? '#9DB4FF' : '#FFF1DC').lerp(SUNSET_LIGHT, L.golden * 0.7);
     }
     // Low quality has no lamp light, so its night keeps more of the sky's glow.
-    if (hemi.current) hemi.current.intensity += ((night ? (quality === 'low' ? 0.55 : 0.22) : (quality === 'low' ? 1.1 : 0.7) * (0.6 + 0.4 * L.dim) * Math.max(0.5, L.daylight)) - hemi.current.intensity) * Math.min(1, dt * 3);
+    if (hemi.current) hemi.current.intensity += ((night ? (quality === 'low' ? 0.65 : 0.4) : (quality === 'low' ? 1.1 : 0.7) * (0.6 + 0.4 * L.dim) * Math.max(0.5, L.daylight)) - hemi.current.intensity) * Math.min(1, dt * 3);
     // The night sky photo has its own stars.
     if (stars.current) stars.current.visible = night && !sky;
 
@@ -1373,6 +1375,8 @@ export function HouseWorld(props: WorldProps) {
     return { key: DISH_KEY, kind: 'carry', model: 'dish', label: 'Dinner', x: t.x, y: t.y + (t.top ?? 0.78), z: t.z, ry: 0, hw: 0.16, hd: 0.16, state: {} };
   }, [dish, placed]);
   const shownItems = dishItem ? [...placed, dishItem] : placed;
+  // Every lamp's light, for the few real lights that follow me and the glows on the floor.
+  const sources = useMemo(() => lightSources(placed, night, carried), [placed, night, me.hold?.key, them.pose?.hk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -1395,7 +1399,7 @@ export function HouseWorld(props: WorldProps) {
         <Optional>
         <Suspense fallback={null}>
           {/* At night the lamps take over; Low quality has none that light, so it keeps more of the baked glow. */}
-          <RealHouse base={houseUrl} light={night ? (quality === 'low' ? 0.45 : 0.25) : 1} into={groups} onReady={onRealReady} />
+          <RealHouse base={houseUrl} light={night ? (quality === 'low' ? 0.65 : 0.55) : 1} into={groups} onReady={onRealReady} />
         </Suspense>
         </Optional>
       ) : null}
@@ -1418,6 +1422,8 @@ export function HouseWorld(props: WorldProps) {
       <Person look={mine} quality={quality} rigRef={setMine} ringColor="#FFFFFF" base={houseUrl} />
       <Person look={theirs} quality={quality} rigRef={setTheirs} ringColor="#FF8FB0" base={houseUrl} />
       {fun.scene}
+      <LightPool sources={sources} size={poolSize(quality, ON_PHONE)} near={me.pos} />
+      <LightPools sources={sources} night={night} />
       {tvVideo ? <TvVideo stream={tvVideo} tv={placed.find((i) => i.key === 'tv')} /> : null}
       <SpeakRing who={me.pos} level={() => (talking && voice ? voice.me : 0)} />
       <SpeakRing who={them.pos} level={() => (talking && voice && them.shown ? voice.them : 0)} />

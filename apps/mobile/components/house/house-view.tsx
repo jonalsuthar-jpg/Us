@@ -205,6 +205,8 @@ export function HouseView() {
           <X size={22} color="#fff" />
         </Round>
         {game.place ? <Chip text={game.place} /> : null}
+        {/* The world's clock: a whole day passes in 4 hours. */}
+        <Chip text={`${game.worldClock.time} · ${game.worldClock.next}`} />
       </View>
 
       {/* Left, under it: talk, the speaker, the sound. */}

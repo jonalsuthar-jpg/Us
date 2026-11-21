@@ -140,7 +140,8 @@ function Balloons() {
 }
 
 /** The shapes, or null when the model isn't one of these. */
-export function funModel(item: PlacedItem, on: boolean, night: boolean, lights: boolean): ReactNode | null {
+/** (Their light comes from the light pool: scene/lights.tsx.) */
+export function funModel(item: PlacedItem, on: boolean, night: boolean): ReactNode | null {
   switch (item.model) {
     case 'firePit':
       return (
@@ -156,7 +157,6 @@ export function funModel(item: PlacedItem, on: boolean, night: boolean, lights: 
             <B a={[-0.3, 0.06, -0.05]} b={[0.3, 0.16, 0.05]} m="bark" />
           </group>
           {on ? <Flames n={6} spread={0.12} size={0.13} y={0.12} /> : null}
-          {lights ? <pointLight position={[0, 0.6, 0]} intensity={on ? (night ? 6 : 1.5) : 0} distance={8} decay={2} color="#FF9A4A" /> : null}
         </>
       );
     case 'logBench':
@@ -178,7 +178,6 @@ export function funModel(item: PlacedItem, on: boolean, night: boolean, lights: 
           <B a={[-0.95, 0.62, -0.82]} b={[-0.82, 0.66, 0.82]} m="wood" />
           <B a={[0.82, 0.62, -0.82]} b={[0.95, 0.66, 0.82]} m="wood" />
           <Bubbles w={0.5} />
-          {lights ? <pointLight position={[0, 0.45, 0]} intensity={night ? 1.6 : 0} distance={3} decay={2} color="#7FD4FF" /> : null}
         </>
       );
     case 'telescope':
@@ -265,7 +264,6 @@ export function funModel(item: PlacedItem, on: boolean, night: boolean, lights: 
               <Ball at={[0, 0.15 + i * 0.04, 0]} r={0.016} c="#FFB43A" glow />
             </group>
           ))}
-          {lights ? <pointLight position={[0, 0.35, 0]} intensity={night ? 2.2 : 0.6} distance={4} decay={2} color="#FFB060" /> : null}
         </>
       );
     case 'balloons':

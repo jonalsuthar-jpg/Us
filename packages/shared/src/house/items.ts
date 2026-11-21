@@ -29,7 +29,7 @@ export type ItemModel =
   | 'balconyTable' | 'lounger' | 'umbrella' | 'frontDoor' | 'balconyDoor' | 'mug' | 'book' | 'pillow' | 'ball' | 'teddy'
   | 'vase' | 'wateringCan' | 'frame' | 'gardenPlant' | 'beanbag' | 'dish'
   | 'firePit' | 'logBench' | 'hotTub' | 'telescope' | 'gardenBed' | 'swing' | 'mailbox' | 'fairyLights' | 'picnic' | 'popcorn'
-  | 'blanket' | 'candles' | 'balloons' | 'cake';
+  | 'blanket' | 'candles' | 'balloons' | 'cake' | 'ceilingLight' | 'gardenLamp';
 
 export interface Seat {
   /** From the item's centre, in its own frame (before it's turned). */
@@ -65,6 +65,8 @@ export interface ItemDef {
   portal?: [RegionId, RegionId];
   /** Only there once this is unlocked (fun.ts UNLOCKS), or while this date is on ('picnic', 'movie', 'candles', 'party'). */
   unlock?: string;
+  /** A light that hangs away from its switch: where the light is, from the item (a ceiling light switched by the door). */
+  light?: [number, number, number];
 }
 
 const F = FLOOR_H;
@@ -126,6 +128,16 @@ export const ITEMS: ItemDef[] = [
   { key: 'teddy', kind: 'carry', model: 'teddy', label: 'Teddy', x: -4.0, y: F + 0.6, z: 0.6, ry: T / 2, hw: 0.12, hd: 0.12 },
   { key: 'vase', kind: 'carry', model: 'vase', label: 'Flowers', x: 3.1, y: 0.78, z: 1.6, ry: 0, hw: 0.1, hd: 0.1 },
   { key: 'watering_can', kind: 'carry', model: 'wateringCan', label: 'Watering can', x: -8.6, y: 0, z: 7.4, ry: 0.5, hw: 0.15, hd: 0.1 },
+
+  // Ceiling lights, switched by each room's door; on until we switch them off. And lamps along the garden paths.
+  { key: 'ceiling_living', kind: 'light', model: 'ceilingLight', label: 'Ceiling light', x: -2.7, y: 0, z: 3.72, ry: 0, hw: 0.12, hd: 0.05, light: [0.2, 2.85, -3.72] },
+  { key: 'ceiling_landing', kind: 'light', model: 'ceilingLight', label: 'Ceiling light', x: 5.72, y: F, z: -1.2, ry: 0, hw: 0.05, hd: 0.12, light: [-2.22, 2.5, 1.8] },
+  { key: 'ceiling_bedroom', kind: 'light', model: 'ceilingLight', label: 'Ceiling light', x: 0.55, y: F, z: 2.8, ry: 0, hw: 0.12, hd: 0.05, light: [-3.05, 2.5, -2.8] },
+  { key: 'garden_lamp_1', kind: 'light', model: 'gardenLamp', label: 'Lamp post', x: -4.8, y: 0, z: 6.7, ry: 0, hw: 0.15, hd: 0.15, light: [0, 2.3, 0] },
+  { key: 'garden_lamp_2', kind: 'light', model: 'gardenLamp', label: 'Lamp post', x: -2.2, y: 0, z: 6.7, ry: 0, hw: 0.15, hd: 0.15, light: [0, 2.3, 0] },
+  { key: 'garden_lamp_3', kind: 'light', model: 'gardenLamp', label: 'Lamp post', x: 1.5, y: 0, z: 9.0, ry: 0, hw: 0.15, hd: 0.15, light: [0, 2.3, 0] },
+  { key: 'garden_lamp_4', kind: 'light', model: 'gardenLamp', label: 'Lamp post', x: 8.6, y: 0, z: 7.6, ry: 0, hw: 0.15, hd: 0.15, light: [0, 2.3, 0] },
+  { key: 'garden_lamp_5', kind: 'light', model: 'gardenLamp', label: 'Lamp post', x: -8.2, y: 0, z: 10.6, ry: 0, hw: 0.15, hd: 0.15, light: [0, 2.3, 0] },
 
   // Our photos on the living-room wall.
   { key: 'frame_wall_1', kind: 'frame', model: 'frame', label: 'Photo', x: -3.3, y: 1.35, z: -3.72, ry: 0, hw: 0.2, hd: 0.05 },
@@ -246,10 +258,10 @@ export function isOpen(item: PlacedItem): boolean {
   return item.state.open ?? false;
 }
 
-/** Lights start on in the evening glow: the floor lamp and the pendant. */
+/** Lights start on: the floor lamp, the pendant, the ceiling lights and the lamp posts (those only shine after dark). */
 export function isOn(item: PlacedItem): boolean {
   if (item.state.on !== undefined) return item.state.on;
-  return item.key === 'floor_lamp' || item.key === 'pendant';
+  return item.key === 'floor_lamp' || item.key === 'pendant' || item.model === 'ceilingLight' || item.model === 'gardenLamp';
 }
 
 /** A point (x, z) in the item's own frame, turned and moved to the world. */
@@ -337,6 +349,8 @@ export function actionFor(item: PlacedItem, holding: string | null, watered: boo
   switch (item.kind) {
     case 'light':
       if (item.model === 'firePit') return isOn(item) ? 'Put out the fire' : 'Light the fire';
+      // Lamp posts look after themselves (on at dusk), and walking past shouldn't offer to switch them.
+      if (item.model === 'gardenLamp') return null;
       return isOn(item) ? `Turn off ${item.label.toLowerCase()}` : `Turn on ${item.label.toLowerCase()}`;
     case 'fun':
       return null;

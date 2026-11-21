@@ -263,6 +263,8 @@ export function HouseView() {
           <X size={22} />
         </HudButton>
         {game.place ? <Chip>{game.place}</Chip> : null}
+        {/* The world's clock: a whole day passes in 4 hours. */}
+        <Chip>{`${game.worldClock.time} · ${game.worldClock.next}`}</Chip>
       </div>
 
       <div className="pointer-events-none absolute left-4 top-[72px] flex flex-col gap-2">
