@@ -9,7 +9,7 @@
  */
 
 /** Bump when the art changes; old versions stay where they are until removed. */
-export const HOUSE_PACK_VERSION = 6;
+export const HOUSE_PACK_VERSION = 7;
 
 export interface PackFile {
   path: string;

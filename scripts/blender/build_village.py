@@ -318,9 +318,12 @@ POND_HOLE = dict(x0=POND["x0"] - 0.4, x1=POND["x1"] + 0.4, z0=POND["z0"] - 0.4, 
 
 # --- the ground --------------------------------------------------------------
 # Grass under the whole village (a hair below the garden's, so they never fight), paths on top.
+HOLES = [POND_HOLE, dict(x0=-45, x1=56, z0=86, z1=146), dict(x0=58, x1=104, z0=30, z1=86)]
 for zid, zr in ZONES.items():
-    base = dict(zr, z0=max(zr["z0"], 15.8))
-    for piece in subtract(base, POND_HOLE):
+    pieces = [dict(zr, z0=max(zr["z0"], 15.8))]
+    for hole in HOLES:
+        pieces = [q for p in pieces for q in subtract(p, hole)]
+    for piece in pieces:
         box(zid, (piece["x0"], -0.25, piece["z0"]), (piece["x1"], -0.03, piece["z1"]), "grass", name="grass")
 for i, g in enumerate(L["GROUNDS"]):
     y = 0.012 + i * 0.0015
@@ -671,6 +674,82 @@ for k in range(8):
     a = k / 8 * math.tau
     ball(TZ, nx + math.cos(a) * 0.17, 0.92, nz + 0.4 + math.sin(a) * 0.08, 0.035, "marigold", subdiv=1, name="nandi_garland")
 
+# --- the lake: a beach, the shallows, the water, a jetty --------------------------------
+LK = L["LAKE"]
+W_ = LK["water"]
+textured("sand", "coast_sand_01", tile=2.5)
+box("lake", (-32, -0.25, 86), (42, 0.01, 97), "sand", name="sand")
+# The beach runs on under the water, down into the lake.
+slab("lake", [(-32, 0.01, 97), (42, 0.01, 97), (42, -0.55, 101.5), (-32, -0.55, 101.5)], 0.2, "sand", name="sand_shore")
+box("lake", (W_["x0"], -1.8, W_["z0"]), (W_["x1"], -1.7, W_["z1"]), "pondBed", name="lake_bed")
+box("lake", (W_["x0"], -0.12, W_["z0"]), (W_["x1"], -0.06, W_["z1"]), "water", name="water_lake")
+# Grassy banks round the far side.
+for (a, c) in (((W_["x0"] - 4, -0.25, 86), (W_["x0"], -0.03, W_["z1"] + 4)), ((W_["x1"], -0.25, 86), (W_["x1"] + 4, -0.03, W_["z1"] + 4)), ((W_["x0"], -0.25, W_["z1"]), (W_["x1"], -0.03, W_["z1"] + 4))):
+    box("lake", a, c, "grass", name="grass")
+# The jetty: a plank deck on posts, a bollard at the end for the boat.
+box("lake", (18, 0.2, 97), (20.5, 0.3, 112.6), "wood", name="jetty_deck")
+for z in range(98, 113, 2):
+    for x in (18.1, 20.4):
+        cyl("lake", x, -1.7, z, 0.1, 2.0, "woodDark", segs=8, name="jetty_post")
+cyl("lake", 20.3, 0.3, 109.5, 0.09, 0.35, "woodDark", segs=8, name="bollard")
+# Beach umbrellas and loungers.
+for (ux, uz) in ((-5, 91.2), (14, 91.5)):
+    cyl("lake", ux, 0, uz, 0.04, 2.3, "trim", segs=8, name="umbrella_pole")
+    for k in range(8):
+        a0, a1 = k / 8 * math.tau, (k + 1) / 8 * math.tau
+        r = 1.4
+        slab("lake", [(ux, 2.4, uz), (ux, 2.4, uz), (ux + math.cos(a1) * r, 2.0, uz + math.sin(a1) * r), (ux + math.cos(a0) * r, 2.0, uz + math.sin(a0) * r)], 0.02, "awning_cafe" if k % 2 else "awningWhite", name="umbrella")
+for (x, z, ry) in L["LOUNGERS"]:
+    box("lake", (x - 0.32, 0.25, z - 0.9), (x + 0.32, 0.32, z + 0.6), "wood", name="lounger")
+    slab("lake", [(x - 0.32, 0.32, z + 0.6), (x + 0.32, 0.32, z + 0.6), (x + 0.32, 0.75, z + 0.95), (x - 0.32, 0.75, z + 0.95)], 0.05, "wood", name="lounger_back")
+    for (lx, lz) in ((x - 0.28, z - 0.85), (x + 0.28, z - 0.85), (x - 0.28, z + 0.55), (x + 0.28, z + 0.55)):
+        box("lake", (lx - 0.03, 0, lz - 0.03), (lx + 0.03, 0.25, lz + 0.03), "woodDark", name="lounger_leg")
+
+# --- the hill: its slope (the same shape as village.ts groundY), the path up, the railing, a bench ---
+HL = L["HILL"]
+TOP = HL["top"]
+
+
+def smooth(t):
+    k = min(1.0, max(0.0, t))
+    return k * k * (3 - 2 * k)
+
+
+def hill_height(x, z):
+    d = math.hypot(max(TOP["x0"] - x, 0, x - TOP["x1"]), max(TOP["z0"] - z, 0, z - TOP["z1"]))
+    plateau = TOP["y"] * smooth(1 - d / 10)
+    path = 0.0
+    if 56 <= x <= 80:
+        ramp = (min(max(x, 58), 78) - 58) / 20 * TOP["y"]
+        path = ramp * smooth(1 - (abs(z - 56.75) - 1.75) / 3)
+    return max(plateau, path)
+
+
+HX0, HX1, HZ0, HZ1 = 58, 104, 30, 86
+bm = bmesh.new()
+step = 1.0
+nx_, nz_ = int((HX1 - HX0) / step), int((HZ1 - HZ0) / step)
+grid = [[bm.verts.new(V(HX0 + i * step, hill_height(HX0 + i * step, HZ0 + j * step) - 0.03, HZ0 + j * step)) for j in range(nz_ + 1)] for i in range(nx_ + 1)]
+for i in range(nx_):
+    for j in range(nz_):
+        bm.faces.new([grid[i][j], grid[i + 1][j], grid[i + 1][j + 1], grid[i][j + 1]])
+bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+terrain = link("hill", mesh_obj("grass_hill", bm), "grass")
+for poly in terrain.data.polygons:
+    poly.use_smooth = True
+# The path up, following the slope.
+slab("hill", [(58, 0.035, 55.4), (78, TOP["y"] + 0.035, 55.4), (78, TOP["y"] + 0.035, 58.1), (58, 0.035, 58.1)], 0.06, "parkPath", name="ground_hillpath")
+# The love-lock railing along the west edge, either side of the path.
+rx = HL["railing"]["x"]
+y0 = TOP["y"]
+for (za, zb) in HL["railing"]["spans"]:
+    n = max(2, int((zb - za) / 1.2) + 1)
+    for k in range(n):
+        z = za + (zb - za) * k / (n - 1)
+        box("hill", (rx - 0.04, y0, z - 0.04), (rx + 0.04, y0 + 1.05, z + 0.04), "metalDark", name="rail_post")
+    for h in (0.5, 1.0):
+        box("hill", (rx - 0.025, y0 + h - 0.025, za), (rx + 0.025, y0 + h + 0.025, zb), "metalDark", name="rail")
+
 # --- props: benches, café furniture, crates and barrels ---------------------------
 
 
@@ -710,16 +789,17 @@ def load_model(mid, target, tris=None):
     return o
 
 
-def place(zone, proto, x, z, ry, name):
+def place(zone, proto, x, z, ry, name, y=0.0):
     o = bpy.data.objects.new(name, proto.data.copy())
     # A Blender turn about Z by ry is the app's turn about Y by ry (facing +z → -y).
-    o.matrix_world = Matrix.Translation(V(x, 0, z)) @ Matrix.Rotation(ry, 4, "Z")
+    o.matrix_world = Matrix.Translation(V(x, y, z)) @ Matrix.Rotation(ry, 4, "Z")
     return link(zone, o)
 
 
 bench = load_model("painted_wooden_bench", 1.7)
 for (x, z, ry) in L["BENCHES"]:
     place(zone_at(x, z), bench, x, z, ry, "bench")
+place("hill", bench, L["HILL"]["bench"]["x"], L["HILL"]["bench"]["z"], L["HILL"]["bench"]["ry"], "bench", y=L["HILL"]["top"]["y"])
 table = load_model("round_wooden_table_02", 0.9, tris=1500)
 chair = load_model("painted_wooden_chair_01", 0.5)
 for (x, z) in L["CAFE_TABLES"]:
@@ -859,7 +939,7 @@ except Exception:
     pass
 
 # The ground, water and leaves are lit live by the app's sun and sky; the light map is for what stands on it.
-LIVE = {"grass", "lanePath", "cobble", "squarePaving", "parkPath", "water", "leaves", "leavesDark", "pondBed"}
+LIVE = {"grass", "lanePath", "cobble", "squarePaving", "parkPath", "water", "leaves", "leavesDark", "pondBed", "sand"}
 
 
 def baked(o):

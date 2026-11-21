@@ -31,7 +31,8 @@ const used = new Set([...furniture.matchAll(/asset: '([a-z0-9_]+)'/g)].map((m) =
 const files = [];
 for (const layer of ['ground', 'upper', 'roof']) files.push(`${layer}.glb`, `${layer}_light.png`);
 // The village (scripts/blender/build_village.py): its zones, their light, the trees.
-const zones = [...readFileSync(join(root, 'packages/shared/src/house/village.ts'), 'utf8').matchAll(/{ id: '(west|square|park)'/g)].map((m) => m[1]);
+// Every zone in ZONES (the lines like { id: 'west', x0: -62, x1: -13, z0: 14, z1: 86 }).
+const zones = [...readFileSync(join(root, 'packages/shared/src/house/village.ts'), 'utf8').matchAll(/\{ id: '([a-z]+)', x0: -?[\d.]+, x1: -?[\d.]+, z0: -?[\d.]+, z1: -?[\d.]+ \}/g)].map((m) => m[1]);
 if (!zones.length) throw new Error('village zones not found');
 files.push('village.glb', 'village_trees.glb');
 for (const z of zones) files.push(`village_${z}_light.png`);

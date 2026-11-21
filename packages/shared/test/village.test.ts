@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findPath, OBSTACLES, region, regionAt, REGIONS, walkStep, type RegionId } from '../src/house/layout';
+import { findPath, floorY, OBSTACLES, region, regionAt, REGIONS, walkStep, type RegionId } from '../src/house/layout';
 import { BENCHES, BUILDINGS, CAFE_TABLES, FOUNTAIN, LAMPS, POND, TREES, VILLAGE_PORTALS, VILLAGE_REGIONS, ZONES } from '../src/house/village';
 
 const inRect = (r: { x0: number; x1: number; z0: number; z1: number }, x: number, z: number, pad = 0) => x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad;
@@ -39,7 +39,10 @@ describe('the village: walking', () => {
   });
 
   it('knows the floor everywhere you can stand', () => {
-    for (const r of VILLAGE_REGIONS) expect(regionAt((r.x0 + r.x1) / 2, 0, (r.z0 + r.z1) / 2)?.id).toBe(r.id);
+    for (const r of VILLAGE_REGIONS) {
+      const x = (r.x0 + r.x1) / 2;
+      expect(regionAt(x, floorY(r.id, x), (r.z0 + r.z1) / 2)?.id, r.id).toBe(r.id);
+    }
   });
 });
 
@@ -143,5 +146,60 @@ describe('the village: shoes off at the temple', () => {
     const { readPose } = await import('../src/house/presence');
     expect(readPose({ x: -54, y: 0, z: 55, h: 0, b: 1 })).toMatchObject({ b: 1 });
     expect(readPose({ x: -54, y: 0, z: 55, h: 0, b: 7 })?.b).toBeUndefined();
+  });
+});
+
+describe('the village: the lake and the hill', () => {
+  it('walks from home down to the end of the jetty', () => {
+    const path = findPath('living', { region: 'jetty', x: 19.25, z: 111 });
+    expect(path.map((w) => w.via)).toEqual(expect.arrayContaining(['lakePath', 'beach', 'jetty']));
+  });
+
+  it('climbs the hill path to the top, 6 m up', () => {
+    expect(floorY('hillPath', 58)).toBe(0);
+    expect(floorY('hillPath', 68)).toBeCloseTo(3);
+    expect(floorY('hillTop', 85)).toBe(6);
+    expect(findPath('parkE', { region: 'hillTop', x: 85, z: 55 }).map((w) => w.via)).toEqual(['parkE', 'hillPath', 'hillTop']);
+  });
+
+  it('wets your feet in the shallows and keeps you out of deep water', async () => {
+    const { LAKE } = await import('../src/house/village');
+    expect(floorY('shallows', 0)).toBeLessThan(0);
+    expect(regionAt(0, 0, 120)).toBeNull();
+    expect(regionAt(LAKE.jettyEnd.x, 0.3, LAKE.jettyEnd.z)?.id).toBe('jetty');
+  });
+});
+
+describe('the village: the hill\'s shape', () => {
+  it('matches where you walk: the path\'s slope and the flat top', async () => {
+    const { groundY } = await import('../src/house/village');
+    for (const x of [58, 63, 68, 73, 78]) expect(groundY(x, 56.75)).toBeCloseTo(floorY('hillPath', x), 5);
+    expect(groundY(85, 57)).toBe(6);
+    expect(groundY(0, 40)).toBe(0);
+    expect(groundY(110, 57)).toBe(0);
+  });
+});
+
+describe('the village: the boat and the shells', () => {
+  it('rows from the dock, round the lake on the water, and back', async () => {
+    const { boatAt, RIDE_S } = await import('../src/house/scene/outdoors');
+    const { LAKE } = await import('../src/house/village');
+    expect(boatAt(0)).toMatchObject({ x: LAKE.boatDock.x, z: LAKE.boatDock.z });
+    expect(boatAt(RIDE_S).x).toBeCloseTo(LAKE.boatDock.x);
+    for (let s = 0; s <= RIDE_S; s += 1.5) {
+      const b = boatAt(s);
+      expect(inRect(LAKE.water, b.x, b.z), `${s}s at ${b.x.toFixed(1)},${b.z.toFixed(1)}`).toBe(true);
+    }
+  });
+
+  it('puts the same shells on the beach on both phones, new ones each day', async () => {
+    const { shellsOn } = await import('../src/house/scene/outdoors');
+    const { LAKE } = await import('../src/house/village');
+    expect(shellsOn(5)).toEqual(shellsOn(5));
+    expect(shellsOn(5)).not.toEqual(shellsOn(6));
+    for (const [x, z] of shellsOn(5)) {
+      expect(inRect(LAKE.shells, x, z)).toBe(true);
+      expect(regionAt(x, 0, z)?.id).toBe('beach');
+    }
   });
 });

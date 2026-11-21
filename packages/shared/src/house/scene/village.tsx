@@ -2,7 +2,7 @@ import { useFrame, useLoader } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { BUILDINGS, TREES, ZONE_DRAW_DISTANCE, ZONES, type Rect } from '../village';
+import { BUILDINGS, groundY, TREES, ZONE_DRAW_DISTANCE, ZONE_DRAW_DISTANCE_HIGH, ZONES, type Rect } from '../village';
 import { plainGlass } from './real-house';
 
 /**
@@ -47,11 +47,13 @@ export interface RealVillageProps {
   /** Where I am: zones far from here aren't drawn. */
   near: THREE.Vector3;
   water: THREE.Material;
+  /** After dark the windows glow, lamps lit inside. */
+  night: boolean;
   /** Everything's in and drawable. */
   onReady?: () => void;
 }
 
-export function RealVillage({ base, light, near, water, onReady }: RealVillageProps) {
+export function RealVillage({ base, light, near, water, night, onReady }: RealVillageProps) {
   const gltf = useLoader(GLTFLoader, `${base}/village.glb`);
   const maps = useLoader(
     THREE.TextureLoader,
@@ -105,6 +107,19 @@ export function RealVillage({ base, light, near, water, onReady }: RealVillagePr
     [gltf, maps, water], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  // After dark the windows glow warm, as if the lamps were lit inside.
+  useEffect(() => {
+    for (const { scene } of zones)
+      scene.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh || !mesh.name.endsWith('_window')) return;
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (!mat.emissive) return;
+        mat.emissive.set('#FFC27A');
+        mat.emissiveIntensity = night ? 0.6 : 0;
+      });
+  }, [zones, night]);
+
   // Dusk and night turn the baked light down (with the house's).
   useEffect(() => {
     for (const { scene } of zones)
@@ -132,7 +147,7 @@ export function RealVillage({ base, light, near, water, onReady }: RealVillagePr
         q.setFromAxisAngle(up, (x * 12.9898 + z * 78.233) % (Math.PI * 2));
         // Each a little taller or shorter than the next, the same every time.
         const jitter = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
-        im.setMatrixAt(i, m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(s, s * (0.9 + jitter * 0.25), s)));
+        im.setMatrixAt(i, m.compose(new THREE.Vector3(x, groundY(x, z) - 0.1, z), q, new THREE.Vector3(s, s * (0.9 + jitter * 0.25), s)));
       });
       im.instanceMatrix.needsUpdate = true;
       im.castShadow = true;
@@ -156,7 +171,8 @@ export function RealVillage({ base, light, near, water, onReady }: RealVillagePr
   const tick = useRef(0);
   useFrame(() => {
     if (tick.current++ % 10) return;
-    for (const { zone, scene } of zones) scene.visible = distanceTo(zone, near.x, near.z) < ZONE_DRAW_DISTANCE;
+    const reach = near.y > 3 ? ZONE_DRAW_DISTANCE_HIGH : ZONE_DRAW_DISTANCE;
+    for (const { zone, scene } of zones) scene.visible = distanceTo(zone, near.x, near.z) < reach;
   });
 
   return (

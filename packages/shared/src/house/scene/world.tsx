@@ -596,6 +596,13 @@ export function HouseWorld(props: WorldProps) {
     const s = me.seat;
     me.seat = null;
     if (!s) return;
+    // Out of the boat: onto the jetty.
+    const out = fun.seatExit(s.key);
+    if (out) {
+      me.at = out.at;
+      me.pos.set(out.x, out.y, out.z);
+      return;
+    }
     const item = placedRef.current.find((i) => i.key === s.key);
     if (!item) return;
     // Step off to the front of the seat.
@@ -765,7 +772,7 @@ export function HouseWorld(props: WorldProps) {
     if (controls.decorate && decor.key) {
       if (mag > 0.08) moveSelected(wx / Math.max(mag, 1e-6), wz / Math.max(mag, 1e-6), mag, dt);
       else commitDraft();
-    } else if (mag > 0.08) {
+    } else if (mag > 0.08 && !fun.locked()) {
       fun.moved();
       if (me.seat) standUp();
       me.path = [];
@@ -825,7 +832,8 @@ export function HouseWorld(props: WorldProps) {
     // Standing on the floor (or the stairs), or sitting where I sat.
     if (me.seat) {
       const item = all.find((i) => i.key === me.seat!.key);
-      const sp = item && seatPose(item, me.seat.i);
+      // A seat that moves (the boat) is the things-to-do layer's; the rest are the furniture's.
+      const sp = fun.seat(me.seat.key, me.seat.i) ?? (item && seatPose(item, me.seat.i));
       if (sp) {
         me.pos.set(sp.x, sp.y, sp.z);
         me.heading = sp.h;
@@ -911,7 +919,7 @@ export function HouseWorld(props: WorldProps) {
       me.rig.root.rotation.y = me.heading;
       me.rig.update(dt, { moving, speed: me.speed, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold, barefoot, talking: talking && !moving && (!voice || voice.me > SPEAKING), lookAt: p && them.shown ? [them.pos.x, them.pos.y + 1.6, them.pos.z] : undefined }, me.motion);
     }
-    const label = region(me.at).label;
+    const label = me.seat?.key === 'boat' ? 'Out on the lake' : region(me.at).label;
     if (label !== me.place) {
       me.place = label;
       onPlace?.(label);
@@ -935,10 +943,13 @@ export function HouseWorld(props: WorldProps) {
     // My partner, eased between the poses they send.
     if (them.rig) {
       if (p) {
-        const to = tmp.to.set(p.x, p.y, p.z);
+        // In the boat they sit in their seat on the ride as this phone works it out (the same ride on both).
+        const inBoat = p.a?.startsWith('sit:boat:') ? fun.seat('boat', Number(p.a.split(':')[2])) : null;
+        const to = inBoat ? tmp.to.set(inBoat.x, inBoat.y, inBoat.z) : tmp.to.set(p.x, p.y, p.z);
         if (!them.shown || them.pos.distanceTo(to) > 6) them.pos.copy(to);
+        else if (inBoat) them.pos.copy(to);
         else them.pos.lerp(to, Math.min(1, dt * 9));
-        them.heading += angleDiff(them.heading, p.h) * Math.min(1, dt * 10);
+        them.heading += angleDiff(them.heading, inBoat ? inBoat.h : p.h) * Math.min(1, dt * 10);
         them.shown = true;
         them.rig.root.visible = !(view === 'ground' && them.pos.y > FLOOR_H / 2);
         them.rig.root.position.copy(them.pos);
@@ -949,7 +960,7 @@ export function HouseWorld(props: WorldProps) {
         them.rig.root.visible = false;
       }
     }
-    const theirPlace = p ? (regionAt(p.x, p.y + 0.1, p.z)?.label ?? 'Garden') : null;
+    const theirPlace = p ? (p.a?.startsWith('sit:boat') ? 'Out on the lake' : (regionAt(p.x, p.y + 0.1, p.z)?.label ?? 'Garden')) : null;
     if (theirPlace !== them.place) {
       them.place = theirPlace;
       onPartnerPlace?.(theirPlace);
@@ -1446,7 +1457,7 @@ export function HouseWorld(props: WorldProps) {
       {houseUrl ? (
         <Optional>
           <Suspense fallback={null}>
-            <RealVillage base={houseUrl} light={night ? (quality === 'low' ? 0.65 : 0.55) : 1} near={me.pos} water={waterMat} onReady={onVillageReady} />
+            <RealVillage base={houseUrl} light={night ? (quality === 'low' ? 0.65 : 0.55) : 1} near={me.pos} water={waterMat} night={night} onReady={onVillageReady} />
           </Suspense>
         </Optional>
       ) : null}

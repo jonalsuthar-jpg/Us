@@ -14,6 +14,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const v = await import('../packages/shared/src/house/village.ts');
 const out = join(root, 'assets-build', 'house', 'village_layout.json');
 mkdirSync(dirname(out), { recursive: true });
-const { GATE, VILLAGE_REGIONS, BUILDINGS, GROUNDS, FOUNTAIN, POND, STALL, LAMPS, BENCHES, CAFE_TABLES, TREES, ZONES, TEMPLE } = v;
-writeFileSync(out, JSON.stringify({ GATE, VILLAGE_REGIONS, BUILDINGS, GROUNDS, FOUNTAIN, POND, STALL, LAMPS, BENCHES, CAFE_TABLES, TREES, ZONES, TEMPLE }, null, 1));
+const { GATE, VILLAGE_REGIONS, BUILDINGS, GROUNDS, FOUNTAIN, POND, STALL, LAMPS, BENCHES, CAFE_TABLES, TREES, ZONES, TEMPLE, LAKE, HILL, LOUNGERS } = v;
+writeFileSync(out, JSON.stringify({ GATE, VILLAGE_REGIONS, BUILDINGS, GROUNDS, FOUNTAIN, POND, STALL, LAMPS, BENCHES, CAFE_TABLES, TREES, ZONES, TEMPLE, LAKE, HILL, LOUNGERS }, null, 1));
 console.log(`wrote ${out}`);

@@ -12,7 +12,7 @@
  * Out through the garden gate, the village (village.ts) adds its own regions:
  * one network, so a walk from the bedroom to the pond is one walk.
  */
-import { obstacles, VILLAGE_PORTALS, VILLAGE_REGIONS, type VillageRegionId } from './village';
+import { obstacles, VILLAGE_PORTALS, VILLAGE_REGIONS, type RegionFloor, type VillageRegionId } from './village';
 
 export const FLOOR_H = 3;
 export const WALL_T = 0.2;
@@ -36,6 +36,8 @@ export interface Region {
   inside: boolean;
   label: string;
 }
+
+const floorOf = new Map<string, RegionFloor>(VILLAGE_REGIONS.map((r) => [r.id, r as RegionFloor]));
 
 export const REGIONS: Region[] = [
   { id: 'living', x0: -5.8, x1: 0.8, z0: -3.8, z1: 3.8, floor: 0, inside: true, label: 'Living room' },
@@ -82,6 +84,13 @@ const PORTALS: [RegionId, RegionId, number, number][] = [
 export function floorY(id: RegionId, x: number): number {
   if (id === 'stairs') return (Math.min(Math.max(x, STAIRS.x0), STAIRS.x1) - STAIRS.x0) / (STAIRS.x1 - STAIRS.x0) * FLOOR_H;
   if (id === 'pool') return SWIM_Y;
+  // The village's own heights: the shallows, the jetty, the hill and its path up.
+  const f = floorOf.get(id);
+  if (f?.ramp) {
+    const r = region(id);
+    return f.ramp.y0 + ((Math.min(Math.max(x, r.x0), r.x1) - r.x0) / (r.x1 - r.x0)) * (f.ramp.y1 - f.ramp.y0);
+  }
+  if (f?.y !== undefined) return f.y;
   return region(id).floor * FLOOR_H;
 }
 

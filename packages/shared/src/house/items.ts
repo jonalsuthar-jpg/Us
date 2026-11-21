@@ -18,8 +18,14 @@
  * Some things only come once we've been together long enough (unlock), or
  * while a date is on (the picnic blanket, the candles): see placeItems.
  */
-import { FLOOR_H, type RegionId } from './layout';
-import { BENCHES, CAFE_TABLES, LAMPS } from './village';
+import { floorY, FLOOR_H, regionAt, type RegionId } from './layout';
+import { BENCHES, CAFE_TABLES, groundY, HILL, LAMPS, LOUNGERS } from './village';
+
+/** How high the ground is under a thing out in the village: the hill, the jetty, the shallows. */
+const villageY = (x: number, z: number) => {
+  const r = regionAt(x, 10, z);
+  return Math.max(groundY(x, z), r ? floorY(r.id, x) : 0);
+};
 
 export type ItemKind = 'light' | 'door' | 'tv' | 'frame' | 'carry' | 'furniture' | 'stove' | 'plant' | 'fun';
 
@@ -170,9 +176,12 @@ export const ITEMS: ItemDef[] = [
   { key: 'cake', kind: 'furniture', model: 'cake', label: 'Cake', x: 3.1, y: 0.78, z: 2.0, ry: 0, hw: 0.1, hd: 0.1, unlock: 'party' },
 
   // The village: lamp posts along the street, round the square and the park.
-  ...LAMPS.map(([x, z], i): ItemDef => ({ key: `village_lamp_${i}`, kind: 'light', model: 'gardenLamp', label: 'Lamp post', x, y: 0, z, ry: 0, hw: 0.15, hd: 0.15, light: [0, 2.3, 0] })),
+  ...LAMPS.map(([x, z], i): ItemDef => ({ key: `village_lamp_${i}`, kind: 'light', model: 'gardenLamp', label: 'Lamp post', x, y: villageY(x, z), z, ry: 0, hw: 0.15, hd: 0.15, light: [0, 2.3, 0] })),
   // Benches (two each) and the café's chairs, all in the village art.
   ...BENCHES.map(([x, z, ry], i): ItemDef => ({ key: `bench_${i}`, kind: 'furniture', model: 'villageSeat', label: 'Bench', x, y: 0, z, ry, hw: 0.85, hd: 0.3, seats: [{ x: -0.4, z: 0.05, y: 0.45 }, { x: 0.4, z: 0.05, y: 0.45 }] })),
+  // The bench on the hilltop, looking over the village; loungers on the beach.
+  { key: 'hill_bench', kind: 'furniture', model: 'villageSeat', label: 'Bench', x: HILL.bench.x, y: HILL.top.y, z: HILL.bench.z, ry: HILL.bench.ry, hw: 0.85, hd: 0.3, seats: [{ x: -0.4, z: 0.05, y: 0.45 }, { x: 0.4, z: 0.05, y: 0.45 }] },
+  ...LOUNGERS.map(([x, z, ry], i): ItemDef => ({ key: `beach_lounger_${i}`, kind: 'furniture', model: 'villageSeat', label: 'Lounger', x, y: 0, z, ry, hw: 0.35, hd: 0.9, seats: [{ x: 0, z: 0.75, y: 0.35, lie: true }] })),
   ...CAFE_TABLES.flatMap(([x, z], i): ItemDef[] => [
     { key: `cafe_chair_${i}_a`, kind: 'furniture', model: 'villageSeat', label: 'Chair', x: x - 0.7, y: 0, z, ry: T / 2, hw: 0.22, hd: 0.22, seats: [{ x: 0, z: 0, y: 0.47 }] },
     { key: `cafe_chair_${i}_b`, kind: 'furniture', model: 'villageSeat', label: 'Chair', x: x + 0.7, y: 0, z, ry: -T / 2, hw: 0.22, hd: 0.22, seats: [{ x: 0, z: 0, y: 0.47 }] },

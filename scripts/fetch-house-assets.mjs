@@ -70,6 +70,7 @@ export const VILLAGE_TEXTURES = {
   squarePaving: 'patterned_cobblestone',
   parkPath: 'stony_dirt_path',
   lanePath: 'grass_path_3',
+  sand: 'coast_sand_01',
   plasterYellow: 'yellow_plaster',
   plasterWhite: 'white_stucco',
   plasterRed: 'red_plaster_weathered',

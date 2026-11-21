@@ -61,6 +61,7 @@ import { PRICES, walletLineText, walletRef, type Priced, type Reward } from '../
 import { VILLAGERS, villagerAt } from '../villagers';
 import { DANCE_S, HEART_S } from './avatar';
 import { colour, FunBall, FunFlames, funSphere } from './fun-models';
+import { useOutdoors } from './outdoors';
 import type { HousePhoto } from './items';
 
 /** A card the screens draw the same way on the phone and the web: some words, a picture, buttons, maybe a box to type in. */
@@ -122,6 +123,8 @@ export interface FunHost {
     seat: { key: string; i: number; lie: boolean } | null;
     hold: { key: string; since: number } | null;
     doing: { act: 'cook' | 'water' | 'hug' | 'kiss' | 'slow'; until: number; key?: string } | null;
+    /** A tapped walk under way (cleared when I sit somewhere). */
+    path: unknown[];
   };
   them: { pos: THREE.Vector3; shown: boolean; pose: Pose | null };
   meId: string;
@@ -338,6 +341,8 @@ export function useFun(h: FunHost) {
   }, [store?.loaded, waitingGifts.length, h.celebrate, game?.at, treasure?.at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const partnerHere = () => !!h.them.pose && h.them.shown;
+  // The lake and the hill (outdoors.tsx).
+  const outdoors = useOutdoors({ h, raw, set, partnerHere, openPanel: (id) => void (ui.panel = id) });
   const dist2 = (x: number, z: number) => Math.hypot(x - h.me.pos.x, z - h.me.pos.z);
   const close = (x: number, y: number, z: number, r = NEAR) => dist2(x, z) < r && Math.abs(y - h.me.pos.y) < 1.6;
   const item = (key: string) => fresh().find((i) => i.key === key);
@@ -452,6 +457,8 @@ export function useFun(h: FunHost) {
     }
     if (!p) return null;
     const next = h.pairedAt ? nextUnlock(h.pairedAt, new Date()) : null;
+    const outsidePanel = outdoors.panel(p);
+    if (outsidePanel) return outsidePanel;
     switch (p) {
       case 'menu':
         return {
@@ -500,6 +507,7 @@ export function useFun(h: FunHost) {
             opt('stars', u.has('telescope') ? 'Stargazing at the telescope' : 'Stargazing on the loungers', '🌌'),
             opt(u.has('fire_pit') ? 'fire' : 'locked', lock('fire_pit', 'A bonfire'), '🔥'),
             opt(u.has('hot_tub') ? 'tub' : 'locked', lock('hot_tub', 'The hot tub'), '♨️'),
+            opt('sandcastle', 'A sandcastle on the beach', '🏰'),
             ...(dateOn ? [opt('end-date', 'End the date', '✖️')] : []),
           ],
         };
@@ -626,6 +634,7 @@ export function useFun(h: FunHost) {
   function pick(id: string, text?: string) {
     const t = text?.trim() ?? '';
     const shut = () => void (ui.panel = null);
+    if (outdoors.pick(id, t, ui.panel)) return;
     if (id === 'close') return shut();
     if (id === 'back') return void (ui.panel = ui.panel === 'wish' && ui.scope ? null : 'menu');
     if (['games', 'dates', 'leave', 'mood', 'photos', 'letter', 'wishes', 'wallet'].includes(id)) {
@@ -815,6 +824,8 @@ export function useFun(h: FunHost) {
   /** What the action button does here, if it's one of ours. */
   function focus(): { label: string; run: () => void } | null {
     if (ui.board || ui.scope) return null;
+    const outside = outdoors.focus();
+    if (outside) return outside;
     const game = readGame(raw(GAME_KEY));
     const treasure = readTreasure();
     const dinner = readDinner();
@@ -912,6 +923,8 @@ export function useFun(h: FunHost) {
             if (!ok) return h.say(`Not enough coins (${PRICES[shop.item]} 🪙)`);
             h.sound?.play('chime', 0.4);
             h.moment(`buy:${shop.item}:${Date.now()}`, shop.done, partnerHere());
+            // Flowers from the stall go in the vase at home.
+            if (shop.item === 'bouquet') set('vase', { ...(raw('vase') ?? {}), at: new Date().toISOString() });
           });
         },
       };
@@ -1150,8 +1163,8 @@ export function useFun(h: FunHost) {
     // Close together somewhere cosy: hearts.
     const a = p?.a;
     const mine = h.me.seat;
-    if (mine && a && a.split(':')[1] === mine.key && ['sofa', 'swing', 'hot_tub', 'picnic', 'log_bench', 'bed'].includes(mine.key)) {
-      const names: Record<string, string> = { sofa: 'Cosy on the sofa', swing: 'On the swing together', hot_tub: 'Hot tub together', picnic: 'A picnic together', log_bench: 'By the fire together', bed: 'Lying together' };
+    if (mine && a && a.split(':')[1] === mine.key && ['sofa', 'swing', 'hot_tub', 'picnic', 'log_bench', 'bed', 'boat'].includes(mine.key)) {
+      const names: Record<string, string> = { sofa: 'Cosy on the sofa', swing: 'On the swing together', hot_tub: 'Hot tub together', picnic: 'A picnic together', log_bench: 'By the fire together', bed: 'Lying together', boat: 'In the boat together' };
       h.moment(`cosy:${mine.key}:${Math.floor(h.now() / 120)}`, names[mine.key]!);
     }
 
@@ -1165,6 +1178,9 @@ export function useFun(h: FunHost) {
     }
     if (aarti && !hud.banner) hud.banner = 'Evening aarti 🪔';
     h.sound?.loop('aarti', aarti ? 0.45 : 0);
+
+    const outside = outdoors.frame();
+    if (!hud.banner && outside.banner) hud.banner = outside.banner;
 
     // Sounds: the fire crackling and the hot tub bubbling, close by.
     if (h.sound) {
@@ -1286,11 +1302,12 @@ export function useFun(h: FunHost) {
       <MoodOrb who={h.me.pos} colourOf={myMood?.ring} hidden={false} />
       <MoodOrb who={h.them.pos} colourOf={theirMood?.ring} hidden={!h.them.shown} />
       {h.night ? <NightSky /> : null}
+      {outdoors.scene}
       <TempleThings lit={diyas().by.length} swing={bellSwing} aarti={aartiNow} barefoot={[h.me.at === 'templeHall', h.them.pose?.b === 1]} />
     </>
   );
 
-  return { focus, flying, frame, tap, camera, moved, cmd, hud: hudState, place, use, cooked, fresh, scene, playing: () => ui.board || ui.scope };
+  return { focus, flying, frame, tap, camera, moved, cmd, hud: hudState, place, use, cooked, fresh, scene, playing: () => ui.board || ui.scope, seat: outdoors.seat, seatExit: outdoors.seatExit, locked: outdoors.locked };
 }
 
 export type Fun = ReturnType<typeof useFun>;

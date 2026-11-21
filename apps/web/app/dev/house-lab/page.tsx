@@ -343,6 +343,28 @@ export default function HouseLab() {
         [900, () => cb.cmds.push({ t: 'walkTo', x: -55, y: 0, z: 49 })],
         [62000, () => ((ca.yaw = Math.PI - 0.5), (ca.pitch = 0.2), (cb.yaw = Math.PI + 0.15), (cb.pitch = 0.2))],
       ]);
+    if (scene === 'beach')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 19.25, y: 0.3, z: 110.4 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 8, y: 0, z: 94 })],
+        [62000, () => ((ca.yaw = 0.3), (ca.pitch = 0.22), (cb.yaw = -0.4), (cb.pitch = 0.2))],
+      ]);
+    if (scene === 'boat')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 20.2, y: 0.3, z: 109.5 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 19.4, y: 0.3, z: 108.6 })],
+        [60000, () => ca.cmds.push({ t: 'use' })],
+        [61500, () => cb.cmds.push({ t: 'use' })],
+        [63000, () => ca.cmds.push({ t: 'use' })],
+        [67000, () => ca.cmds.push({ t: 'use' })],
+        [72000, () => ((ca.yaw = 0.6), (ca.pitch = 0.3), (cb.yaw = 2.4), (cb.pitch = 0.35))],
+      ]);
+    if (scene === 'hill')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 80.2, y: 6, z: 51.5, use: 'hill_bench' })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 81, y: 6, z: 57 })],
+        [62000, () => ((ca.yaw = Math.PI / 2 + 0.2), (ca.pitch = 0.18), (cb.yaw = Math.PI / 2 - 0.3), (cb.pitch = 0.15))],
+      ]);
     if (scene === 'pool')
       run([
         [800, () => ca.cmds.push({ t: 'walkTo', x: 5, y: -1, z: 9 })],

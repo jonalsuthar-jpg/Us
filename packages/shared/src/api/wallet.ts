@@ -17,6 +17,8 @@ export const REWARDS = {
   harvest: { amount: 20, perDay: 6 },
   catch: { amount: 5, perDay: 10 },
   treasure: { amount: 25, perDay: 3 },
+  fish: { amount: 10, perDay: 8 },
+  shells: { amount: 5, perDay: 8 },
 } as const;
 export type Reward = keyof typeof REWARDS;
 
@@ -99,6 +101,8 @@ export function walletLineText(l: Pick<WalletLine, 'reason' | 'delta'>): string 
     harvest: 'From the garden',
     catch: 'A catch streak',
     treasure: 'Finding the treasure',
+    fish: 'A fish from the lake',
+    shells: 'Shells from the beach',
     'spend:gift': 'A gift',
     'spend:bread': 'Bread',
     'spend:coffee': 'Coffee',

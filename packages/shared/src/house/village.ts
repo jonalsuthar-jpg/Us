@@ -9,8 +9,10 @@
  * Through a gate in the garden's south hedge, a grassy lane runs down to the
  * village street. Off the street: the square with its fountain, the café
  * (you can go in), the bakery and a flower stall; cottages; and the park
- * with its pond; at the west end, up a path, a small Shiva temple. Trees
- * all round frame it, and the world fades into haze beyond.
+ * with its pond; at the west end, up a path, a small Shiva temple. South of
+ * the square a path runs down to a beach on a lake, with a jetty and a
+ * rowing boat; east of the park one climbs a hill to a viewpoint. Trees all
+ * round frame it, and the world fades into haze beyond.
  */
 
 export interface Rect {
@@ -43,7 +45,21 @@ export const VILLAGE_REGIONS = [
   { id: 'templePath', x0: -57, x1: -53.5, z0: 36, z1: 46, label: 'The temple path' },
   { id: 'templeCourt', x0: -61, x1: -47, z0: 46, z1: 53, label: 'The temple' },
   { id: 'templeHall', x0: -58, x1: -50, z0: 53, z1: 57, label: 'The temple' },
+  // Down to the lake: the path, the beach, the shallows to paddle in, the jetty (a step up, over the water).
+  { id: 'lakePath', x0: -2, x1: 2, z0: 58, z1: 88, label: 'The lake path' },
+  { id: 'beach', x0: -30, x1: 40, z0: 88, z1: 97, label: 'The beach' },
+  { id: 'shallows', x0: -30, x1: 40, z0: 97, z1: 100, label: 'The shallows', y: -0.18 },
+  { id: 'jetty', x0: 18, x1: 20.5, z0: 97, z1: 112, label: 'The jetty', y: 0.3 },
+  // Up the hill: a path that climbs 6 m, and the top.
+  { id: 'hillPath', x0: 58, x1: 78, z0: 55, z1: 58.5, label: 'The hill path', ramp: { y0: 0, y1: 6 } },
+  { id: 'hillTop', x0: 78, x1: 92, z0: 48, z1: 66, label: 'The hilltop', y: 6 },
 ] as const;
+
+/** A region's floor: flat at its height, or a slope rising along x from y0 to y1. */
+export interface RegionFloor {
+  y?: number;
+  ramp?: { y0: number; y1: number };
+}
 
 export type VillageRegionId = (typeof VILLAGE_REGIONS)[number]['id'];
 
@@ -73,6 +89,62 @@ export const VILLAGE_PORTALS: [string, string, number, number][] = [
   ['templePath', 'templeCourt', -55.2, 46],
   // Up the hall's steps.
   ['templeCourt', 'templeHall', -54, 53],
+  ['squareS', 'lakePath', 0, 58],
+  ['lakePath', 'beach', 0, 88],
+  ['beach', 'shallows', 5, 97],
+  ['beach', 'jetty', 19.25, 97],
+  ['parkE', 'hillPath', 58, 56.7],
+  ['hillPath', 'hillTop', 78, 56.7],
+];
+
+/** The lake: its water, the shore, the jetty's end (the boat and the fishing spot), where shells wash up. */
+export const LAKE = {
+  water: { x0: -45, x1: 56, z0: 97, z1: 142 },
+  surface: -0.06,
+  jettyEnd: { x: 19.25, z: 111.4 },
+  boatDock: { x: 21.6, z: 109.5 },
+  /** The boat's loop round the lake, from the dock and back. */
+  loop: { x: 6, z: 120, rx: 15.5, rz: 10.5 },
+  shells: { x0: -26, x1: 36, z0: 90, z1: 96.5 },
+} as const;
+
+/**
+ * The hilltop: the love-lock railing along its west edge (the village below,
+ * the sunset beyond), either side of where the path comes up; a bench there.
+ */
+export const HILL = {
+  top: { x0: 78, x1: 92, z0: 48, z1: 66, y: 6 },
+  railing: { x: 77.8, spans: [[48.2, 54.6], [59, 65.8]] },
+  bench: { x: 79.6, z: 51.5, ry: -Math.PI / 2 },
+} as const;
+
+const smooth = (t: number) => {
+  const k = Math.min(1, Math.max(0, t));
+  return k * k * (3 - 2 * k);
+};
+
+/**
+ * The ground's height at (x, z): flat everywhere but the hill, a plateau 6 m
+ * up falling away over 10 m, with the path climbing its west side. The same
+ * formula shapes the hill in Blender (build_village.py hill_height), so trees
+ * and lamp posts stand on it.
+ */
+export function groundY(x: number, z: number): number {
+  const t = HILL.top;
+  const d = Math.hypot(Math.max(t.x0 - x, 0, x - t.x1), Math.max(t.z0 - z, 0, z - t.z1));
+  const plateau = t.y * smooth(1 - d / 10);
+  let path = 0;
+  if (x >= 56 && x <= 80) {
+    const ramp = (Math.min(Math.max(x, 58), 78) - 58) / 20 * t.y;
+    path = ramp * smooth(1 - (Math.abs(z - 56.75) - 1.75) / 3);
+  }
+  return Math.max(plateau, path);
+}
+
+/** Beach loungers to lie on: [x, z, facing (the lake)]. */
+export const LOUNGERS: [number, number, number][] = [
+  [-6, 93, 0],
+  [-4, 93, 0],
 ];
 
 export type Wall = 'plasterYellow' | 'plasterWhite' | 'plasterRed' | 'plasterBlue' | 'plasterClay' | 'siding';
@@ -118,6 +190,8 @@ export const GROUNDS: (Rect & { kind: 'lanePath' | 'cobble' | 'squarePaving' | '
   { kind: 'parkPath', x0: 26, x1: 58, z0: 73, z1: 76 },
   { kind: 'parkPath', x0: 34, x1: 50, z0: 48, z1: 64 },
   { kind: 'cafeFloor', x0: 12.2, x1: 23.8, z0: 38.2, z1: 49.8 },
+  // The lake path.
+  { kind: 'lanePath', x0: -1.6, x1: 1.6, z0: 58, z1: 88 },
   // The temple: its path, the courtyard and the hall's stone floor.
   { kind: 'cobble', x0: -57, x1: -53.5, z0: 36, z1: 46 },
   { kind: 'squarePaving', x0: -61, x1: -47, z0: 46, z1: 53 },
@@ -153,6 +227,8 @@ export const LAMPS: [number, number][] = [
   [-12.4, 46], [12.4, 52], [-6, 58.4], [6, 58.4],
   [30, 50], [54, 50], [30, 66], [54, 66], [42, 76.4],
   [-57.4, 40], [-53.1, 44.5],
+  [2.6, 66], [-2.6, 76], [2.6, 86], [-12, 87.6], [12, 87.6], [18.25, 104], [20.25, 104],
+  [64, 54.6], [72, 59], [79, 48.6], [91, 48.6],
 ];
 
 /** Benches you can sit on: [x, z, facing]. */
@@ -189,7 +265,10 @@ export const TREES: [number, number, number, number][] = [
   // The park.
   [31, 42, 0, 1.3], [31, 58, 1, 1.2], [32, 70, 0, 1.2], [53, 42, 2, 1.1], [52, 58, 0, 1.3], [52, 70, 1, 1.1], [39, 70, 0, 1], [45, 44, 2, 0.9],
   // The edges.
-  [-60.5, 29, 2, 1.3], [-59.5, 41, 0, 1.2], [64, 33, 2, 1.3], [64, 44, 0, 1.2], [62, 60, 2, 1.3], [62, 74, 0, 1.2], [0, 64, 0, 1.3], [-8, 66, 2, 1.2], [8, 66, 1, 1.2],
+  [-60.5, 29, 2, 1.3], [-59.5, 41, 0, 1.2], [64, 33, 2, 1.3], [64, 44, 0, 1.2], [62, 60, 2, 1.3], [62, 74, 0, 1.2], [-4.5, 64, 0, 1.3], [-8, 66, 2, 1.2], [8, 66, 1, 1.2],
+  // Along the lake path, by the beach, and on the hill.
+  [-5, 74, 1, 1.2], [5, 80, 0, 1.1], [-34, 90, 0, 1.3], [44, 90, 2, 1.2], [-20, 86.5, 1, 1.1], [30, 86.6, 0, 1.2],
+  [62, 50, 0, 1.2], [70, 62, 2, 1.2], [76, 52, 1, 1.1], [94, 52, 0, 1.3], [94, 64, 2, 1.2], [84, 68, 0, 1.3],
   [24, 80, 0, 1.3], [40, 82, 2, 1.3], [56, 82, 0, 1.2], [-20, 70, 0, 1.3], [-40, 66, 2, 1.2], [-61.5, 58, 0, 1.3],
   // The temple's peepal tree, beside the courtyard.
   [-46.2, 57.5, 0, 1.6],
@@ -199,11 +278,16 @@ export const TREES: [number, number, number, number][] = [
  * Zones, for drawing: the village is one walk (no loading anywhere in it),
  * but a part far from me isn't drawn. Each has its own art and light map.
  */
-export const ZONES: (Rect & { id: 'west' | 'square' | 'park' })[] = [
+export const ZONES: (Rect & { id: 'west' | 'square' | 'park' | 'lake' | 'hill' })[] = [
   { id: 'west', x0: -62, x1: -13, z0: 14, z1: 86 },
   { id: 'square', x0: -13, x1: 25, z0: 14, z1: 86 },
   { id: 'park', x0: 25, x1: 68, z0: 14, z1: 86 },
+  { id: 'lake', x0: -48, x1: 60, z0: 86, z1: 146 },
+  { id: 'hill', x0: 68, x1: 104, z0: 30, z1: 86 },
 ];
+
+/** From up high (the hilltop) you see further: the whole village below. */
+export const ZONE_DRAW_DISTANCE_HIGH = 170;
 
 /**
  * What you walk round, not through, inside walkable ground: tree trunks and

@@ -3,12 +3,14 @@ import { PRICES, REWARDS, walletLineText, walletRef } from '../src/api/wallet';
 
 // The migration itself (Node's fs, loaded at run time: the shared package has no Node types).
 const { readFileSync } = (await import('node:fs' as string)) as { readFileSync: (p: URL, enc: 'utf8') => string };
+// The rewards as the latest migration defines them, the prices as the first.
 const sql = readFileSync(new URL('../../../supabase/migrations/20261122000500_wallet.sql', import.meta.url), 'utf8');
+const rewardsSql = readFileSync(new URL('../../../supabase/migrations/20261122000700_wallet_lake.sql', import.meta.url), 'utf8');
 
 describe('our money', () => {
   it('shows the same rewards as the server pays', () => {
-    for (const [reason, r] of Object.entries(REWARDS)) expect(sql).toContain(`('${reason}', ${r.amount}, ${r.perDay})`);
-    expect([...sql.matchAll(/\('([a-z_]+)', \d+, \d+\)/g)].length).toBe(Object.keys(REWARDS).length);
+    for (const [reason, r] of Object.entries(REWARDS)) expect(rewardsSql).toContain(`('${reason}', ${r.amount}, ${r.perDay})`);
+    expect([...rewardsSql.matchAll(/\('([a-z_]+)', \d+, \d+\)/g)].length).toBe(Object.keys(REWARDS).length);
   });
 
   it('shows the same prices as the server charges', () => {

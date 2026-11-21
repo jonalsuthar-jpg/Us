@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { isOn, isOpen, type ItemModel, type PlacedItem } from '../items';
 import type { Materials, Quality } from './materials';
-import { funModel } from './fun-models';
+import { FunBall, funModel } from './fun-models';
 import { REAL_MODELS, type RealModel } from './furniture';
 import { B, KitContext, useKit, type MatKey } from './model';
 import { Optional, plainGlass } from './real-house';
@@ -589,9 +589,27 @@ function Drawn({ it, assets, look }: { it: PlacedItem; assets?: string; look: Lo
     <Optional fallback={<Model look={look} />}>
       <Suspense fallback={<Model look={look} />}>
         <Real base={assets} real={real} color={it.state.color} />
+        {it.model === 'vase' && freshFlowers(it.state.at) ? <Bouquet /> : null}
         {real.keepScreen ? <TvPanel on={look.on} photos={look.photos} /> : null}
       </Suspense>
     </Optional>
+  );
+}
+
+/** Flowers bought at the village stall stay fresh in the vase for three days. */
+const freshFlowers = (at?: string) => !!at && Date.now() - Date.parse(at) < 3 * 24 * 3600 * 1000;
+
+function Bouquet() {
+  const cs = ['#E84A6F', '#FFC93C', '#F2A7B8', '#9B5DE5', '#FFFFFF', '#E84A6F', '#FF8A3D'];
+  return (
+    <group position={[0, 0.2, 0]}>
+      {cs.map((c, i) => {
+        const a = (i / cs.length) * Math.PI * 2;
+        const r = i % 2 ? 0.07 : 0.035;
+        return <FunBall key={i} at={[Math.cos(a) * r, 0.12 + (i % 3) * 0.035, Math.sin(a) * r]} r={0.04} c={c} />;
+      })}
+      <FunBall at={[0, 0.06, 0]} r={0.05} c="#4F8A3A" />
+    </group>
   );
 }
 
