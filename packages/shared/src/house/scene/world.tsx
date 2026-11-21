@@ -251,6 +251,7 @@ interface Me {
   hands: { lead: boolean; since: number } | null;
   /** Metres walked since the last footstep. */
   stride: number;
+  barefoot?: boolean;
 }
 
 /** The house, the two of us, the things in it and the camera. Goes inside a Canvas. */
@@ -901,17 +902,21 @@ export function HouseWorld(props: WorldProps) {
           : me.at === 'pool'
             ? 'swim'
             : undefined;
+    // Shoes off in the temple hall (left on the rack by the steps), on again outside.
+    const barefoot = me.at === 'templeHall';
+    if (barefoot && !me.barefoot) onMoment?.('Shoes off, in the temple 🙏');
+    me.barefoot = barefoot;
     if (me.rig) {
       me.rig.root.position.copy(me.pos);
       me.rig.root.rotation.y = me.heading;
-      me.rig.update(dt, { moving, speed: me.speed, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold, talking: talking && !moving && (!voice || voice.me > SPEAKING), lookAt: p && them.shown ? [them.pos.x, them.pos.y + 1.6, them.pos.z] : undefined }, me.motion);
+      me.rig.update(dt, { moving, speed: me.speed, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold, barefoot, talking: talking && !moving && (!voice || voice.me > SPEAKING), lookAt: p && them.shown ? [them.pos.x, them.pos.y + 1.6, them.pos.z] : undefined }, me.motion);
     }
     const label = region(me.at).label;
     if (label !== me.place) {
       me.place = label;
       onPlace?.(label);
     }
-    presence?.update({ x: me.pos.x, y: me.pos.y, z: me.pos.z, h: me.heading, m: moving ? 1 : 0, s: moving ? Math.round(me.speed * 10) / 10 : undefined, a: act, hk: me.hold?.key, hs: me.hold?.since });
+    presence?.update({ x: me.pos.x, y: me.pos.y, z: me.pos.z, h: me.heading, m: moving ? 1 : 0, s: moving ? Math.round(me.speed * 10) / 10 : undefined, a: act, b: barefoot ? 1 : undefined, hk: me.hold?.key, hs: me.hold?.since });
 
     // What's cut away in the dollhouse: inside, the floor above and the roof,
     // and the walls between the camera and me drop to a low strip.
@@ -938,7 +943,7 @@ export function HouseWorld(props: WorldProps) {
         them.rig.root.visible = !(view === 'ground' && them.pos.y > FLOOR_H / 2);
         them.rig.root.position.copy(them.pos);
         them.rig.root.rotation.y = them.heading;
-        them.rig.update(dt, { moving: p.m === 1, speed: p.s, swimming: p.a === 'swim', act: bodyAct(p.a), carrying: !!p.hk, talking: talking && p.m !== 1 && (!voice || voice.them > SPEAKING), lookAt: [me.pos.x, me.pos.y + 1.6, me.pos.z] }, them.motion);
+        them.rig.update(dt, { moving: p.m === 1, speed: p.s, swimming: p.a === 'swim', act: bodyAct(p.a), carrying: !!p.hk, barefoot: p.b === 1, talking: talking && p.m !== 1 && (!voice || voice.them > SPEAKING), lookAt: [me.pos.x, me.pos.y + 1.6, me.pos.z] }, them.motion);
       } else {
         them.shown = false;
         them.rig.root.visible = false;

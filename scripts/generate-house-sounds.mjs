@@ -191,3 +191,54 @@ wav('fire', seamless(mix(gain(lowpass(noise(5), 500), 0.35), Array.from({ length
   }
   wav('bubbles', seamless(mix(x, gain(lowpass(noise(4), 700), 0.12))));
 }
+
+// The temple.
+// A brass bell: a strong strike, long ringing partials that beat a little.
+{
+  const d = 4.5;
+  const x = Array.from({ length: len(d) }, (_, i) => {
+    const t = i / RATE;
+    const parts = [[620, 1], [1240.5, 0.55], [1683, 0.4], [2350, 0.25], [3105, 0.15]];
+    let v = 0;
+    for (const [f, a] of parts) v += Math.sin(2 * Math.PI * f * t) * a * Math.exp(-t * (0.7 + f / 2400)) * (1 + 0.08 * Math.sin(2 * Math.PI * 2.5 * t));
+    return v * 0.32;
+  });
+  wav('bell', mix(x, gain(env(highpass(noise(0.03), 3000), 0.0005, 0.006), 0.5)));
+}
+// A conch: a breathy, rising horn.
+{
+  const d = 2.6;
+  let ph = 0;
+  const x = Array.from({ length: len(d) }, (_, i) => {
+    const t = i / RATE;
+    const f = 233 + Math.min(1, t / 0.4) * 8;
+    ph += (2 * Math.PI * f) / RATE;
+    const e = Math.min(1, t / 0.25) * Math.min(1, (d - t) / 0.5);
+    return (Math.sin(ph) * 0.5 + Math.sin(ph * 2) * 0.25 + Math.sin(ph * 3) * 0.12) * e * 0.4;
+  });
+  wav('conch', mix(x, gain(lowpass(noise(d), 1200), 0.05)));
+}
+// The aarti: a gentle drone (tanpura-like Sa and Pa) with a little bell and a simple tune over it, looping.
+{
+  const d = 16;
+  const x = new Array(len(d)).fill(0);
+  const sa = 146.83;
+  for (let i = 0; i < x.length; i++) {
+    const t = i / RATE;
+    for (const [f, a] of [[sa, 0.09], [sa * 1.5, 0.06], [sa * 2, 0.05]]) x[i] += Math.sin(2 * Math.PI * f * t + Math.sin(t * 0.7) * 0.3) * a;
+  }
+  const tune = [0, 2, 4, 2, 0, 4, 7, 4, 2, 0, -1, 0, 2, 4, 2, 0];
+  tune.forEach((n, k) => {
+    const s = len(k * 1.0);
+    const f = sa * 2 * Math.pow(2, n / 12);
+    for (let i = 0; i < len(0.95); i++) {
+      const t = i / RATE;
+      x[s + i] += Math.sin(2 * Math.PI * f * t) * 0.11 * Math.min(1, t / 0.05) * Math.exp(-t * 1.6);
+    }
+  });
+  for (let k = 0; k < d; k += 2) {
+    const s = len(k + 0.5);
+    for (let i = 0; i < len(0.4) && s + i < x.length; i++) x[s + i] += Math.sin(2 * Math.PI * 1850 * (i / RATE)) * 0.06 * Math.exp(-(i / RATE) * 9);
+  }
+  wav('aarti', seamless(x, 0.6));
+}

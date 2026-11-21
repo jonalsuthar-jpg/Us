@@ -5,8 +5,8 @@ import type { RegionId } from './layout';
  * under sounds/). The world says what to play and how loud; each app plays
  * them its own way (Web Audio on the web, expo-audio on the phone).
  */
-export const ONE_SHOTS = ['step_wood', 'step_tile', 'step_grass', 'step_stone', 'door', 'click', 'fridge', 'splash', 'chime', 'dice', 'pop', 'swish', 'catch'] as const;
-export const LOOPS = ['sizzle', 'pour', 'rain', 'crickets', 'birds', 'music', 'fire', 'bubbles'] as const;
+export const ONE_SHOTS = ['step_wood', 'step_tile', 'step_grass', 'step_stone', 'door', 'click', 'fridge', 'splash', 'chime', 'dice', 'pop', 'swish', 'catch', 'bell', 'conch'] as const;
+export const LOOPS = ['sizzle', 'pour', 'rain', 'crickets', 'birds', 'music', 'fire', 'bubbles', 'aarti'] as const;
 export type OneShot = (typeof ONE_SHOTS)[number];
 export type Loop = (typeof LOOPS)[number];
 

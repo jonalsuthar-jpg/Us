@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { isOn, toWorld, type PlacedItem } from '../items';
 import { FLOOR_H } from '../layout';
+import { TEMPLE } from '../village';
 
 /**
  * The lamps' light. Every lamp, ceiling light, lamp post, fire and candle is
@@ -56,6 +57,8 @@ export function lightSources(items: PlacedItem[], night: boolean, carried: Reado
     else if (it.model === 'hotTub' && night) add(it, [0, 0.45, 0], 1.6, 3, 1.4, '#7FD4FF');
     else if (it.model === 'candles') add(it, [0, 0.35, 0], night ? 2.2 : 0.6, 4, 1, '#FFB060');
   }
+  // The temple's sanctum, lit as if by its oil lamps, day and night.
+  out.push({ key: 'sanctum', x: TEMPLE.lingam.x, y: 1.6, z: TEMPLE.lingam.z - 0.6, floor: 0, color: '#FFB060', power: night ? 3 : 1.6, range: 4.5, pool: 1.2 });
   return out;
 }
 

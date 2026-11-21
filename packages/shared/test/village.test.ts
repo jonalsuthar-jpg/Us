@@ -137,3 +137,11 @@ describe('the village: the temple', () => {
     expect(n).toBeTruthy();
   });
 });
+
+describe('the village: shoes off at the temple', () => {
+  it('sends and reads the barefoot flag with my position', async () => {
+    const { readPose } = await import('../src/house/presence');
+    expect(readPose({ x: -54, y: 0, z: 55, h: 0, b: 1 })).toMatchObject({ b: 1 });
+    expect(readPose({ x: -54, y: 0, z: 55, h: 0, b: 7 })?.b).toBeUndefined();
+  });
+});

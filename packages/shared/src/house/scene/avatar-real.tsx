@@ -92,7 +92,9 @@ export function RealAvatar({ base, look, rigRef, ringColor, ring = true }: { bas
       else if (name.startsWith('MI_Superhero')) mat.color.set(skinTint);
       mesh.material = mat;
     });
-    return { scene, mats, bones };
+    // The shoes, so they can come off at the temple: bare feet in the skin's own colour.
+    const shoes = mats.filter((m) => m.name === 'Shoes');
+    return { scene, mats, bones, shoes };
   }, [person, look, body]);
   useEffect(() => () => made.mats.forEach((m) => m.dispose()), [made]);
 
@@ -131,9 +133,14 @@ export function RealAvatar({ base, look, rigRef, ringColor, ring = true }: { bas
     const tmpV = new THREE.Vector3();
     const tmpUp = new THREE.Vector3();
     const rq = new THREE.Quaternion();
+    let bare = false;
     const rig: AvatarRig = {
       root: r,
       update(dt, d, m) {
+        if (!!d.barefoot !== bare) {
+          bare = !!d.barefoot;
+          for (const s of made.shoes) (s as THREE.MeshStandardMaterial).color.set(bare ? look.skin : (look.shoes ?? '#F2F0EA'));
+        }
         const { clip, speed } = clipFor(d, m);
         const next = actions.get(clip) ?? actions.get('Idle_Loop')!;
         if (next !== playing) {

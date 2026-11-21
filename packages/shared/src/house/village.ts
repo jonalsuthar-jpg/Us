@@ -118,6 +118,10 @@ export const GROUNDS: (Rect & { kind: 'lanePath' | 'cobble' | 'squarePaving' | '
   { kind: 'parkPath', x0: 26, x1: 58, z0: 73, z1: 76 },
   { kind: 'parkPath', x0: 34, x1: 50, z0: 48, z1: 64 },
   { kind: 'cafeFloor', x0: 12.2, x1: 23.8, z0: 38.2, z1: 49.8 },
+  // The temple: its path, the courtyard and the hall's stone floor.
+  { kind: 'cobble', x0: -57, x1: -53.5, z0: 36, z1: 46 },
+  { kind: 'squarePaving', x0: -61, x1: -47, z0: 46, z1: 53 },
+  { kind: 'squarePaving', x0: -58.4, x1: -49.6, z0: 53, z1: 57.2 },
 ];
 
 export const FOUNTAIN = { x: 0, z: 47, r: 2.6 } as const;

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { FLOOR_H, HOUSE, POOL, STAIRS, WALL_T } from '../layout';
-import { BUILDINGS } from '../village';
+import { BUILDINGS, TEMPLE } from '../village';
 import type { Materials } from './materials';
 
 /**
@@ -255,6 +255,10 @@ export function HouseColliders({ mats, into }: { mats: Materials; into: (g: THRE
         <B a={[STAIRS.x1, FLOOR_H - 0.15, HOUSE.z0]} b={[HOUSE.x1, FLOOR_H, -2.7]} m="wood" />
         <Floor y={FLOOR_H} upper />
         <Roof />
+        {/* The temple: the sanctum and its tower, the hall's roof, the gateway's tower. */}
+        <B a={[TEMPLE.sanctum.x0, 0, TEMPLE.sanctum.z0]} b={[TEMPLE.sanctum.x1, 7.5, TEMPLE.sanctum.z1]} m="wood" />
+        <B a={[TEMPLE.hall.x0 - 0.5, 3.0, TEMPLE.hall.z0 - 0.4]} b={[TEMPLE.hall.x1 + 0.5, 3.6, TEMPLE.hall.z1]} m="wood" />
+        <B a={[TEMPLE.gateway.x0 - 1, 3.0, TEMPLE.gateway.z - 0.55]} b={[TEMPLE.gateway.x1 + 1, 5.6, TEMPLE.gateway.z + 0.55]} m="wood" />
         {BUILDINGS.map((b) =>
           b.inside ? (
             // The café: its walls and ceiling, not the room inside.

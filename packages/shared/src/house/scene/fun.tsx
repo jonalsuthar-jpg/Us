@@ -52,13 +52,15 @@ import {
 } from '../fun';
 import { DISH_KEY, isOn, MUSIC_KEY, placeItems, restingY, today, type PlacedItem } from '../items';
 import { FLOOR_H, POOL, regionAt, type RegionId } from '../layout';
+import { WORLD_DAY_MS, worldHours } from '../sky';
+import { TEMPLE } from '../village';
 import type { Emote, Pose } from '../presence';
 import type { HouseSound } from '../sound';
 import type { HouseStore } from '../store';
 import { PRICES, walletLineText, walletRef, type Priced, type Reward } from '../../api/wallet';
 import { VILLAGERS, villagerAt } from '../villagers';
 import { DANCE_S, HEART_S } from './avatar';
-import { colour, FunBall, funSphere } from './fun-models';
+import { colour, FunBall, FunFlames, funSphere } from './fun-models';
 import type { HousePhoto } from './items';
 
 /** A card the screens draw the same way on the phone and the web: some words, a picture, buttons, maybe a box to type in. */
@@ -148,6 +150,8 @@ export interface FunHost {
 }
 
 const GAME_KEY = 'game';
+const BELL_KEY = 'temple_bell';
+const DIYAS_KEY = 'temple_diyas';
 const SEEK_KEY = 'seek';
 const TREASURE_KEY = 'treasure';
 const THROW_KEY = 'throw';
@@ -259,6 +263,7 @@ export function useFun(h: FunHost) {
     lastBall: '',
   }).current;
   const boardGroup = useRef<THREE.Group>(null);
+  const bellSwing = useRef(0);
   const boardPlane = useRef<THREE.Mesh>(null);
 
   // Read fresh wherever it's used every frame (focus, frame): what React last rendered can be a few frames behind
@@ -880,6 +885,22 @@ export function useFun(h: FunHost) {
       }
     }
 
+    // The temple: ring the bell at the hall's door; light a diya (one each, each world day).
+    if (me.at === 'templeHall' || me.at === 'templeCourt') {
+      if (close(TEMPLE.bell.x, 0, TEMPLE.bell.z, 1.3)) return { label: 'Ring the bell', run: ringBell };
+      if (close(TEMPLE.diyas.x, 0, TEMPLE.diyas.z, 1.4) && !litBy(meId)) {
+        return {
+          label: 'Light a diya',
+          run: () => {
+            const d = diyas();
+            set(DIYAS_KEY, { day: worldDay(), by: [...d.by, meId] } as unknown as Record<string, unknown>);
+            h.sound?.play('chime', 0.3);
+            h.moment(`diya:${worldDay()}:${meId}`, partnerHere() && litBy(partnerId) ? 'Two diyas, side by side 🪔' : 'A diya, lit 🪔', false);
+          },
+        };
+      }
+    }
+
     for (const shop of SHOPS) {
       const keeper = VILLAGERS.find((v) => v.id === shop.keeper);
       if (!keeper || !close(shop.x, 0, shop.z, 1.8) || !villagerAt(keeper, Date.now(), h.coupleId)) continue;
@@ -1017,6 +1038,37 @@ export function useFun(h: FunHost) {
     return true;
   }
 
+  // ---------------------------------------------------------- the temple
+
+  const worldDay = () => Math.floor((Date.now() + (worldHours(0, h.coupleId) / 24) * WORLD_DAY_MS) / WORLD_DAY_MS);
+  /** Who has lit a diya today (the world's day). */
+  const diyas = (): { day: number; by: string[] } => {
+    const v = raw(DIYAS_KEY);
+    return v && v.day === worldDay() && Array.isArray(v.by) ? { day: v.day as number, by: (v.by as unknown[]).filter(isStr).slice(0, 4) } : { day: worldDay(), by: [] };
+  };
+  const litBy = (id: string) => diyas().by.includes(id);
+
+  function ringBell() {
+    h.sound?.play('bell', 0.8);
+    bellSwing.current = 1;
+    // My partner hears it too (softer the further they are): the ring goes through the store.
+    set(BELL_KEY, { at: new Date().toISOString(), by: meId });
+  }
+  // Their ring: play it, from where the bell is.
+  const theirRing = raw(BELL_KEY);
+  useEffect(() => {
+    if (!theirRing || theirRing.by === meId || !isStr(theirRing.at) || Date.now() - Date.parse(theirRing.at) > 5000) return;
+    const d = Math.hypot(TEMPLE.bell.x - h.me.pos.x, TEMPLE.bell.z - h.me.pos.z);
+    h.sound?.play('bell', 0.8 / (1 + d / 4));
+    bellSwing.current = 1;
+  }, [theirRing?.at]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** The evening aarti: at world dusk, for a world hour. */
+  const aartiNow = () => {
+    const hr = worldHours(Date.now(), h.coupleId);
+    return hr >= 18.4 && hr < 19.4;
+  };
+
   /** The ball's in the air: nobody can pick it up from where it lay. */
   function flying(key: string): boolean {
     if (key !== 'ball') return false;
@@ -1102,6 +1154,17 @@ export function useFun(h: FunHost) {
       const names: Record<string, string> = { sofa: 'Cosy on the sofa', swing: 'On the swing together', hot_tub: 'Hot tub together', picnic: 'A picnic together', log_bench: 'By the fire together', bed: 'Lying together' };
       h.moment(`cosy:${mine.key}:${Math.floor(h.now() / 120)}`, names[mine.key]!);
     }
+
+    // The aarti: the tune, a conch to begin, a line across the top, while we're at the temple.
+    const atTemple = h.me.at === 'templeHall' || h.me.at === 'templeCourt' || h.me.at === 'templePath';
+    const aarti = atTemple && aartiNow();
+    if (aarti && !ui.told.has(`aarti:${worldDay()}`)) {
+      ui.told.add(`aarti:${worldDay()}`);
+      h.sound?.play('conch', 0.7);
+      h.say('The evening aarti 🪔');
+    }
+    if (aarti && !hud.banner) hud.banner = 'Evening aarti 🪔';
+    h.sound?.loop('aarti', aarti ? 0.45 : 0);
 
     // Sounds: the fire crackling and the hot tub bubbling, close by.
     if (h.sound) {
@@ -1223,6 +1286,7 @@ export function useFun(h: FunHost) {
       <MoodOrb who={h.me.pos} colourOf={myMood?.ring} hidden={false} />
       <MoodOrb who={h.them.pos} colourOf={theirMood?.ring} hidden={!h.them.shown} />
       {h.night ? <NightSky /> : null}
+      <TempleThings lit={diyas().by.length} swing={bellSwing} aarti={aartiNow} barefoot={[h.me.at === 'templeHall', h.them.pose?.b === 1]} />
     </>
   );
 
@@ -1625,6 +1689,81 @@ function NightSky() {
       <mesh ref={shoot} geometry={unitBox} scale={[3.2, 0.06, 0.06]} visible={false}>
         <meshBasicMaterial color="#FFFFFF" transparent opacity={0} fog={false} depthWrite={false} />
       </mesh>
+    </>
+  );
+}
+
+// ------------------------------------------------------------- the temple
+
+const brass = () => colour('#C9A23A');
+const bellShape = new THREE.LatheGeometry(
+  [[0, 0.32], [0.05, 0.31], [0.08, 0.26], [0.1, 0.12], [0.14, 0.02], [0.16, 0], [0.13, 0.01], [0.09, 0.11], [0.07, 0.25], [0.03, 0.3], [0, 0.3]].map(([r, y]) => new THREE.Vector2(r, y)),
+  16,
+);
+
+/** The bell over the hall's steps, the diya stand, the shoe rack, and the aarti lamp circling before the lingam. */
+function TempleThings({ lit, swing, aarti, barefoot }: { lit: number; swing: { current: number }; aarti: () => boolean; barefoot: [boolean, boolean] }) {
+  const bell = useRef<THREE.Group>(null);
+  const lamp = useRef<THREE.Group>(null);
+  useFrame(({ clock }, dt) => {
+    if (bell.current) {
+      swing.current = Math.max(0, swing.current - dt * 0.4);
+      bell.current.rotation.x = Math.sin(clock.elapsedTime * 6) * 0.35 * swing.current;
+    }
+    if (lamp.current) {
+      const on = aarti();
+      lamp.current.visible = on;
+      if (on) {
+        const a = clock.elapsedTime * 1.4;
+        lamp.current.position.set(TEMPLE.lingam.x + Math.cos(a) * 0.45, 1.0 + Math.sin(a) * 0.45, TEMPLE.lingam.z - 0.9);
+      }
+    }
+  });
+  const slots = 8;
+  return (
+    <>
+      <group position={[TEMPLE.bell.x, TEMPLE.bell.y, TEMPLE.bell.z]}>
+        <mesh geometry={unitBox} material={brass()} position={[0, 0.25, 0]} scale={[0.02, 0.5, 0.02]} />
+        <group ref={bell}>
+          <mesh geometry={bellShape} material={brass()} position={[0, -0.32, 0]} />
+        </group>
+      </group>
+      <group position={[TEMPLE.diyas.x, 0, TEMPLE.diyas.z]}>
+        <mesh geometry={cylinderGeo} material={brass()} position={[0, 0.45, 0]} scale={[0.04, 0.9, 0.04]} />
+        <mesh geometry={cylinderGeo} material={brass()} position={[0, 0.02, 0]} scale={[0.22, 0.04, 0.22]} />
+        <mesh geometry={cylinderGeo} material={brass()} position={[0, 0.9, 0]} scale={[0.3, 0.03, 0.3]} />
+        {Array.from({ length: slots }, (_, i) => {
+          const a = (i / slots) * Math.PI * 2;
+          const x = Math.cos(a) * 0.24;
+          const z = Math.sin(a) * 0.24;
+          return (
+            <group key={i} position={[x, 0.93, z]}>
+              <mesh geometry={funSphere} material={colour('#A0522D')} scale={[0.045, 0.02, 0.045]} />
+              {i < lit * 2 ? <FunFlames n={1} spread={0} size={0.03} y={0.01} /> : null}
+            </group>
+          );
+        })}
+      </group>
+      <group position={[TEMPLE.rack.x, 0, TEMPLE.rack.z]} rotation={[0, Math.PI / 2, 0]}>
+        <mesh geometry={unitBox} material={colour('#6B4A2E')} position={[0, 0.35, 0]} scale={[1.0, 0.04, 0.3]} />
+        <mesh geometry={unitBox} material={colour('#6B4A2E')} position={[0, 0.05, 0]} scale={[1.0, 0.04, 0.3]} />
+        {[-0.48, 0.48].map((x) => (
+          <mesh key={x} geometry={unitBox} material={colour('#5A3A24')} position={[x, 0.2, 0]} scale={[0.04, 0.4, 0.3]} />
+        ))}
+        {barefoot.map((off, i) =>
+          off ? (
+            <group key={i} position={[i ? 0.25 : -0.25, 0.39, 0]}>
+              {[-0.05, 0.05].map((x) => (
+                <mesh key={x} geometry={unitBox} material={colour(i ? '#2E2E38' : '#F2F0EA')} position={[x, 0.025, 0]} scale={[0.08, 0.05, 0.24]} />
+              ))}
+            </group>
+          ) : null,
+        )}
+      </group>
+      <group ref={lamp} visible={false}>
+        <mesh geometry={cylinderGeo} material={brass()} scale={[0.07, 0.02, 0.07]} />
+        <FunFlames n={3} spread={0.03} size={0.035} y={0.01} />
+      </group>
     </>
   );
 }

@@ -281,4 +281,4 @@ export function funModel(item: PlacedItem, on: boolean, night: boolean): ReactNo
   return null;
 }
 
-export { Ball as FunBall, sphere as funSphere };
+export { Ball as FunBall, Flames as FunFlames, sphere as funSphere };

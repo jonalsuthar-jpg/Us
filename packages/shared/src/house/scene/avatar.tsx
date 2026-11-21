@@ -149,6 +149,8 @@ export interface Doing {
   /** Turn the head to look here (my partner), when they're near. */
   lookAt?: [number, number, number];
   carrying: boolean;
+  /** Shoes off (in the temple hall). */
+  barefoot?: boolean;
 }
 
 /** What a pose's activity means for the body. */

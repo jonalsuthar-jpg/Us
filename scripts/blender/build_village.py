@@ -570,6 +570,103 @@ for k in range(6):
         ball("square", sx + 0.25 + math.cos(a) * 0.08, 1.2 + (j % 2) * 0.06, bz + math.sin(a) * 0.08, 0.07, f"flower{(k + j) % 6}", subdiv=1, name="bloom")
 text("square", "Flowers", sx + 0.96, 2.05, sz, math.pi / 2, 0.28, "trim")
 
+# --- the temple: Shiva, small and South Indian --------------------------------------
+plain("blackStone", srgb("#2A2A2E"), rough=0.32)
+plain("templeStone", srgb("#C9B89A"), rough=0.85)
+plain("gold", srgb("#C9A23A"), rough=0.3, metal=0.9)
+plain("marigold", srgb("#F2A21B"), rough=0.7)
+T = L["TEMPLE"]
+TZ = "west"
+
+
+def tiers(cx, cz, w, d, y, n, step_h, inset, mat):
+    """A stepped tower: n tiers, each smaller, with little pavilions at the corners; a dome and a kalasha on top."""
+    for k in range(n):
+        hw, hd = w / 2 - k * inset, d / 2 - k * inset
+        box(TZ, (cx - hw, y, cz - hd), (cx + hw, y + step_h * 0.8, cz + hd), mat, name="tier")
+        # A cornice on each tier, and small corner pavilions (kudu).
+        box(TZ, (cx - hw - 0.08, y + step_h * 0.8, cz - hd - 0.08), (cx + hw + 0.08, y + step_h, cz + hd + 0.08), "templeStone", name="cornice")
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                ball(TZ, cx + sx * (hw - 0.15), y + step_h + 0.1, cz + sz * (hd - 0.15), 0.14, mat, subdiv=1, squash=1.2, name="kudu")
+        y += step_h
+    r = max(0.35, min(w, d) / 2 - n * inset)
+    ball(TZ, cx, y + r * 0.45, cz, r, mat, subdiv=2, squash=0.9, name="shikhara")
+    cyl(TZ, cx, y + r * 1.3, cz, 0.12, 0.18, "gold", segs=12, name="kalasha_base")
+    ball(TZ, cx, y + r * 1.55, cz, 0.13, "gold", subdiv=2, name="kalasha")
+    cyl(TZ, cx, y + r * 1.62, cz, 0.04, 0.3, "gold", segs=8, r2=0.0, name="kalasha_tip")
+
+
+# The gateway: two piers, a lintel, and a little tiered tower over the opening onto the courtyard.
+g = T["gateway"]
+gz = g["z"]
+for (a, b) in ((g["x0"] - 0.9, g["x0"]), (g["x1"], g["x1"] + 0.9)):
+    box(TZ, (a, 0, gz - 0.45), (b, 3.0, gz + 0.45), "templeStone", name="gate_pier")
+box(TZ, (g["x0"] - 1.0, 3.0, gz - 0.55), (g["x1"] + 1.0, 3.45, gz + 0.55), "templeStone", name="gate_lintel")
+tiers((g["x0"] + g["x1"]) / 2, gz, g["x1"] - g["x0"] + 1.6, 1.0, 3.45, 3, 0.75, 0.25, "stoneWall")
+
+# The courtyard's low wall, open at the gateway and towards the hall.
+for (a, b) in (((-61.2, 0, 45.8), (g["x0"] - 0.9, 1.1, 46.2)), ((g["x1"] + 0.9, 0, 45.8), (-46.8, 1.1, 46.2)), ((-61.2, 0, 46.2), (-60.8, 1.1, 53)), ((-47.2, 0, 46.2), (-46.8, 1.1, 53))):
+    box(TZ, a, b, "stoneWall", name="court_wall")
+    box(TZ, (a[0] - 0.05, 1.1, a[2] - 0.05), (b[0] + 0.05, 1.2, b[2] + 0.05), "templeStone", name="court_cap")
+
+# The hall (mandapa): a stone floor, pillars, a flat roof with a parapet.
+hh = T["hall"]
+box(TZ, (hh["x0"] - 0.4, 0, hh["z0"] - 0.1), (hh["x1"] + 0.4, 0.08, hh["z1"] + 0.2), "templeStone", name="hall_floor")
+for px in (hh["x0"] - 0.1, hh["x0"] + 2.6, hh["x1"] - 2.6, hh["x1"] + 0.1):
+    for pz in (hh["z0"] + 0.1, hh["z1"] - 0.1):
+        box(TZ, (px - 0.2, 0.08, pz - 0.2), (px + 0.2, 3.0, pz + 0.2), "templeStone", name="pillar")
+        box(TZ, (px - 0.28, 0.08, pz - 0.28), (px + 0.28, 0.4, pz + 0.28), "stoneWall", name="pillar_base")
+        box(TZ, (px - 0.3, 2.8, pz - 0.3), (px + 0.3, 3.0, pz + 0.3), "stoneWall", name="pillar_capital")
+box(TZ, (hh["x0"] - 0.5, 3.0, hh["z0"] - 0.4), (hh["x1"] + 0.5, 3.3, hh["z1"] + 0.2), "templeStone", name="hall_roof")
+for (a, b) in (((hh["x0"] - 0.5, 3.3, hh["z0"] - 0.4), (hh["x1"] + 0.5, 3.6, hh["z0"] - 0.25)), ((hh["x0"] - 0.5, 3.3, hh["z0"] - 0.4), (hh["x0"] - 0.35, 3.6, hh["z1"] + 0.2)), ((hh["x1"] + 0.35, 3.3, hh["z0"] - 0.4), (hh["x1"] + 0.5, 3.6, hh["z1"] + 0.2))):
+    box(TZ, a, b, "stoneWall", name="parapet")
+
+# The sanctum (garbhagriha): thick walls, a doorway facing the hall, the lingam inside, the vimana above.
+sn = T["sanctum"]
+t = 0.45
+door_x = (T["lingam"]["x"] - 0.6, T["lingam"]["x"] + 0.6)
+box(TZ, (sn["x0"], 0, sn["z0"]), (door_x[0], 3.4, sn["z0"] + t), "templeStone", name="sanctum_wall")
+box(TZ, (door_x[1], 0, sn["z0"]), (sn["x1"], 3.4, sn["z0"] + t), "templeStone", name="sanctum_wall")
+box(TZ, (door_x[0], 2.3, sn["z0"]), (door_x[1], 3.4, sn["z0"] + t), "templeStone", name="sanctum_wall")
+box(TZ, (door_x[0] - 0.12, 0, sn["z0"] - 0.05), (door_x[0], 2.4, sn["z0"] + t + 0.05), "gold", name="door_frame")
+box(TZ, (door_x[1], 0, sn["z0"] - 0.05), (door_x[1] + 0.12, 2.4, sn["z0"] + t + 0.05), "gold", name="door_frame")
+box(TZ, (sn["x0"], 0, sn["z1"] - t), (sn["x1"], 3.4, sn["z1"]), "templeStone", name="sanctum_wall")
+box(TZ, (sn["x0"], 0, sn["z0"]), (sn["x0"] + t, 3.4, sn["z1"]), "templeStone", name="sanctum_wall")
+box(TZ, (sn["x1"] - t, 0, sn["z0"]), (sn["x1"], 3.4, sn["z1"]), "templeStone", name="sanctum_wall")
+box(TZ, (sn["x0"], 0, sn["z0"]), (sn["x1"], 0.1, sn["z1"]), "templeStone", name="sanctum_floor")
+box(TZ, (sn["x0"] - 0.1, 3.4, sn["z0"] - 0.1), (sn["x1"] + 0.1, 3.6, sn["z1"] + 0.1), "templeStone", name="sanctum_roof")
+tiers((sn["x0"] + sn["x1"]) / 2, (sn["z0"] + sn["z1"]) / 2, sn["x1"] - sn["x0"], sn["z1"] - sn["z0"], 3.6, 4, 0.9, 0.42, "stoneWall")
+
+# The lingam on its base (the yoni, its spout to the north), in black stone, garlanded with marigolds.
+lx, lz = T["lingam"]["x"], T["lingam"]["z"]
+cyl(TZ, lx, 0.1, lz, 0.55, 0.22, "blackStone", segs=24, name="pitha")
+cyl(TZ, lx, 0.32, lz, 0.48, 0.12, "blackStone", segs=24, name="yoni")
+box(TZ, (lx - 0.12, 0.32, lz - 0.95), (lx + 0.12, 0.42, lz - 0.4), "blackStone", name="yoni_spout")
+cyl(TZ, lx, 0.44, lz, 0.17, 0.42, "blackStone", segs=20, name="lingam")
+ball(TZ, lx, 0.86, lz, 0.17, "blackStone", subdiv=2, name="lingam_top")
+for k in range(14):
+    a = k / 14 * math.tau
+    ball(TZ, lx + math.cos(a) * 0.2, 0.62, lz + math.sin(a) * 0.2, 0.045, "marigold", subdiv=1, name="garland")
+ball(TZ, lx, 1.0, lz, 0.05, "flower0", subdiv=1, name="tilak")
+
+# Nandi, seated in the hall, facing the sanctum: a simple carved bull on a plinth.
+nx, nz = T["nandi"]["x"], T["nandi"]["z"]
+box(TZ, (nx - 0.45, 0.08, nz - 0.75), (nx + 0.45, 0.32, nz + 0.75), "templeStone", name="nandi_plinth")
+ball(TZ, nx, 0.72, nz - 0.1, 0.42, "blackStone", subdiv=2, squash=0.95, name="nandi_body")
+for o in [PARTS[TZ][-1]]:
+    o.scale = (1.0, 1.7, 1.0)  # longer than wide (Blender y is the app's -z)
+ball(TZ, nx, 1.08, nz + 0.05, 0.22, "blackStone", subdiv=2, name="nandi_hump")
+ball(TZ, nx, 1.02, nz + 0.62, 0.2, "blackStone", subdiv=2, squash=1.2, name="nandi_head")
+for sx in (-1, 1):
+    cyl(TZ, nx + sx * 0.13, 1.2, nz + 0.6, 0.035, 0.2, "blackStone", segs=6, r2=0.01, name="nandi_horn")
+    ball(TZ, nx + sx * 0.2, 1.08, nz + 0.6, 0.06, "blackStone", subdiv=1, name="nandi_ear")
+    box(TZ, (nx + sx * 0.3 - 0.1, 0.32, nz + 0.25), (nx + sx * 0.3 + 0.1, 0.48, nz + 0.6), "blackStone", name="nandi_leg")
+ball(TZ, nx, 0.95, nz + 0.82, 0.1, "blackStone", subdiv=1, name="nandi_muzzle")
+for k in range(8):
+    a = k / 8 * math.tau
+    ball(TZ, nx + math.cos(a) * 0.17, 0.92, nz + 0.4 + math.sin(a) * 0.08, 0.035, "marigold", subdiv=1, name="nandi_garland")
+
 # --- props: benches, café furniture, crates and barrels ---------------------------
 
 
@@ -904,8 +1001,12 @@ if PREVIEW:
     cam_data.lens = 22
     cam = bpy.data.objects.new("cam", cam_data)
     scene.collection.objects.link(cam)
-    cam.location = V(-14, 16, 64)
-    cam.rotation_euler = (V(4, 1, 40) - cam.location).to_track_quat("-Z", "Y").to_euler()
+    if arg("--preview-temple", False):
+        cam.location = V(-49.5, 2.4, 48.6)
+        cam.rotation_euler = (V(-54.5, 1.6, 57) - cam.location).to_track_quat("-Z", "Y").to_euler()
+    else:
+        cam.location = V(-14, 16, 64)
+        cam.rotation_euler = (V(4, 1, 40) - cam.location).to_track_quat("-Z", "Y").to_euler()
     scene.camera = cam
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720

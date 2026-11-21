@@ -38,6 +38,8 @@ export interface Pose {
   /** What I'm doing: sit:<item>:<seat>, lie:<item>:<seat>, cook, water, hug, swim. */
   a?: string;
   /** What I'm carrying, and since when (ms). */
+  /** Barefoot (shoes off in the temple). */
+  b?: 1;
   hk?: string;
   hs?: number;
 }
@@ -82,6 +84,7 @@ export function readPose(e: unknown): Pose | null {
   const out: Pose = { x: p.x!, y: p.y!, z: p.z!, h: p.h!, m: p.m ? 1 : 0 };
   if (typeof p.a === 'string' && ACT.test(p.a)) out.a = p.a;
   if (typeof p.s === 'number' && Number.isFinite(p.s) && p.s >= 0 && p.s <= 10) out.s = p.s;
+  if (p.b === 1) out.b = 1;
   if (typeof p.hk === 'string' && KEY.test(p.hk) && finite(p.hs)) {
     out.hk = p.hk;
     out.hs = p.hs;
@@ -156,7 +159,7 @@ export class HousePresence {
     const since = this.now() - this.sentAt;
     const l = this.lastSent;
     // Stopping, starting to sit or picking something up goes out at once.
-    const changed = !!l && (l.m !== p.m || l.a !== p.a || l.hk !== p.hk);
+    const changed = !!l && (l.m !== p.m || l.a !== p.a || l.hk !== p.hk || l.b !== p.b);
     if (changed || (p.m === 1 && since >= POSE_EVERY_MS)) this.sendPose(p, false);
   }
 
@@ -217,12 +220,13 @@ export class HousePresence {
     const out: Pose = { x: round(p.x), y: round(p.y), z: round(p.z), h: round(p.h), m: p.m };
     if (p.a) out.a = p.a;
     if (p.s !== undefined) out.s = p.s;
+    if (p.b) out.b = 1;
     if (p.hk) {
       out.hk = p.hk;
       out.hs = p.hs;
     }
     const l = this.lastSent;
-    const same = l && out.x === l.x && out.y === l.y && out.z === l.z && out.h === l.h && out.m === l.m && out.a === l.a && out.hk === l.hk;
+    const same = l && out.x === l.x && out.y === l.y && out.z === l.z && out.h === l.h && out.m === l.m && out.a === l.a && out.hk === l.hk && out.b === l.b;
     if (same && !force) return;
     this.lastSent = out;
     this.sentAt = this.now();
