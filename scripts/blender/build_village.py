@@ -180,6 +180,9 @@ plain("trim", srgb("#F4F1EA"), rough=0.45)
 plain("woodDark", srgb("#5A3A24"), rough=0.55)
 plain("wood", srgb("#9A6A42"), rough=0.6)
 plain("window", srgb("#1E2A33"), rough=0.08, metal=0.2)
+glass = plain("glass", srgb("#BFD9E6"), rough=0.02)
+glass.node_tree.nodes["Principled BSDF"].inputs["Transmission Weight"].default_value = 1.0
+glass.node_tree.nodes["Principled BSDF"].inputs["Alpha"].default_value = 0.3
 plain("interior", srgb("#F3E6D2"), rough=0.8)
 plain("counterTop", srgb("#E8E2D6"), rough=0.3)
 plain("bark", srgb("#5B4030"), rough=1.0)
@@ -493,7 +496,7 @@ def cafe_walls(b, zid):
     for (za, zb) in ((39.2, 42.6), (45.4, 48.8)):
         solid((x0, 0.0, za), (x0 + t, 1.0, zb))
         solid((x0, 3.2, za), (x0 + t, h, zb))
-        box(zid, (x0 + 0.12, 1.0, za), (x0 + 0.16, 3.2, zb), "window", name="cafe_glass")
+        box(zid, (x0 + 0.12, 1.0, za), (x0 + 0.16, 3.2, zb), "glass", name="glass_cafe")
         box(zid, (x0 - 0.06, 3.2, za - 0.05), (x0 + t + 0.06, 3.3, zb + 0.05), "trim", name="frame")
         box(zid, (x0 - 0.12, 0.92, za - 0.05), (x0 + t + 0.06, 1.0, zb + 0.05), "trim", name="sill")
     solid((x0, 2.9, door_z - 0.7), (x0 + t, h, door_z + 0.7))
@@ -503,7 +506,7 @@ def cafe_walls(b, zid):
     for (xa, xb) in ((14.2, 17.4), (18.6, 21.8)):
         solid((xa, 0.0, z0), (xb, 1.0, z0 + t))
         solid((xa, 3.2, z0), (xb, h, z0 + t))
-        box(zid, (xa, 1.0, z0 + 0.12), (xb, 3.2, z0 + 0.16), "window", name="cafe_glass")
+        box(zid, (xa, 1.0, z0 + 0.12), (xb, 3.2, z0 + 0.16), "glass", name="glass_cafe")
     # East and south: plain.
     solid((x1 - t, 0.0, z0), (x1, h, z1))
     solid((x0, 0.0, z1 - t), (x1, h, z1))
@@ -573,6 +576,7 @@ text("square", "Flowers", sx + 0.96, 2.05, sz, math.pi / 2, 0.28, "trim")
 # --- the temple: Shiva, small and South Indian --------------------------------------
 plain("blackStone", srgb("#2A2A2E"), rough=0.32)
 plain("templeStone", srgb("#C9B89A"), rough=0.85)
+plain("granite", srgb("#77777D"), rough=0.45)
 plain("gold", srgb("#C9A23A"), rough=0.3, metal=0.9)
 plain("marigold", srgb("#F2A21B"), rough=0.7)
 T = L["TEMPLE"]
@@ -653,16 +657,16 @@ ball(TZ, lx, 1.0, lz, 0.05, "flower0", subdiv=1, name="tilak")
 # Nandi, seated in the hall, facing the sanctum: a simple carved bull on a plinth.
 nx, nz = T["nandi"]["x"], T["nandi"]["z"]
 box(TZ, (nx - 0.45, 0.08, nz - 0.75), (nx + 0.45, 0.32, nz + 0.75), "templeStone", name="nandi_plinth")
-ball(TZ, nx, 0.72, nz - 0.1, 0.42, "blackStone", subdiv=2, squash=0.95, name="nandi_body")
+ball(TZ, nx, 0.72, nz - 0.1, 0.42, "granite", subdiv=3, squash=0.95, name="nandi_body")
 for o in [PARTS[TZ][-1]]:
     o.scale = (1.0, 1.7, 1.0)  # longer than wide (Blender y is the app's -z)
-ball(TZ, nx, 1.08, nz + 0.05, 0.22, "blackStone", subdiv=2, name="nandi_hump")
-ball(TZ, nx, 1.02, nz + 0.62, 0.2, "blackStone", subdiv=2, squash=1.2, name="nandi_head")
+ball(TZ, nx, 1.08, nz + 0.05, 0.22, "granite", subdiv=2, name="nandi_hump")
+ball(TZ, nx, 1.02, nz + 0.62, 0.2, "granite", subdiv=2, squash=1.2, name="nandi_head")
 for sx in (-1, 1):
-    cyl(TZ, nx + sx * 0.13, 1.2, nz + 0.6, 0.035, 0.2, "blackStone", segs=6, r2=0.01, name="nandi_horn")
-    ball(TZ, nx + sx * 0.2, 1.08, nz + 0.6, 0.06, "blackStone", subdiv=1, name="nandi_ear")
-    box(TZ, (nx + sx * 0.3 - 0.1, 0.32, nz + 0.25), (nx + sx * 0.3 + 0.1, 0.48, nz + 0.6), "blackStone", name="nandi_leg")
-ball(TZ, nx, 0.95, nz + 0.82, 0.1, "blackStone", subdiv=1, name="nandi_muzzle")
+    cyl(TZ, nx + sx * 0.13, 1.2, nz + 0.6, 0.035, 0.2, "granite", segs=6, r2=0.01, name="nandi_horn")
+    ball(TZ, nx + sx * 0.2, 1.08, nz + 0.6, 0.06, "granite", subdiv=1, name="nandi_ear")
+    box(TZ, (nx + sx * 0.3 - 0.1, 0.32, nz + 0.25), (nx + sx * 0.3 + 0.1, 0.48, nz + 0.6), "granite", name="nandi_leg")
+ball(TZ, nx, 0.95, nz + 0.82, 0.1, "granite", subdiv=1, name="nandi_muzzle")
 for k in range(8):
     a = k / 8 * math.tau
     ball(TZ, nx + math.cos(a) * 0.17, 0.92, nz + 0.4 + math.sin(a) * 0.08, 0.035, "marigold", subdiv=1, name="nandi_garland")
@@ -769,7 +773,10 @@ def tree_kind(k):
         bpy.context.view_layer.objects.active = parts[0]
         if len(parts) > 1:
             bpy.ops.object.join()
-        bpy.context.view_layer.objects.active.name = nm
+        o = bpy.context.view_layer.objects.active
+        o.name = nm
+        for poly in o.data.polygons:
+            poly.use_smooth = True
 
 
 for k in range(3):
@@ -856,7 +863,7 @@ LIVE = {"grass", "lanePath", "cobble", "squarePaving", "parkPath", "water", "lea
 
 
 def baked(o):
-    return o.type == "MESH" and not o.name.startswith("water") and not any(m.name in LIVE for m in o.data.materials)
+    return o.type == "MESH" and not o.name.startswith(("water", "glass")) and not any(m.name in LIVE or m.name == "glass" for m in o.data.materials)
 
 
 def bake_zone(zid):

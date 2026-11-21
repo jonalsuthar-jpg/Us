@@ -315,9 +315,9 @@ export default function HouseLab() {
     // The village: out through the gate, to the square, the café and the park.
     if (scene === 'gate')
       run([
-        [800, () => ca.cmds.push({ t: 'walkTo', x: 5, y: 0, z: 22 })],
-        [900, () => cb.cmds.push({ t: 'walkTo', x: 5.6, y: 0, z: 20 })],
-        [14000, () => ((ca.yaw = 0.15), (ca.pitch = 0.28), (cb.yaw = Math.PI), (cb.pitch = 0.3))],
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 5, y: 0, z: 27 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 5.4, y: 0, z: 24 })],
+        [20000, () => ((ca.yaw = 0.15), (ca.pitch = 0.28), (cb.yaw = Math.PI), (cb.pitch = 0.3))],
       ]);
     if (scene === 'square')
       run([
@@ -336,6 +336,12 @@ export default function HouseLab() {
         [800, () => ca.cmds.push({ t: 'walkTo', x: 35, y: 0, z: 56, use: 'bench_4' })],
         [900, () => cb.cmds.push({ t: 'walkTo', x: 42, y: 0, z: 48 })],
         [55000, () => ((ca.yaw = -Math.PI / 2 + 0.3), (ca.pitch = 0.25), (cb.yaw = 0.4), (cb.pitch = 0.3))],
+      ]);
+    if (scene === 'temple')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: -52.5, y: 0, z: 55.5 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: -55, y: 0, z: 49 })],
+        [62000, () => ((ca.yaw = Math.PI - 0.5), (ca.pitch = 0.2), (cb.yaw = Math.PI + 0.15), (cb.pitch = 0.2))],
       ]);
     if (scene === 'pool')
       run([
