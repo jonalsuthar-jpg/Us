@@ -12,11 +12,11 @@ import { Optional } from './real-house';
  * they are this moment. Far away they move less often; out of sight they
  * aren't drawn. Come up to someone at work and they turn and say hello.
  */
-export function Villagers({ base, near, coupleId, say }: { base: string; near: THREE.Vector3; coupleId: string; say: (text: string) => void }) {
+export function Villagers({ base, near, coupleId, say, show = SHOW_M }: { base: string; near: THREE.Vector3; coupleId: string; say: (text: string) => void; show?: number }) {
   return (
     <>
       {VILLAGERS.map((v) => (
-        <OneVillager key={v.id} v={v} base={base} near={near} coupleId={coupleId} say={say} />
+        <OneVillager key={v.id} v={v} base={base} near={near} coupleId={coupleId} say={say} show={show} />
       ))}
       <Ducks near={near} />
     </>
@@ -28,7 +28,7 @@ const SHOW_M = 55;
 const NEAR_M = 15;
 const HELLO_M = 2.6;
 
-function OneVillager({ v, base, near, coupleId, say }: { v: Villager; base: string; near: THREE.Vector3; coupleId: string; say: (text: string) => void }) {
+function OneVillager({ v, base, near, coupleId, say, show }: { v: Villager; base: string; near: THREE.Vector3; coupleId: string; say: (text: string) => void; show: number }) {
   const rig = useRef<AvatarRig | null>(null);
   const motion = useMemo(newMotion, []);
   const st = useRef({ acc: 0, greeted: 0, close: false }).current;
@@ -38,7 +38,7 @@ function OneVillager({ v, base, near, coupleId, say }: { v: Villager; base: stri
     const now = Date.now();
     const p = villagerAt(v, now, coupleId);
     const d = p ? Math.hypot(p.x - near.x, p.z - near.z) : Infinity;
-    r.root.visible = d < SHOW_M;
+    r.root.visible = d < show;
     if (!p || !r.root.visible) return;
     r.root.position.set(p.x, 0, p.z);
     const close = d < HELLO_M;

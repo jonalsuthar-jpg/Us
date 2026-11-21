@@ -34,6 +34,7 @@ import { useFun, useUnlocked, withMailbox, type FunCmd, type FunHud, type HouseL
 import { PRICES, walletRef } from '../../api/wallet';
 import { RealAvatar } from './avatar-real';
 import { Items, type HousePhoto } from './items';
+import { LampPosts } from './lamp-posts';
 import { LightPool, LightPools, lightSources, poolSize } from './lights';
 import { makeMaterials, type Quality } from './materials';
 import { HouseColliders, HouseModel, type HouseGroups } from './model';
@@ -205,7 +206,9 @@ export interface WorldProps {
  * targets don't work (reflection maps and the HDR sky drew garbage), and
  * every draw call costs more, so phones get a lighter version.
  */
-const ON_PHONE = typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+const IS_PHONE = typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+/** The lab can act as a phone (?phone=1), to measure what a phone would draw. */
+const onPhone = () => IS_PHONE || (typeof window !== 'undefined' && (window as unknown as { __US_PHONE__?: boolean }).__US_PHONE__ === true);
 
 const SKY_DAY = new THREE.Color('#BFDDF2');
 const GOLDEN = new THREE.Color('#F4B98A');
@@ -218,6 +221,8 @@ const REACH = 1.05;
 const COOK_S = 6;
 const WATER_S = 2.5;
 const HUG_S = 3;
+/** Things in the house and the village beyond this (in x + z) aren't drawn. */
+const ITEM_DRAW_M = 45;
 /** Louder than this on the call: talking. */
 const SPEAKING = 0.035;
 
@@ -299,7 +304,7 @@ export function HouseWorld(props: WorldProps) {
 
   // Until then, reflections from a soft studio light, above low quality.
   useEffect(() => {
-    if (quality === 'low' || sky || ON_PHONE) return;
+    if (quality === 'low' || sky || onPhone()) return;
     let env: THREE.WebGLRenderTarget | null = null;
     try {
       const pmrem = new THREE.PMREMGenerator(gl);
@@ -334,10 +339,10 @@ export function HouseWorld(props: WorldProps) {
   const walls = useRef<{ obj: THREE.Object3D; nx: number; nz: number; upper: boolean }[]>([]);
   useLayoutEffect(() => {
     // Phones: no shadows for now; on expo-gl they speckle the picture.
-    const shadows = quality !== 'low' && !ON_PHONE;
+    const shadows = quality !== 'low' && !onPhone();
     gl.shadowMap.enabled = shadows;
     // On phones the shadows are redrawn every other frame (see the frame); the house itself never moves.
-    gl.shadowMap.autoUpdate = !ON_PHONE;
+    gl.shadowMap.autoUpdate = !onPhone();
     gl.shadowMap.needsUpdate = true;
     gl.shadowMap.type = quality === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     walls.current = [];
@@ -985,6 +990,8 @@ export function HouseWorld(props: WorldProps) {
         o.position.set(it.x, it.y, it.z);
         o.rotation.y = it.ry;
       }
+      // Far away it isn't drawn (it'd be a few pixels, but each is a draw call).
+      o.visible = mineHeld || theirsHeld || Math.abs(it.x - me.pos.x) + Math.abs(it.z - me.pos.z) < ITEM_DRAW_M;
     }
 
     // Together moments.
@@ -1209,7 +1216,7 @@ export function HouseWorld(props: WorldProps) {
       onHud?.(state);
     }
 
-    if (ON_PHONE && gl.shadowMap.enabled && pace.current.frames % 2 === 0) gl.shadowMap.needsUpdate = true;
+    if (onPhone() && gl.shadowMap.enabled && pace.current.frames % 2 === 0) gl.shadowMap.needsUpdate = true;
     const sh = opened.current;
     // Ready once the house and the village are both in (or the village has had its chance: 10 s).
     if (real && !village) sh.waited += rawDt;
@@ -1431,7 +1438,7 @@ export function HouseWorld(props: WorldProps) {
   return (
     <>
       <hemisphereLight ref={hemi} args={['#DCEBFF', '#5F7F45', quality === 'low' ? 1.1 : 0.7]} />
-      <directionalLight ref={sun} position={[12, 20, 14]} intensity={quality === 'low' ? 1.6 : 2.4} color="#FFF1DC" castShadow={quality !== 'low' && !ON_PHONE} />
+      <directionalLight ref={sun} position={[12, 20, 14]} intensity={quality === 'low' ? 1.6 : 2.4} color="#FFF1DC" castShadow={quality !== 'low' && !onPhone()} />
       <mesh position={[0, -0.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[240, 240]} />
         <meshLambertMaterial color={night ? '#22351F' : '#6E9650'} />
@@ -1457,12 +1464,12 @@ export function HouseWorld(props: WorldProps) {
       {houseUrl ? (
         <Optional>
           <Suspense fallback={null}>
-            <RealVillage base={houseUrl} light={night ? (quality === 'low' ? 0.65 : 0.55) : 1} near={me.pos} water={waterMat} night={night} onReady={onVillageReady} />
+            <RealVillage base={houseUrl} light={night ? (quality === 'low' ? 0.65 : 0.55) : 1} near={me.pos} water={waterMat} night={night} phone={onPhone()} onReady={onVillageReady} />
           </Suspense>
         </Optional>
       ) : null}
-      {houseUrl && village ? <Villagers base={houseUrl} near={me.pos} coupleId={coupleId ?? ''} say={(t) => onMoment?.(t)} /> : null}
-      {houseUrl && !ON_PHONE ? (
+      {houseUrl && village ? <Villagers base={houseUrl} near={me.pos} coupleId={coupleId ?? ''} say={(t) => onMoment?.(t)} show={onPhone() ? 35 : 55} /> : null}
+      {houseUrl && !onPhone() ? (
         <Optional>
           <Suspense fallback={null}>
             <Sky base={houseUrl} night={night} onReady={onSkyReady} />
@@ -1480,7 +1487,8 @@ export function HouseWorld(props: WorldProps) {
       <Person look={mine} quality={quality} rigRef={setMine} ringColor="#FFFFFF" base={houseUrl} />
       <Person look={theirs} quality={quality} rigRef={setTheirs} ringColor="#FF8FB0" base={houseUrl} />
       {fun.scene}
-      <LightPool sources={sources} size={poolSize(quality, ON_PHONE)} near={me.pos} />
+      <LampPosts items={placed} mats={mats} night={night} />
+      <LightPool sources={sources} size={poolSize(quality, onPhone())} near={me.pos} />
       <LightPools sources={sources} night={night} />
       {tvVideo ? <TvVideo stream={tvVideo} tv={placed.find((i) => i.key === 'tv')} /> : null}
       <SpeakRing who={me.pos} level={() => (talking && voice ? voice.me : 0)} />

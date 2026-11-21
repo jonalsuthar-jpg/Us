@@ -1,9 +1,10 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { CROPS, type Crop } from '../fun';
 import type { PlacedItem } from '../items';
-import { B } from './model';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { B, useKit } from './model';
 
 /**
  * The shapes of the things to do together (items.ts: the fire pit, the hot
@@ -56,18 +57,20 @@ function Flames({ n, spread, size, y }: { n: number; spread: number; size: numbe
 
 /** Bubbles rising in the hot tub. */
 function Bubbles({ w }: { w: number }) {
-  const g = useRef<THREE.Group>(null);
   const seeds = useMemo(() => Array.from({ length: 14 }, (_, i) => [((i * 37) % 17) / 17 - 0.5, ((i * 53) % 13) / 13 - 0.5, i * 0.37] as const), []);
+  const im = useMemo(() => new THREE.InstancedMesh(sphere, colour('#F4FBFF'), seeds.length), [seeds]);
+  useEffect(() => () => im.dispose(), [im]);
+  const m = useMemo(() => new THREE.Matrix4(), []);
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    g.current?.children.forEach((c, i) => {
-      const s = seeds[i]!;
-      const k = (t * 0.8 + s[2]) % 1;
-      c.position.set(s[0] * w * 1.6, 0.55 + k * 0.08, s[1] * w * 1.6);
-      c.scale.setScalar(0.025 + k * 0.02);
+    seeds.forEach((sd, i) => {
+      const k = (t * 0.8 + sd[2]) % 1;
+      const r = 0.025 + k * 0.02;
+      im.setMatrixAt(i, m.makeScale(r, r, r).setPosition(sd[0] * w * 1.6, 0.55 + k * 0.08, sd[1] * w * 1.6));
     });
+    im.instanceMatrix.needsUpdate = true;
   });
-  return <group ref={g}>{seeds.map((_, i) => <mesh key={i} geometry={sphere} material={colour('#F4FBFF')} />)}</group>;
+  return <primitive object={im} />;
 }
 
 /** What grows in a bed, by how far it's grown (0…1). */
@@ -95,21 +98,36 @@ function FairyLights() {
     const t = i / 21;
     return [-3.5 + t * 7, 2.35 - Math.sin(t * Math.PI) * 0.5, 0] as [number, number, number];
   }), []);
-  const tint = ['#FFE7A0', '#FFC4D6', '#BDE3FF'];
-  // A bulb right by the camera would fill the screen: those step out of the way.
-  const g = useRef<THREE.Group>(null);
+  const im = useMemo(() => {
+    const mesh = new THREE.InstancedMesh(sphere, new THREE.MeshBasicMaterial({ color: '#FFFFFF', toneMapped: false }), bulbs.length);
+    const tint = ['#FFE7A0', '#FFC4D6', '#BDE3FF'].map((c) => new THREE.Color(c));
+    bulbs.forEach((_, i) => mesh.setColorAt(i, tint[i % 3]!));
+    mesh.computeBoundingSphere();
+    return mesh;
+  }, [bulbs]);
+  useEffect(() => () => {
+    im.dispose();
+    (im.material as THREE.Material).dispose();
+  }, [im]);
   const at = useMemo(() => new THREE.Vector3(), []);
+  const m = useMemo(() => new THREE.Matrix4(), []);
+  const tick = useRef(0);
   useFrame(({ camera }) => {
-    g.current?.children.forEach((b) => {
-      b.getWorldPosition(at);
-      b.visible = at.distanceTo(camera.position) > 1.5;
+    if (tick.current++ % 4) return;
+    im.updateMatrixWorld();
+    bulbs.forEach((b, i) => {
+      at.set(b[0], b[1], b[2]).applyMatrix4(im.matrixWorld);
+      // A bulb right by the camera would fill the screen: it steps out of the way.
+      const r = at.distanceTo(camera.position) > 1.5 ? 0.04 : 0;
+      im.setMatrixAt(i, m.makeScale(r, r, r).setPosition(b[0], b[1], b[2]));
     });
+    im.instanceMatrix.needsUpdate = true;
   });
   return (
     <>
       <B a={[-3.55, 0, -0.05]} b={[-3.45, 2.45, 0.05]} m="bark" />
       <B a={[3.45, 0, -0.05]} b={[3.55, 2.45, 0.05]} m="bark" />
-      <group ref={g}>{bulbs.map((p, i) => <Ball key={i} at={p} r={0.04} c={tint[i % 3]!} glow />)}</group>
+      <primitive object={im} />
     </>
   );
 }
@@ -139,6 +157,21 @@ function Balloons() {
   );
 }
 
+/** The fire pit's ring of stones, merged into one mesh. */
+const stoneRing = (() => {
+  const parts = Array.from({ length: 10 }, (_, i) => {
+    const a = (i / 10) * Math.PI * 2;
+    return new THREE.BoxGeometry(0.2, 0.22, 0.2).translate(Math.cos(a) * 0.5, 0.11, Math.sin(a) * 0.5);
+  });
+  const g = mergeGeometries(parts, false)!;
+  parts.forEach((p) => p.dispose());
+  return g;
+})();
+function StoneRing() {
+  const { mats } = useKit();
+  return <mesh geometry={stoneRing} material={mats.stone} />;
+}
+
 /** The shapes, or null when the model isn't one of these. */
 /** (Their light comes from the light pool: scene/lights.tsx.) */
 export function funModel(item: PlacedItem, on: boolean, night: boolean): ReactNode | null {
@@ -146,10 +179,7 @@ export function funModel(item: PlacedItem, on: boolean, night: boolean): ReactNo
     case 'firePit':
       return (
         <>
-          {Array.from({ length: 10 }, (_, i) => {
-            const a = (i / 10) * Math.PI * 2;
-            return <B key={i} a={[Math.cos(a) * 0.5 - 0.1, 0, Math.sin(a) * 0.5 - 0.1]} b={[Math.cos(a) * 0.5 + 0.1, 0.22, Math.sin(a) * 0.5 + 0.1]} m="stone" />;
-          })}
+          <StoneRing />
           <group rotation={[0, 0.5, 0]}>
             <B a={[-0.3, 0.04, -0.05]} b={[0.3, 0.14, 0.05]} m="bark" />
           </group>
@@ -279,6 +309,17 @@ export function funModel(item: PlacedItem, on: boolean, night: boolean): ReactNo
       );
   }
   return null;
+}
+
+/** Its children are drawn only while `near` (me) is within r of (x, z): props you see only close up. */
+export function Near({ near, x, z, r, children }: { near: THREE.Vector3; x: number; z: number; r: number; children: ReactNode }) {
+  const g = useRef<THREE.Group>(null);
+  const tick = useRef(0);
+  useFrame(() => {
+    if (!g.current || tick.current++ % 10) return;
+    g.current.visible = Math.hypot(near.x - x, near.z - z) < r;
+  });
+  return <group ref={g}>{children}</group>;
 }
 
 export { Ball as FunBall, Flames as FunFlames, sphere as funSphere };

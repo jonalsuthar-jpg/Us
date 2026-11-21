@@ -60,7 +60,7 @@ import type { HouseStore } from '../store';
 import { PRICES, walletLineText, walletRef, type Priced, type Reward } from '../../api/wallet';
 import { VILLAGERS, villagerAt } from '../villagers';
 import { DANCE_S, HEART_S } from './avatar';
-import { colour, FunBall, FunFlames, funSphere } from './fun-models';
+import { colour, FunBall, FunFlames, funSphere, Near } from './fun-models';
 import { useOutdoors } from './outdoors';
 import type { HousePhoto } from './items';
 
@@ -1303,7 +1303,9 @@ export function useFun(h: FunHost) {
       <MoodOrb who={h.them.pos} colourOf={theirMood?.ring} hidden={!h.them.shown} />
       {h.night ? <NightSky /> : null}
       {outdoors.scene}
-      <TempleThings lit={diyas().by.length} swing={bellSwing} aarti={aartiNow} barefoot={[h.me.at === 'templeHall', h.them.pose?.b === 1]} />
+      <Near near={h.me.pos} x={TEMPLE.lingam.x} z={TEMPLE.lingam.z} r={40}>
+        <TempleThings lit={diyas().by.length} swing={bellSwing} aarti={aartiNow} barefoot={[h.me.at === 'templeHall', h.them.pose?.b === 1]} />
+      </Near>
     </>
   );
 

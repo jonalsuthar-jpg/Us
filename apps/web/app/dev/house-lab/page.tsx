@@ -7,7 +7,7 @@
  * play it: WASD walks (Shift runs), drag looks, E uses, 1–3 emote, N night,
  * V view, P decorate. window.__lab exposes everything for automated checks.
  */
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import {
   createControls,
   HouseStore,
@@ -98,6 +98,7 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
       onWheel={(e) => zoomBy(controls, e.deltaY < 0 ? 1.08 : 1 / 1.08)}
     >
       <Canvas key={quality} shadows={quality !== 'low'} dpr={[1, 1.5]} frameloop={quality === 'low' ? 'demand' : 'always'} camera={{ fov: 55, near: 0.1, far: 200 }} style={{ pointerEvents: 'none', position: 'absolute', inset: 0 }}>
+        <SceneHandle who={who} />
         <HouseWorld
           quality={quality}
           controls={controls}
@@ -117,7 +118,7 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
             setMoment(m);
             setTimeout(() => setMoment(''), 3000);
           }}
-          onFps={(f) => setFps(Math.round(f))}
+          onFps={(f, calls) => setFps(`${Math.round(f)} · ${calls} calls` as unknown as number)}
           houseUrl={houseUrl}
           pairedAt={PAIRED}
         />
@@ -136,6 +137,9 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
 
 /** Together long enough that the house has everything. */
 const PAIRED = new Date(Date.now() - 400 * 86_400_000).toISOString();
+
+// ?phone=1: the house behaves as on a phone (no shadows, nearer drawing), to measure it.
+if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('phone')) (window as unknown as { __US_PHONE__?: boolean }).__US_PHONE__ = true;
 
 export default function HouseLab() {
   if (process.env.NODE_ENV === 'production') notFound();
@@ -435,4 +439,14 @@ export default function HouseLab() {
       </div>
     </div>
   );
+}
+
+/** The lab's scenes, for counting what's drawn (window.__scenes.a / .b). */
+function SceneHandle({ who }: { who: string }) {
+  const scene = useThree((st) => st.scene);
+  useEffect(() => {
+    const w = window as unknown as { __scenes?: Record<string, unknown> };
+    w.__scenes = { ...(w.__scenes ?? {}), [who]: scene };
+  }, [scene, who]);
+  return null;
 }

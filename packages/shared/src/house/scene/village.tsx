@@ -1,4 +1,4 @@
-import { useFrame, useLoader } from '@react-three/fiber';
+import { useFrame, useLoader, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -13,6 +13,9 @@ import { plainGlass } from './real-house';
  */
 
 export const VILLAGE_FILES = ['village.glb', ...ZONES.map((z) => `village_${z.id}_light.png`), 'village_trees.glb'];
+
+/** How far a phone draws the village (the haze is thick by then). */
+const PHONE_DRAW_DISTANCE = 50;
 
 /** Stored at half strength, like the house's. */
 const STORED_AT = 0.5;
@@ -49,11 +52,16 @@ export interface RealVillageProps {
   water: THREE.Material;
   /** After dark the windows glow, lamps lit inside. */
   night: boolean;
+  /** Phones draw less far. */
+  phone?: boolean;
   /** Everything's in and drawable. */
   onReady?: () => void;
 }
 
-export function RealVillage({ base, light, near, water, night, onReady }: RealVillageProps) {
+export function RealVillage({ base, light, near, water, night, phone, onReady }: RealVillageProps) {
+  const camera = useThree((s) => s.camera);
+  const gl = useThree((s) => s.gl);
+  const root = useThree((s) => s.scene);
   const gltf = useLoader(GLTFLoader, `${base}/village.glb`);
   const maps = useLoader(
     THREE.TextureLoader,
@@ -165,14 +173,42 @@ export function RealVillage({ base, light, near, water, night, onReady }: RealVi
   }, [trees]);
   useEffect(() => () => instanced.forEach((im) => im.dispose()), [instanced]);
 
-  useEffect(() => onReady?.(), [onReady]);
+  // Behind the loading screen: every texture sent to the graphics chip and every shader compiled now,
+  // so walking into a part of the village for the first time doesn't stutter.
+  useEffect(() => {
+    const maps = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'lightMap', 'emissiveMap'] as const;
+    const warm = (o: THREE.Object3D) =>
+      o.traverse((c) => {
+        const mat = (c as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+        if (!mat) return;
+        for (const k of maps) {
+          const t = mat[k];
+          if (t) gl.initTexture(t);
+        }
+      });
+    try {
+      for (const { scene } of zones) {
+        warm(scene);
+        gl.compile(scene, camera, root);
+      }
+      for (const im of instanced) warm(im);
+    } catch {
+      // A phone that can't do it ahead of time does it on the way, as before.
+    }
+    onReady?.();
+  }, [zones, instanced, gl, camera, root, onReady]);
 
-  // Far zones aren't drawn; checked a few times a second.
+  // A zone is drawn only when it's near enough and in front of the camera (its box in view).
+  // Its meshes are merged across the whole zone, so three.js's own per-mesh culling can't do this.
   const tick = useRef(0);
+  const cull = useMemo(() => ({ frustum: new THREE.Frustum(), m: new THREE.Matrix4(), boxes: ZONES.map((z) => new THREE.Box3(new THREE.Vector3(z.x0, -2, z.z0), new THREE.Vector3(z.x1, 16, z.z1))) }), []);
   useFrame(() => {
-    if (tick.current++ % 10) return;
-    const reach = near.y > 3 ? ZONE_DRAW_DISTANCE_HIGH : ZONE_DRAW_DISTANCE;
-    for (const { zone, scene } of zones) scene.visible = distanceTo(zone, near.x, near.z) < reach;
+    if (tick.current++ % 6) return;
+    const reach = near.y > 3 ? ZONE_DRAW_DISTANCE_HIGH : phone ? PHONE_DRAW_DISTANCE : ZONE_DRAW_DISTANCE;
+    cull.frustum.setFromProjectionMatrix(cull.m.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    zones.forEach(({ zone, scene }, i) => {
+      scene.visible = distanceTo(zone, near.x, near.z) < reach && cull.frustum.intersectsBox(cull.boxes[i]!);
+    });
   });
 
   return (

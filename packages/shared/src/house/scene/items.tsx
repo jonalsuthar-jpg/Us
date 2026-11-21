@@ -559,7 +559,8 @@ export function Items({ items, mats, quality, night, photos, objects, selected, 
     return m;
   };
 
-  const mine = items.filter((it) => (carried.has(it.key) ? floor === 0 : (it.y > 2 ? 1 : 0) === floor));
+  // Lamp posts are drawn all together (lamp-posts.tsx), not one by one.
+  const mine = items.filter((it) => it.model !== 'gardenLamp' && (carried.has(it.key) ? floor === 0 : (it.y > 2 ? 1 : 0) === floor));
   return (
     <KitContext.Provider value={kit}>
       {mine.map((it) => (

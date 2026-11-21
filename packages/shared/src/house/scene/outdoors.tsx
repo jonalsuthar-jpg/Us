@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { walletRef } from '../../api/wallet';
 import { WORLD_DAY_MS, worldHours } from '../sky';
 import { HILL, LAKE } from '../village';
-import { colour, FunBall, funSphere } from './fun-models';
+import { colour, FunBall, funSphere, Near } from './fun-models';
 import type { FunHost, FunPanel } from './fun';
 
 /**
@@ -257,13 +257,18 @@ export function useOutdoors({ h, raw, set, partnerHere, openPanel }: Ctx) {
   const c = castle();
   const scene: ReactNode = (
     <>
-      <Boat ride={ride} />
-      {shellsOn(day).map(([x, z], i) => (taken.includes(i) ? null : <Shell key={i} x={x} z={z} i={i} />))}
+      {/* The lake's things, only when we're near the lake; the locks, only up on the hill. */}
+      <Near near={h.me.pos} x={LAKE.loop.x} z={105} r={55}>
+        <Boat ride={ride} />
+        {shellsOn(day).map(([x, z], i) => (taken.includes(i) ? null : <Shell key={i} x={x} z={z} i={i} />))}
+        {c ? <Sandcastle x={c.x} z={c.z} /> : null}
+        <Waves />
+        {h.night ? <Lanterns /> : null}
+      </Near>
       {total > 0 ? <ShellJar n={total} /> : null}
-      {c ? <Sandcastle x={c.x} z={c.z} /> : null}
-      <Waves />
-      {h.night ? <Lanterns /> : null}
-      <Locks list={locks()} />
+      <Near near={h.me.pos} x={HILL.railing.x} z={57} r={40}>
+        <Locks list={locks()} />
+      </Near>
     </>
   );
 
