@@ -15,9 +15,10 @@
 import { Canvas } from '@react-three/fiber';
 import type { Quality } from '@us/shared/house';
 import {
+  artAt,
+  cuesFor,
   DEV_INFO,
   IDLE,
-  cuesFor,
   IsleBoard,
   logLines,
   pickMark,
@@ -49,6 +50,8 @@ import {
   Hourglass,
   House,
   Layers,
+  Map as MapIcon,
+  Rotate3d,
   Minus,
   Music,
   Plus,
@@ -83,6 +86,9 @@ export interface IsleTableProps {
   onToggleMusic?: () => void;
 }
 
+/** The tile pictures, from public/isle/art (scripts/build-isle-art.mjs). */
+const ART = artAt('/isle/art');
+
 const WOOD = 'bg-gradient-to-b from-[#6B4527] to-[#3F2615] border border-[#9A6B3F]/70 shadow-[0_10px_24px_-10px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,230,190,0.25)]';
 const PARCHMENT = 'bg-gradient-to-b from-[#FBF0D6] to-[#EED9AE] border border-[#C9A66B] text-[#3B2A1E] shadow-[0_18px_40px_-16px_rgba(0,0,0,0.6)]';
 
@@ -105,6 +111,7 @@ export function IsleTable({
   const view = useMemo(() => tableView(state, me, live), [state, me, live]);
   const [problem, setProblem] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
+  const [top, setTop] = useState(false);
   const api = useRef<IsleBoardApi | null>(null);
 
   useEffect(() => {
@@ -175,7 +182,7 @@ export function IsleTable({
     <div className="fixed inset-0 z-50 select-none overflow-hidden bg-[#A9D8E8] font-sans">
       <BoardSurface api={api} onTap={tap}>
         <Canvas shadows={quality !== 'low'} dpr={[1, 2]} camera={{ fov: 45, near: 0.1, far: 120 }} resize={{ debounce: 0 }} style={{ pointerEvents: 'none' }}>
-          <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} />
+          <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} art={ART} />
         </Canvas>
       </BoardSurface>
 
@@ -189,6 +196,9 @@ export function IsleTable({
           ) : null}
           <RoundButton label="Game log" onClick={() => setShowLog((v) => !v)} active={showLog}>
             <ScrollText size={20} />
+          </RoundButton>
+          <RoundButton label={top ? 'Tilted view' : 'Top view'} onClick={() => setTop(api.current?.toggleTop() === 'top')} active={top}>
+            {top ? <Rotate3d size={20} /> : <MapIcon size={20} />}
           </RoundButton>
           {onToggleSound ? (
             <RoundButton label={muted ? 'Sound on' : 'Sound off'} onClick={onToggleSound}>
@@ -316,6 +326,8 @@ function BoardSurface({ api, onTap, children }: { api: React.RefObject<IsleBoard
           const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
           if (pinch.current) api.current?.zoomBy(pinch.current / d);
           pinch.current = d;
+          // Both fingers sliding up or down tilt towards the top view or back (half each, as each finger reports).
+          api.current?.tiltBy(-(e.movementY || 0) / h / 2);
           return;
         }
         api.current?.panBy((e.clientX - p.x) / h, (e.clientY - p.y) / h);

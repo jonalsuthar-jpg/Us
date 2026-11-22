@@ -4,9 +4,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 /**
  * The board's shapes, made from simple pieces merged into one geometry each
- * with the colours in the vertices, so a forest of trees or every sheep on
- * the island is one draw. Sizes are in board units: a hex is one from its
- * centre to a corner.
+ * with the colours in the vertices, so all the tokens or all the harbours
+ * are one draw. Sizes are in board units: a hex is one from its centre to a
+ * corner.
  */
 
 export const TILE_TOP = 0.26;
@@ -65,76 +65,76 @@ export function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 
 // ---- Land ----------------------------------------------------------------
 
-/** A hex tile: a bevelled top (white, tinted per tile) on a darker earth side. */
-export function tileGeometry() {
-  return {
-    top: new THREE.CylinderGeometry(0.9, 0.955, 0.06, 6).translate(0, TILE_TOP - 0.03, 0),
-    side: new THREE.CylinderGeometry(0.955, 0.985, TILE_TOP - 0.06, 6).translate(0, (TILE_TOP - 0.06) / 2, 0),
-  };
+/** How much of each tile's picture shows: a little gap between tiles, like printed tiles on a table. */
+export const TILE_INSET = 0.955;
+
+/**
+ * A flat pointy-topped hex lying face up, `r` from centre to corner, with
+ * UVs that put a square picture on it the way the art is rendered (corners
+ * touching the picture's edges, north at the top). `y` is its height.
+ */
+export function hexTopGeometry(r = TILE_INSET, y = TILE_TOP) {
+  const pos: number[] = [0, y, 0];
+  const uv: number[] = [0.5, 0.5];
+  for (let i = 0; i < 6; i++) {
+    const a = ((60 * i - 90) * Math.PI) / 180;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    pos.push(x, y, z);
+    // The picture spans corner to corner (radius 1), north (-z) at its top.
+    uv.push(x / 2 + 0.5, -z / 2 + 0.5);
+  }
+  const index: number[] = [];
+  for (let i = 0; i < 6; i++) index.push(0, 1 + ((i + 1) % 6), 1 + i);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(index);
+  g.computeVertexNormals();
+  return g;
 }
 
-export function treeGeometry() {
-  return merge([
-    piece(new THREE.CylinderGeometry(0.025, 0.035, 0.12, 5), '#5B3B24', { at: [0, 0.06, 0] }),
-    piece(new THREE.ConeGeometry(0.13, 0.22, 7), '#2F6A33', { at: [0, 0.2, 0] }),
-    piece(new THREE.ConeGeometry(0.1, 0.18, 7), '#3E8240', { at: [0, 0.3, 0] }),
-  ]);
+/** A tile's thickness under its picture: a dark earthy edge. */
+export function hexRimGeometry() {
+  return merge([piece(new THREE.CylinderGeometry(TILE_INSET, TILE_INSET + 0.02, TILE_TOP - 0.03, 6), COLORS.earth, { at: [0, (TILE_TOP - 0.03) / 2, 0] })]);
 }
 
-export function sheepGeometry() {
-  return merge([
-    piece(new THREE.SphereGeometry(0.085, 8, 6), '#F7F4EC', { at: [0, 0.09, 0], scale: [1.25, 0.9, 0.9] }),
-    piece(new THREE.SphereGeometry(0.045, 7, 5), '#2E2A27', { at: [0.11, 0.11, 0] }),
-    ...[-0.05, 0.05].flatMap((x) =>
-      [-0.04, 0.04].map((z) => piece(new THREE.CylinderGeometry(0.012, 0.012, 0.06, 4), '#2E2A27', { at: [x, 0.03, z] })),
-    ),
-  ]);
+/** The board's frame: a big flat-topped hex of water the island sits in, with a wooden rim. */
+export const FRAME_R = 6.25;
+
+export function frameWaterGeometry() {
+  const pos: number[] = [0, 0.03, 0];
+  const uv: number[] = [0.5, 0.5];
+  for (let i = 0; i < 6; i++) {
+    const a = (60 * i * Math.PI) / 180;
+    const x = Math.cos(a) * FRAME_R;
+    const z = Math.sin(a) * FRAME_R;
+    pos.push(x, 0.03, z);
+    uv.push(x / (2 * FRAME_R) + 0.5, -z / (2 * FRAME_R) + 0.5);
+  }
+  const index: number[] = [];
+  for (let i = 0; i < 6; i++) index.push(0, 1 + ((i + 1) % 6), 1 + i);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(index);
+  g.computeVertexNormals();
+  return g;
 }
 
-export function bushGeometry() {
-  return piece(new THREE.IcosahedronGeometry(0.07, 0), '#5E9E3E', { at: [0, 0.05, 0], scale: [1, 0.8, 1] });
-}
-
-/** A strip of wheat: a raised row with a seed-head ridge. */
-export function wheatGeometry() {
-  return merge([
-    piece(new THREE.BoxGeometry(0.62, 0.05, 0.09), '#D9AE36', { at: [0, 0.025, 0] }),
-    piece(new THREE.BoxGeometry(0.6, 0.03, 0.05), '#F0CF62', { at: [0, 0.065, 0] }),
-  ]);
-}
-
-export function clayGeometry() {
-  return merge([
-    piece(new THREE.SphereGeometry(0.2, 9, 6, 0, Math.PI * 2, 0, Math.PI / 2), '#A8552F', { scale: [1, 0.55, 1] }),
-    piece(new THREE.BoxGeometry(0.1, 0.05, 0.05), '#C2603A', { at: [0.24, 0.025, 0.02] }),
-    piece(new THREE.BoxGeometry(0.1, 0.05, 0.05), '#B0532F', { at: [0.24, 0.075, 0.02] }),
-    piece(new THREE.BoxGeometry(0.1, 0.05, 0.05), '#C2603A', { at: [0.25, 0.025, 0.09] }),
-  ]);
-}
-
-export function peakGeometry() {
-  return merge([
-    piece(new THREE.ConeGeometry(0.26, 0.42, 6), '#7D848A', { at: [0, 0.21, 0] }),
-    piece(new THREE.ConeGeometry(0.1, 0.13, 6), '#F4F6F7', { at: [0, 0.37, 0] }),
-  ]);
-}
-
-export function rockGeometry() {
-  return piece(new THREE.DodecahedronGeometry(0.09, 0), '#9CA2A7', { at: [0, 0.05, 0], scale: [1, 0.7, 1] });
-}
-
-export function duneGeometry() {
-  return piece(new THREE.SphereGeometry(0.24, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), '#D9BD7C', { scale: [1.3, 0.35, 0.8] });
-}
-
-export function palmGeometry() {
-  const leaves = [0, 1, 2, 3, 4].map((i) =>
-    piece(new THREE.BoxGeometry(0.17, 0.012, 0.05), '#4C8C3C', {
-      at: [Math.cos((i * 2 * Math.PI) / 5) * 0.07, 0.24, Math.sin((i * 2 * Math.PI) / 5) * 0.07],
-      rot: [0, (-i * 2 * Math.PI) / 5, -0.35],
-    }),
-  );
-  return merge([piece(new THREE.CylinderGeometry(0.015, 0.024, 0.25, 5), '#8A6A44', { at: [0, 0.125, 0], rot: [0, 0, 0.12] }), ...leaves]);
+export function frameRimGeometry() {
+  const parts: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (60 * i * Math.PI) / 180;
+    const b = (60 * (i + 1) * Math.PI) / 180;
+    const x = (Math.cos(a) + Math.cos(b)) / 2;
+    const z = (Math.sin(a) + Math.sin(b)) / 2;
+    const len = FRAME_R + 0.12;
+    const turn = -Math.atan2(Math.sin(b) - Math.sin(a), Math.cos(b) - Math.cos(a));
+    parts.push(piece(new THREE.BoxGeometry(len, 0.14, 0.24), COLORS.woodDark, { at: [x * (FRAME_R + 0.1), 0.07, z * (FRAME_R + 0.1)], rot: [0, turn, 0] }));
+    parts.push(piece(new THREE.BoxGeometry(len - 0.05, 0.03, 0.14), COLORS.wood, { at: [x * (FRAME_R + 0.1), 0.15, z * (FRAME_R + 0.1)], rot: [0, turn, 0] }));
+  }
+  return merge(parts);
 }
 
 // ---- Pieces ----------------------------------------------------------------
@@ -236,15 +236,31 @@ export function dieFacing(value: number): THREE.Quaternion {
   }
 }
 
-/** A harbour pier: planks out to a little platform, on posts. Along +x, out to sea. */
-export function pierGeometry() {
+/** A little harbour boat with a white sail, bow along +x. */
+export function boatGeometry() {
+  const hull = new THREE.CylinderGeometry(0.12, 0.07, 0.36, 10, 1, false, 0, Math.PI);
+  return merge([
+    // A half-cylinder hull lying along x, open side up.
+    piece(hull, '#8A5530', { at: [0, 0.08, 0], rot: [0, 0, Math.PI / 2], scale: [1, 1, 0.7] }),
+    piece(new THREE.BoxGeometry(0.34, 0.02, 0.15), '#B07B4E', { at: [0, 0.085, 0] }),
+    piece(new THREE.ConeGeometry(0.075, 0.12, 8), '#8A5530', { at: [0.22, 0.07, 0], rot: [0, 0, -Math.PI / 2], scale: [1, 1, 0.7] }),
+    piece(new THREE.CylinderGeometry(0.008, 0.008, 0.34, 6), '#5E3B24', { at: [0, 0.26, 0] }),
+    // The sail: a thin triangle from the mast top to the boom.
+    piece(new THREE.CylinderGeometry(0.0, 0.14, 0.26, 3, 1), '#FBF6EA', { at: [0.05, 0.24, 0], scale: [1, 1, 0.08] }),
+  ]);
+}
+
+/** A mooring line from a boat to the shore, as a row of rope knots. */
+export function ropeGeometry(from: [number, number], to: [number, number], y = 0.1) {
   const parts: THREE.BufferGeometry[] = [];
-  for (const side of [-1, 1]) {
-    parts.push(piece(new THREE.BoxGeometry(0.42, 0.03, 0.08), '#A47148', { at: [0.2, 0.13, side * 0.22], rot: [0, side * -0.55, 0] }));
-  }
-  parts.push(piece(new THREE.BoxGeometry(0.34, 0.035, 0.34), '#B07B4E', { at: [0.48, 0.13, 0] }));
-  for (const [x, z] of [[0.33, -0.15], [0.33, 0.15], [0.63, -0.15], [0.63, 0.15]] as const) {
-    parts.push(piece(new THREE.CylinderGeometry(0.022, 0.022, 0.2, 6), '#6E4A2E', { at: [x, 0.06, z] }));
+  const [x0, z0] = from;
+  const [x1, z1] = to;
+  const n = Math.max(3, Math.round(Math.hypot(x1 - x0, z1 - z0) / 0.06));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    // A gentle sag in the middle.
+    const sag = Math.sin(t * Math.PI) * 0.04;
+    parts.push(piece(new THREE.SphereGeometry(0.014, 6, 4), '#E9DCC0', { at: [x0 + (x1 - x0) * t, y + 0.06 * (1 - t) - sag, z0 + (z1 - z0) * t] }));
   }
   return merge(parts);
 }

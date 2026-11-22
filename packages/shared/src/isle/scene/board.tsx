@@ -1,17 +1,19 @@
 /**
- * The island on the table: a sunlit sea with foam on the beach, nineteen
- * bevelled land tiles with their forests, sheep, wheat, clay, peaks and
- * dunes, wooden number tokens, harbour piers, everyone's towns, cities and
- * roads (dropping in with a bounce when built), the robber, glowing spots
- * where a piece can go, and two dice that tumble onto a raft and land on the
- * number the game rolled.
+ * The island on the table, like a printed board: nineteen picture tiles
+ * (forest, pasture, fields, hills, mountains, desert; two pictures of each,
+ * turned this way and that) in a framed sea, wooden number tokens, harbour
+ * boats moored to their corners, everyone's towns, cities and roads
+ * (dropping in with a bounce when built), the robber, glowing spots where a
+ * piece can go, and two dice that tumble onto a raft and land on the number
+ * the game rolled. The camera tilts from a three-quarter view to straight
+ * down from above.
  *
  * It only draws the state it's given. Taps are the screen's job: it asks
  * pick() where on the board a tap lands (see IsleBoardApi) and turns that
  * into a move with pickMark (isle/pick.ts).
  */
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import * as THREE from 'three';
 import type { Quality } from '../../house/scene/materials';
 import { mulberry32 } from '../../rng';
@@ -20,33 +22,31 @@ import type { Marks } from '../pick';
 import type { IsleState } from '../rules';
 import { textGeometry } from './glyphs';
 import {
-  bushGeometry,
+  boatGeometry,
   cityGeometry,
-  clayGeometry,
   COLORS,
   dieFacing,
   dieGeometry,
-  duneGeometry,
+  frameRimGeometry,
+  frameWaterGeometry,
+  hexRimGeometry,
+  hexTopGeometry,
   merge,
-  palmGeometry,
-  peakGeometry,
   piece,
-  pierGeometry,
   PLAYER_COLORS,
   roadGeometry,
   robberGeometry,
-  rockGeometry,
-  sheepGeometry,
-  tileGeometry,
+  ropeGeometry,
+  TILE_INSET,
   TILE_TOP,
   townGeometry,
-  treeGeometry,
-  wheatGeometry,
 } from './parts';
 
 const SKY = '#A9D8E8';
-/** The camera's tilt above the table. */
-const PITCH = (56 * Math.PI) / 180;
+/** The camera's tilt above the table: the usual three-quarter view, up to straight down from above. */
+const PITCH_LOW = (62 * Math.PI) / 180;
+const PITCH_TOP = (89.5 * Math.PI) / 180;
+const pitchAt = (tilt: number) => PITCH_LOW + (PITCH_TOP - PITCH_LOW) * tilt;
 
 export interface IsleBoardApi {
   /** Where on the board (board units: x across, y down the table) a point on screen lands, from -1..1 coordinates. */
@@ -55,6 +55,10 @@ export interface IsleBoardApi {
   zoomBy(factor: number): void;
   /** Slides the view by a share of the screen's height. */
   panBy(dx: number, dy: number): void;
+  /** Tilts towards the top view (positive) or back (negative), by a share of the screen's height. */
+  tiltBy(delta: number): void;
+  /** Glides to the top view, or back to the usual one; says which it's going to. */
+  toggleTop(): 'top' | 'tilted';
   /** Glides to look at a spot on the board. */
   focus(x: number, y: number): void;
   reset(): void;
@@ -67,6 +71,8 @@ export interface IsleBoardProps {
   onReady?: (api: IsleBoardApi) => void;
   /** The dice have landed (after a roll's tumble). */
   onRolled?: (total: number) => void;
+  /** The tile pictures; without them the lands show as plain colours. */
+  art?: IsleArt;
 }
 
 function useMaterial(quality: Quality, params: THREE.MeshStandardMaterialParameters = {}) {
@@ -91,7 +97,7 @@ export function lastRoll(s: IsleState): { key: number; d: [number, number] } | n
   return null;
 }
 
-export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled }: IsleBoardProps) {
+export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled, art }: IsleBoardProps) {
   const glow = useRef<{ total: number; at: number } | null>(null);
   const clock = useThree((t) => t.clock);
   return (
@@ -100,7 +106,7 @@ export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled 
       <fog attach="fog" args={[SKY, 20, 42]} />
       <Lights quality={quality} />
       <Sea />
-      <Island board={state.board} seed={state.seed} robber={state.robber} quality={quality} glow={glow} />
+      <Island board={state.board} seed={state.seed} robber={state.robber} quality={quality} glow={glow} art={art} />
       <Pieces state={state} quality={quality} />
       <Robber hex={state.robber} quality={quality} />
       <MarkSpots marks={marks} />
@@ -163,22 +169,15 @@ const SEA_FRAGMENT = /* glsl */ `
   uniform float uTime;
   uniform vec3 uDeep;
   uniform vec3 uShallow;
-  uniform vec3 uFoam;
   uniform vec3 uSky;
   varying vec3 vWorld;
   void main() {
     float r = length(vWorld.xz);
-    float a = atan(vWorld.z, vWorld.x);
-    vec3 c = mix(uShallow, uDeep, smoothstep(4.7, 8.0, r));
+    vec3 c = mix(uShallow, uDeep, smoothstep(6.2, 10.0, r));
     // Ripples catching the light.
     float w = sin(vWorld.x * 3.1 + uTime * 1.3) * sin(vWorld.z * 2.6 - uTime * 1.05)
             + 0.5 * sin((vWorld.x + vWorld.z) * 5.3 - uTime * 1.9);
     c += w * 0.025 * (1.0 - smoothstep(6.0, 16.0, r));
-    // Foam where the waves meet the beach, breathing in and out.
-    float shore = 4.72 + 0.06 * sin(a * 9.0 + uTime * 0.7) + 0.05 * sin(uTime * 0.9);
-    float band = 1.0 - smoothstep(0.0, 0.14 + 0.05 * sin(uTime * 1.6 + a * 5.0), abs(r - shore - 0.1));
-    float edge = 1.0 - smoothstep(0.0, 0.05, abs(r - shore - 0.3 - 0.05 * sin(uTime * 1.2 + a * 7.0)));
-    c = mix(c, uFoam, clamp(band * 0.8 + edge * 0.35, 0.0, 1.0));
     c = mix(c, uSky, smoothstep(16.0, 34.0, r));
     gl_FragColor = vec4(c, 1.0);
     #include <tonemapping_fragment>
@@ -196,7 +195,6 @@ function Sea() {
           uTime: { value: 0 },
           uDeep: { value: new THREE.Color(COLORS.sea) },
           uShallow: { value: new THREE.Color(COLORS.shallow) },
-          uFoam: { value: new THREE.Color(COLORS.foam) },
           uSky: { value: new THREE.Color(SKY) },
         },
       }),
@@ -215,27 +213,61 @@ function Sea() {
 
 // ---- The island ----------------------------------------------------------------
 
-/** What grows on each land, and how much of it per hex. */
-const DECOR: Record<Terrain, { make: () => THREE.BufferGeometry; n: number; scale?: [number, number] }[]> = {
-  wood: [{ make: treeGeometry, n: 9, scale: [0.85, 1.25] }],
-  wool: [
-    { make: sheepGeometry, n: 4, scale: [0.9, 1.1] },
-    { make: bushGeometry, n: 4, scale: [0.7, 1.2] },
-  ],
-  grain: [],
-  brick: [
-    { make: clayGeometry, n: 3, scale: [0.8, 1.15] },
-    { make: rockGeometry, n: 2, scale: [0.7, 1] },
-  ],
-  ore: [
-    { make: peakGeometry, n: 3, scale: [0.8, 1.25] },
-    { make: rockGeometry, n: 3, scale: [0.8, 1.2] },
-  ],
-  desert: [
-    { make: duneGeometry, n: 3, scale: [0.8, 1.2] },
-    { make: palmGeometry, n: 2, scale: [0.9, 1.1] },
-  ],
+/** Where the pictures are: two of each land (rendered by scripts/blender/build_isle_art.py), and the frame's water. */
+export interface IsleArt {
+  tiles: Partial<Record<Terrain, string[]>>;
+  sea?: string;
+}
+
+/** The art's file names for each land. */
+export const ART_LAND: Record<Terrain, string> = {
+  wood: 'forest',
+  brick: 'hills',
+  wool: 'pasture',
+  grain: 'fields',
+  ore: 'mountains',
+  desert: 'desert',
 };
+
+/** The art served from one folder (the web's public/isle/art). */
+export function artAt(base: string): IsleArt {
+  const tiles: Partial<Record<Terrain, string[]>> = {};
+  for (const [t, name] of Object.entries(ART_LAND) as [Terrain, string][]) tiles[t] = [1, 2].map((v) => `${base}/tile_${name}_${v}.jpg`);
+  return { tiles, sea: `${base}/sea.jpg` };
+}
+
+/** Which of a land's pictures each hex shows, and how it's turned (in sixths): the same on both phones. */
+export function tileLooks(board: Board, seed: number): { variant: number; turn: number }[] {
+  const random = mulberry32(seed ^ 0xa27);
+  return board.terrain.map(() => ({ variant: Math.floor(random() * 2), turn: Math.floor(random() * 6) }));
+}
+
+/** Loads a picture into a material when it arrives; the material keeps its plain colour until then. */
+function usePicture(url: string | undefined, mat: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial, repeat = 1) {
+  const gl = useThree((t) => t.gl);
+  useEffect(() => {
+    if (!url) return;
+    let live = true;
+    let tex: THREE.Texture | null = null;
+    new THREE.TextureLoader().load(url, (t) => {
+      if (!live) return t.dispose();
+      tex = t;
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
+      if (repeat !== 1) {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(repeat, repeat);
+      }
+      mat.map = t;
+      mat.color.set('#FFFFFF');
+      mat.needsUpdate = true;
+    });
+    return () => {
+      live = false;
+      tex?.dispose();
+    };
+  }, [url, mat, gl, repeat]);
+}
 
 function Island({
   board,
@@ -243,40 +275,60 @@ function Island({
   robber,
   quality,
   glow,
+  art,
 }: {
   board: Board;
   seed: number;
   robber: number;
   quality: Quality;
   glow: RefObject<{ total: number; at: number } | null>;
+  art?: IsleArt;
 }) {
   const mat = useMaterial(quality);
-  const tileMat = useMaterial(quality, { roughness: 0.92 });
-  const built = useMemo(() => buildIsland(board, seed, mat, tileMat), [board, seed, mat, tileMat]);
+  const built = useMemo(() => buildIsland(board, mat), [board, mat]);
   useEffect(() => () => built.dispose(), [built]);
 
-  const base = useMemo(() => board.terrain.map((t) => new THREE.Color(COLORS.terrain[t])), [board]);
-  const tmp = useMemo(() => new THREE.Color(), []);
-  const lit = useRef(false);
+  // One textured group per land and picture.
+  const groups = useMemo(() => {
+    const looks = tileLooks(board, seed);
+    const by = new Map<string, { land: Terrain; variant: number; hexes: number[] }>();
+    board.terrain.forEach((land, h) => {
+      const key = `${land}${looks[h]!.variant}`;
+      const g = by.get(key) ?? { land, variant: looks[h]!.variant, hexes: [] };
+      g.hexes.push(h);
+      by.set(key, g);
+    });
+    return { list: [...by.values()], looks };
+  }, [board, seed]);
+
+  // The glow over lands that paid out after a roll: soft light added over the picture.
+  const glowMat = useMemo(
+    () => new THREE.MeshBasicMaterial({ color: '#FFF1B8', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+    [],
+  );
+  useEffect(() => () => glowMat.dispose(), [glowMat]);
+  const glowShape = useMemo(() => hexTopGeometry(TILE_INSET, TILE_TOP + 0.004), []);
+  useEffect(() => () => glowShape.dispose(), [glowShape]);
+  const paid = useRef<number[]>([]);
+  const [lit, setLit] = useState<number[]>([]);
   useFrame(({ clock }) => {
     const g = glow.current;
     const t = g ? clock.elapsedTime - g.at : Infinity;
     if (t > 2.2) {
-      if (lit.current) {
-        base.forEach((c, h) => built.tops.setColorAt(h, c));
-        built.tops.instanceColor!.needsUpdate = true;
-        lit.current = false;
+      if (paid.current.length) {
+        paid.current = [];
+        setLit([]);
       }
+      glowMat.opacity = 0;
       return;
     }
-    lit.current = true;
-    // Two soft pulses on the lands that paid out.
-    const pulse = Math.max(0, Math.sin((t / 2.2) * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5) * (1 - t / 2.2);
-    base.forEach((c, h) => {
-      const paid = board.numbers[h] === g!.total && h !== robber;
-      built.tops.setColorAt(h, paid ? tmp.copy(c).lerp(new THREE.Color('#FFF6C8'), pulse * 0.75) : c);
-    });
-    built.tops.instanceColor!.needsUpdate = true;
+    const now = board.numbers.flatMap((n, h) => (n === g!.total && h !== robber ? [h] : []));
+    if (now.join() !== paid.current.join()) {
+      paid.current = now;
+      setLit(now);
+    }
+    // Two soft pulses.
+    glowMat.opacity = Math.max(0, Math.sin((t / 2.2) * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5) * (1 - t / 2.2) * 0.55;
   });
 
   return (
@@ -284,126 +336,93 @@ function Island({
       {built.objects.map((o) => (
         <primitive key={o.uuid} object={o} />
       ))}
+      <FrameWater url={art?.sea} quality={quality} />
+      {groups.list.map((g) => (
+        <TileGroup
+          key={`${g.land}${g.variant}`}
+          land={g.land}
+          hexes={g.hexes}
+          turns={g.hexes.map((h) => groups.looks[h]!.turn)}
+          url={art?.tiles[g.land]?.[g.variant]}
+          quality={quality}
+        />
+      ))}
+      {lit.map((h) => (
+        <mesh key={h} geometry={glowShape} material={glowMat} position={[TOPOLOGY.hexes[h]!.x, 0, TOPOLOGY.hexes[h]!.y]} renderOrder={2} />
+      ))}
     </group>
   );
 }
 
-function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: THREE.Material) {
+/** Every hex of one land showing the same picture, each turned its own way: one draw. */
+function TileGroup({ land, hexes, turns, url, quality }: { land: Terrain; hexes: number[]; turns: number[]; url?: string; quality: Quality }) {
+  const mat = useMemo(
+    () =>
+      quality === 'low'
+        ? new THREE.MeshLambertMaterial({ color: COLORS.terrain[land] })
+        : new THREE.MeshStandardMaterial({ color: COLORS.terrain[land], roughness: 0.9, metalness: 0 }),
+    [land, quality],
+  );
+  useEffect(() => () => mat.dispose(), [mat]);
+  usePicture(url, mat);
+  const geo = useMemo(() => hexTopGeometry(), []);
+  useEffect(() => () => geo.dispose(), [geo]);
+  const mesh = useMemo(() => {
+    const im = new THREE.InstancedMesh(geo, mat, hexes.length);
+    const m = new THREE.Matrix4();
+    hexes.forEach((h, i) => {
+      const hex = TOPOLOGY.hexes[h]!;
+      // A pointy hex turned by sixths is still the same hex: the picture just faces another way.
+      m.makeRotationY((turns[i]! * Math.PI) / 3).setPosition(hex.x, 0, hex.y);
+      im.setMatrixAt(i, m);
+    });
+    im.receiveShadow = true;
+    return im;
+  }, [geo, mat, hexes, turns]);
+  useEffect(() => () => mesh.dispose(), [mesh]);
+  return <primitive object={mesh} />;
+}
+
+/** The water inside the board's frame, painted, under the tiles. */
+function FrameWater({ url, quality }: { url?: string; quality: Quality }) {
+  const mat = useMemo(
+    () =>
+      quality === 'low'
+        ? new THREE.MeshLambertMaterial({ color: COLORS.shallow })
+        : new THREE.MeshStandardMaterial({ color: COLORS.shallow, roughness: 0.35, metalness: 0.05 }),
+    [quality],
+  );
+  useEffect(() => () => mat.dispose(), [mat]);
+  usePicture(url, mat, 3);
+  const geo = useMemo(() => frameWaterGeometry(), []);
+  useEffect(() => () => geo.dispose(), [geo]);
+  return <mesh geometry={geo} material={mat} receiveShadow />;
+}
+
+function buildIsland(board: Board, mat: THREE.Material) {
   const objects: THREE.Object3D[] = [];
   const geos: THREE.BufferGeometry[] = [];
   const { hexes } = TOPOLOGY;
 
-  // The beach under it all, a little uneven at the water's edge.
-  const sand = new THREE.CylinderGeometry(4.78, 4.95, 0.16, 56, 1);
-  const pos = sand.getAttribute('position');
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const z = pos.getZ(i);
-    const r = Math.hypot(x, z);
-    if (r < 0.5) continue;
-    const a = Math.atan2(z, x);
-    const k = 1 + 0.025 * Math.sin(a * 7 + 1.3) + 0.018 * Math.sin(a * 13);
-    pos.setXYZ(i, x * k, pos.getY(i), z * k);
-  }
-  sand.computeVertexNormals();
-  const beach = merge([piece(sand, COLORS.sand, { at: [0, 0.08, 0] })]);
-  geos.push(beach);
-  const beachMesh = new THREE.Mesh(beach, mat);
-  beachMesh.receiveShadow = true;
-  objects.push(beachMesh);
+  // The frame's wooden rim.
+  const rim = frameRimGeometry();
+  geos.push(rim);
+  const rimMesh = new THREE.Mesh(rim, mat);
+  rimMesh.castShadow = true;
+  rimMesh.receiveShadow = true;
+  objects.push(rimMesh);
 
-  // The tiles: shared earth sides, tops tinted per land.
-  const tile = tileGeometry();
-  const side = merge([piece(tile.side, COLORS.earth)]);
-  const top = merge([piece(tile.top, '#FFFFFF')]);
-  geos.push(side, top);
-  const sides = new THREE.InstancedMesh(side, tileMat, hexes.length);
-  const tops = new THREE.InstancedMesh(top, tileMat, hexes.length);
+  // Each tile's thickness under its picture.
+  const side = hexRimGeometry();
+  geos.push(side);
+  const sides = new THREE.InstancedMesh(side, mat, hexes.length);
   const m = new THREE.Matrix4();
-  hexes.forEach((h, i) => {
-    m.makeTranslation(h.x, 0.04, h.y);
-    sides.setMatrixAt(i, m);
-    tops.setMatrixAt(i, m);
-    tops.setColorAt(i, new THREE.Color(COLORS.terrain[board.terrain[i]!]));
-  });
-  for (const im of [sides, tops]) {
-    im.receiveShadow = true;
-    im.castShadow = true;
-    objects.push(im);
-  }
+  hexes.forEach((h, i) => sides.setMatrixAt(i, m.makeTranslation(h.x, 0.03, h.y)));
+  sides.castShadow = true;
+  sides.receiveShadow = true;
+  objects.push(sides);
 
-  // What grows on each land.
-  const random = mulberry32(seed ^ 0x51ed);
-  const spots = new Map<() => THREE.BufferGeometry, { m: THREE.Matrix4[] }>();
-  const taken: { x: number; z: number; r: number }[] = [];
-  const place = (cx: number, cz: number, r: number) => {
-    for (let tries = 0; tries < 30; tries++) {
-      const a = random() * Math.PI * 2;
-      const d = 0.38 + random() * 0.42;
-      const x = cx + Math.cos(a) * d;
-      const z = cz + Math.sin(a) * d;
-      if (taken.some((t) => Math.hypot(t.x - x, t.z - z) < t.r + r)) continue;
-      taken.push({ x, z, r });
-      return { x, z };
-    }
-    return null;
-  };
-  hexes.forEach((h, i) => {
-    const land = board.terrain[i]!;
-    taken.length = 0;
-    // Keep the middle clear for the number token.
-    taken.push({ x: h.x, z: h.y, r: 0.28 });
-    if (land === 'grain') {
-      const turn = random() * Math.PI;
-      for (let row = -2; row <= 2; row++) {
-        const off = row * 0.15;
-        const x = h.x + Math.cos(turn + Math.PI / 2) * off * 1;
-        const z = h.y + Math.sin(turn + Math.PI / 2) * off * 1;
-        for (const side of [-1, 1]) {
-          // Two half-rows either side of the token, shorter towards the hex's edge.
-          const len = 1 - Math.abs(row) * 0.22;
-          const along = side * 0.42;
-          const sx = x + Math.cos(turn) * along;
-          const sz = z + Math.sin(turn) * along;
-          const mm = new THREE.Matrix4().compose(
-            new THREE.Vector3(sx, TILE_TOP + 0.04, sz),
-            new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -turn),
-            new THREE.Vector3(len * 0.55, 1, 1),
-          );
-          const list = spots.get(wheatGeometry) ?? { m: [] };
-          list.m.push(mm);
-          spots.set(wheatGeometry, list);
-        }
-      }
-      return;
-    }
-    for (const d of DECOR[land]) {
-      for (let k = 0; k < d.n; k++) {
-        const s = d.scale ? d.scale[0] + random() * (d.scale[1] - d.scale[0]) : 1;
-        const at = place(h.x, h.y, 0.11 * s);
-        if (!at) continue;
-        const mm = new THREE.Matrix4().compose(
-          new THREE.Vector3(at.x, TILE_TOP + 0.04, at.z),
-          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), random() * Math.PI * 2),
-          new THREE.Vector3(s, s, s),
-        );
-        const list = spots.get(d.make) ?? { m: [] };
-        list.m.push(mm);
-        spots.set(d.make, list);
-      }
-    }
-  });
-  for (const [make, { m: ms }] of spots) {
-    const g = make();
-    geos.push(g);
-    const im = new THREE.InstancedMesh(g, mat, ms.length);
-    ms.forEach((mm, i) => im.setMatrixAt(i, mm));
-    im.castShadow = true;
-    im.receiveShadow = true;
-    objects.push(im);
-  }
-
-  // Number tokens and harbours never move: each lot is merged into one shape, one draw.
+  // Number tokens and harbours never move: all of them merged into one shape, one draw.
   const tokenGeo = new Map<number, THREE.BufferGeometry>();
   const still: THREE.BufferGeometry[] = [];
   const placed = (g: THREE.BufferGeometry, x: number, y: number, z: number, turn = 0) =>
@@ -418,7 +437,7 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
     }
     still.push(placed(g, h.x, TILE_TOP + 0.002, h.y));
   });
-  const pier = pierGeometry();
+  const boat = boatGeometry();
   for (const port of board.ports) {
     const e = TOPOLOGY.edges[port.edge]!;
     const h = hexes[e.hexes[0]!]!;
@@ -427,12 +446,19 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
     const len = Math.hypot(nx, nz);
     const ux = nx / len;
     const uz = nz / len;
-    still.push(placed(pier, e.x, 0.04, e.y, -Math.atan2(uz, ux)));
+    // The harbour's sign just off the coast, its boat further out, side on, with a rope to each of the two corners.
+    const bx = e.x + ux * 0.86;
+    const bz = e.y + uz * 0.86;
+    still.push(placed(boat, bx, 0.03, bz, -Math.atan2(uz, ux) + Math.PI / 2));
+    for (const v of e.v) {
+      const c = TOPOLOGY.verts[v]!;
+      still.push(ropeGeometry([bx - ux * 0.08, bz - uz * 0.08], [c.x, c.y], 0.1));
+    }
     const label = portLabel(port.kind === 'any' ? '3:1' : '2:1', port.kind === 'any' ? COLORS.wood : COLORS.terrain[port.kind]);
-    still.push(placed(label, e.x + ux * 0.48, 0.19, e.y + uz * 0.48));
+    still.push(placed(label, e.x + ux * 0.5, 0.06, e.y + uz * 0.5));
     label.dispose();
   }
-  pier.dispose();
+  boat.dispose();
   for (const g of tokenGeo.values()) g.dispose();
   const fixtures = merge(still);
   geos.push(fixtures);
@@ -443,7 +469,6 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
 
   return {
     objects,
-    tops,
     dispose() {
       for (const g of geos) g.dispose();
       for (const o of objects) if (o instanceof THREE.InstancedMesh) o.dispose();
@@ -468,9 +493,9 @@ function tokenGeometry(n: number) {
 
 function portLabel(text: string, color: string) {
   return merge([
-    piece(new THREE.CylinderGeometry(0.2, 0.2, 0.03, 24), color, { at: [0, 0, 0] }),
-    piece(new THREE.CylinderGeometry(0.17, 0.17, 0.035, 24), COLORS.cream, { at: [0, 0.01, 0] }),
-    piece(textGeometry(text, 0.12, 0.16, 0.012), COLORS.ink, { at: [0, 0.028, 0] }),
+    piece(new THREE.CylinderGeometry(0.27, 0.27, 0.04, 28), color, { at: [0, 0, 0] }),
+    piece(new THREE.CylinderGeometry(0.225, 0.225, 0.045, 28), COLORS.cream, { at: [0, 0.012, 0] }),
+    piece(textGeometry(text, 0.16, 0.16, 0.014), COLORS.ink, { at: [0, 0.035, 0] }),
   ]);
 }
 
@@ -660,7 +685,7 @@ function MarkSpots({ marks }: { marks?: Marks }) {
 
 // ---- Dice ----------------------------------------------------------------------
 
-const TRAY = new THREE.Vector3(6.1, 0, 0.9);
+const TRAY = new THREE.Vector3(7.4, 0, 0.9);
 const DIE = 0.3;
 const dieShape = dieGeometry(DIE);
 
@@ -752,7 +777,7 @@ function Dice({ state, quality, onLanded }: { state: IsleState; quality: Quality
 function CameraRig({ onReady }: { onReady?: (api: IsleBoardApi) => void }) {
   const camera = useThree((t) => t.camera) as THREE.PerspectiveCamera;
   const size = useThree((t) => t.size);
-  const home = () => ({ x: 0.9, z: 0.4, d: size.width / size.height < 1.2 ? 15 : 10 });
+  const home = (tilt = 0) => ({ x: 0.9, z: 0.3, d: size.width / size.height < 1.2 ? 16 : 11, tilt });
   const want = useRef(home());
   const now = useRef({ ...want.current });
 
@@ -763,7 +788,9 @@ function CameraRig({ onReady }: { onReady?: (api: IsleBoardApi) => void }) {
     n.x += (w.x - n.x) * k;
     n.z += (w.z - n.z) * k;
     n.d += (w.d - n.d) * k;
-    camera.position.set(n.x, n.d * Math.sin(PITCH), n.z + n.d * Math.cos(PITCH));
+    n.tilt += (w.tilt - n.tilt) * k;
+    const pitch = pitchAt(n.tilt);
+    camera.position.set(n.x, n.d * Math.sin(pitch), n.z + n.d * Math.cos(pitch));
     camera.lookAt(n.x, 0, n.z);
   });
 
@@ -794,8 +821,19 @@ function CameraRig({ onReady }: { onReady?: (api: IsleBoardApi) => void }) {
       panBy(dx, dy) {
         const span = 2 * want.current.d * Math.tan(((camera.fov ?? 55) * Math.PI) / 360);
         want.current.x -= dx * span;
-        want.current.z -= (dy * span) / Math.sin(PITCH);
+        want.current.z -= (dy * span) / Math.sin(pitchAt(want.current.tilt));
         clampView();
+      },
+      tiltBy(delta) {
+        want.current.tilt = Math.min(1, Math.max(0, want.current.tilt + delta * 2.2));
+      },
+      toggleTop() {
+        const top = want.current.tilt < 0.5;
+        want.current.tilt = top ? 1 : 0;
+        // From above, the board is taller than it is from the side: step back so all of it shows.
+        if (top) want.current.d = Math.max(want.current.d, 13.5);
+        clampView();
+        return top ? 'top' : 'tilted';
       },
       focus(x, y) {
         want.current.x = x;
@@ -804,7 +842,7 @@ function CameraRig({ onReady }: { onReady?: (api: IsleBoardApi) => void }) {
         clampView();
       },
       reset() {
-        want.current = home();
+        want.current = home(want.current.tilt);
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -7,7 +7,7 @@
  * wheel zooms, dragging pans, a click says what's under it.
  * ?seed=… picks the island, ?q=low|medium|high the quality, ?at=… plays that
  * many moves straight away, ?paused=1 starts paused, ?marks=1 shows the town
- * spots. window.__isle exposes the game for checks.
+ * spots, ?top=1 looks from straight above. window.__isle exposes the game for checks.
  * ?table=1 shows the whole game screen instead, with Asha played by hand
  * (?at= plays everyone, Asha too, before handing over; ?mine=1 then plays on
  * until Asha has rolled on her own turn).
@@ -16,6 +16,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { QUALITIES, type Quality } from '@us/shared/house';
 import {
   apply,
+  artAt,
   hardMove,
   IsleBoard,
   newGame,
@@ -171,6 +172,7 @@ function BoardLab() {
 
   const onReady = useCallback((a: IsleBoardApi) => {
     api.current = a;
+    if (new URLSearchParams(window.location.search).get('top')) a.toggleTop();
   }, []);
 
   const ndc = (e: React.PointerEvent | React.WheelEvent) => {
@@ -204,7 +206,7 @@ function BoardLab() {
       onPointerUp={() => (drag.current = null)}
     >
       <Canvas shadows={quality !== 'low'} dpr={[1, 2]} camera={{ fov: 45, near: 0.1, far: 120 }} style={{ pointerEvents: 'none' }}>
-        <IsleBoard state={s} marks={marks} quality={quality} onReady={onReady} />
+        <IsleBoard state={s} marks={marks} quality={quality} onReady={onReady} art={artAt('/isle/art')} />
         <Counter onCount={setCount} />
       </Canvas>
       <div

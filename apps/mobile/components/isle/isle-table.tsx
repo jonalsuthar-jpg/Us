@@ -36,6 +36,8 @@ import {
   Hourglass,
   House,
   Layers,
+  Map as MapIcon,
+  Rotate3d,
   Minus,
   Music,
   Plus,
@@ -55,6 +57,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useIsleArt } from '@/lib/isle-art';
 import { GradientView } from '../plan/art';
 import { Text } from '../ui/text';
 
@@ -116,9 +119,11 @@ export function IsleTable({
   const view = useMemo(() => tableView(state, me, live), [state, me, live]);
   const [problem, setProblem] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
+  const [top, setTop] = useState(false);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [broken, setBroken] = useState<Error | null>(null);
   const api = useRef<IsleBoardApi | null>(null);
+  const art = useIsleArt();
 
   useEffect(() => {
     if (live !== mode) setMode(live);
@@ -196,6 +201,12 @@ export function IsleTable({
         api.current?.zoomBy(last / e.scale);
         last = e.scale;
       });
+    // Two thumbs up the screen tilt towards the top view; down, back to the usual one.
+    const tilt = Gesture.Pan()
+      .minPointers(2)
+      .maxPointers(2)
+      .runOnJS(true)
+      .onChange((e) => api.current?.tiltBy(-e.changeY / Math.max(1, size.h)));
     const tap = Gesture.Tap()
       .maxDistance(10)
       .runOnJS(true)
@@ -207,7 +218,7 @@ export function IsleTable({
         if (r.action) move(r.action);
         if (r.mode) setMode(r.mode);
       });
-    return Gesture.Race(tap, Gesture.Simultaneous(pan, pinch));
+    return Gesture.Race(tap, Gesture.Simultaneous(pan, pinch, tilt));
   }, [size, view.marks, state, me, live, move]);
 
   const scale = Math.min(1, DPR[quality] / PixelRatio.get());
@@ -231,7 +242,7 @@ export function IsleTable({
             >
               <Catch onError={setBroken}>
                 <Canvas shadows={quality !== 'low'} camera={{ fov: 45, near: 0.1, far: 120 }} events={noEvents}>
-                  <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} />
+                  <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} art={art?.board} />
                 </Canvas>
               </Catch>
             </View>
@@ -250,6 +261,9 @@ export function IsleTable({
           ) : null}
           <RoundButton label="Game log" onPress={() => setShowLog((v) => !v)} active={showLog}>
             <ScrollText size={18} color={CREAM} />
+          </RoundButton>
+          <RoundButton label={top ? 'Tilted view' : 'Top view'} onPress={() => setTop(api.current?.toggleTop() === 'top')} active={top}>
+            {top ? <Rotate3d size={18} color={CREAM} /> : <MapIcon size={18} color={CREAM} />}
           </RoundButton>
           {onToggleSound ? (
             <RoundButton label={muted ? 'Sound on' : 'Sound off'} onPress={onToggleSound}>
