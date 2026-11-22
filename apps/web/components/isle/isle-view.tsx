@@ -7,29 +7,32 @@ import { useEffect, useRef, useState } from 'react';
 import { IsleTable } from './isle-table';
 import { useIsleSound } from './use-isle-sound';
 
-/** The two bots who make up the table. */
+/** The bots who make up the table: two when we play together, all three when one of us plays alone. */
 const BOTS: Seat[] = [
   { id: 'bot:meera', name: 'Meera', bot: true },
   { id: 'bot:kabir', name: 'Kabir', bot: true },
+  { id: 'bot:tara', name: 'Tara', bot: true },
 ];
 
 /**
- * Isle, as the two of us share it: straight onto the board. The first time
- * (or when nothing's being played) a fresh island is dealt at once.
+ * Isle straight onto the board: the game the two of us share, or with
+ * ?solo=1 my game alone against three bots. The first time (or when nothing's
+ * being played) a fresh island is dealt at once.
  */
 export function IsleView() {
   const router = useRouter();
   const { me, partner } = useCouple();
-  const { store, snap } = useIsle();
+  // Only ever drawn in the browser (the page loads it with ssr: false), so the address is there to read.
+  const [solo] = useState(() => new URLSearchParams(window.location.search).get('solo') === '1');
+  const { store, snap } = useIsle({ solo });
   const audio = useIsleSound();
   const [problem, setProblem] = useState<string | null>(null);
   const starting = useRef(false);
 
-  const seats = (): Seat[] => [
-    { id: me.id, name: me.display_name || 'You', bot: false },
-    { id: partner.id, name: partner.display_name || 'Partner', bot: false },
-    ...BOTS,
-  ];
+  const seats = (): Seat[] =>
+    solo
+      ? [{ id: me.id, name: me.display_name || 'You', bot: false }, ...BOTS]
+      : [{ id: me.id, name: me.display_name || 'You', bot: false }, { id: partner.id, name: partner.display_name || 'Partner', bot: false }, ...BOTS.slice(0, 2)];
   const start = () => {
     if (!store || starting.current) return;
     starting.current = true;

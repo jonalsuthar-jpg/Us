@@ -1,4 +1,5 @@
 import { useFeature } from '@us/shared/react';
+import { useLocalSearchParams } from 'expo-router';
 import * as NavigationBar from 'expo-navigation-bar';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useEffect, useState, type ComponentType } from 'react';
@@ -6,12 +7,14 @@ import { ActivityIndicator, Platform, StatusBar, View } from 'react-native';
 import { FeatureOff } from '@/components/feature-off';
 
 /**
- * Isle, full screen and sideways. The board (three.js) is required only once
- * this screen opens, so it costs nothing at app start.
+ * Isle, full screen and sideways: the game the two of us share, or with
+ * ?solo=1 my game alone against three bots. The board (three.js) is required
+ * only once this screen opens, so it costs nothing at app start.
  */
 export default function IsleScreen() {
   const on = useFeature('isle');
-  const [Table, setTable] = useState<ComponentType | null>(null);
+  const { solo } = useLocalSearchParams<{ solo?: string }>();
+  const [Table, setTable] = useState<ComponentType<{ solo?: boolean }> | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
   if (loadError) throw loadError;
 
@@ -45,5 +48,5 @@ export default function IsleScreen() {
       </View>
     );
   }
-  return <Table />;
+  return <Table solo={solo === '1'} />;
 }

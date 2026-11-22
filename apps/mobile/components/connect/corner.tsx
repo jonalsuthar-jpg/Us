@@ -174,16 +174,10 @@ function HouseCard() {
   );
 }
 
-/** Isle: a board game for the two of us and two bots, straight onto the island. */
+/** Isle: a board game, together with two bots or alone against three, straight onto the island. */
 function IsleCard() {
-  const line = 'Build, trade and race to 10 points against Meera and Kabir';
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Isle. ${line}`}
-      onPress={tap(() => router.push('/isle'))}
-      style={({ pressed }) => [{ borderRadius: 26, backgroundColor: '#1C6A8A' }, lift('#1C6A8A', 0.35), pressed && { transform: [{ scale: 0.98 }] }]}
-    >
+    <View style={[{ borderRadius: 26, backgroundColor: '#1C6A8A' }, lift('#1C6A8A', 0.35)]}>
       <GradientView from="#3FB0BE" to="#1C6A8A" radius={26} className="min-h-[132px] flex-row items-center gap-4 p-4">
         <View className="h-20 w-20 items-center justify-center rounded-[22px] bg-white/20">
           <Sailboat size={44} color="#fff" strokeWidth={1.7} />
@@ -191,12 +185,24 @@ function IsleCard() {
         <View className="flex-1 gap-1">
           <Text className="font-sans-bold text-[18px] text-white">Isle</Text>
           <Text className="text-[13px] text-white/90" numberOfLines={2}>
-            {line}
+            Build, trade and race to 10 points on a new island every game
           </Text>
-          <Pill label="Play" className="bg-[#F6CF62]" textClass="text-[#3B2A1E]" />
+          <View className="flex-row flex-wrap gap-2">
+            <Pressable accessibilityRole="button" accessibilityLabel="Play Isle together" onPress={tap(() => router.push('/isle'))} style={({ pressed }) => [pressed && { transform: [{ scale: 0.96 }] }]}>
+              <Pill label="Play together" className="bg-[#F6CF62]" textClass="text-[#3B2A1E]" />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Play Isle alone against three bots"
+              onPress={tap(() => router.push('/isle?solo=1'))}
+              style={({ pressed }) => [pressed && { transform: [{ scale: 0.96 }] }]}
+            >
+              <Pill label="Play alone" className="bg-white/90" textClass="text-[#1C6A8A]" />
+            </Pressable>
+          </View>
         </View>
       </GradientView>
-    </Pressable>
+    </View>
   );
 }
 

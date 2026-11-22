@@ -44,7 +44,6 @@ import {
   Castle,
   Check,
   ChevronLeft,
-  Coins,
   Crown,
   Dice5,
   Hourglass,
@@ -59,7 +58,6 @@ import {
   ScrollText,
   Shield,
   Sparkles,
-  Star,
   Trophy,
   Volume2,
   VolumeX,
@@ -89,8 +87,12 @@ export interface IsleTableProps {
 /** The tile pictures, from public/isle/art (scripts/build-isle-art.mjs). */
 const ART = artAt('/isle/art');
 
-const WOOD = 'bg-gradient-to-b from-[#6B4527] to-[#3F2615] border border-[#9A6B3F]/70 shadow-[0_10px_24px_-10px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,230,190,0.25)]';
-const PARCHMENT = 'bg-gradient-to-b from-[#FBF0D6] to-[#EED9AE] border border-[#C9A66B] text-[#3B2A1E] shadow-[0_18px_40px_-16px_rgba(0,0,0,0.6)]';
+/** Dark carved wood with a fine grain and a gold hairline inside its edge. */
+const WOOD =
+  'bg-[linear-gradient(180deg,rgba(255,220,170,0.07),transparent_40%),repeating-linear-gradient(97deg,rgba(255,235,200,0.035)_0_2px,transparent_2px_9px),linear-gradient(180deg,#6B4527,#3F2615)] border border-[#2A180B] shadow-[0_12px_26px_-10px_rgba(0,0,0,0.7),inset_0_0_0_1px_rgba(232,184,74,0.35),inset_0_1px_0_rgba(255,230,190,0.3)]';
+/** Old paper: warm in the middle, darker towards its edges, in a gold-edged wooden border. */
+const PARCHMENT =
+  'bg-[radial-gradient(ellipse_at_center,#FFF7E2_0%,#F6E6C0_60%,#E6CE98_100%)] border-[3px] border-[#8A6420] text-[#3B2A1E] shadow-[0_22px_48px_-16px_rgba(0,0,0,0.7),inset_0_0_0_2px_#F6DE9C,inset_0_0_30px_rgba(150,100,40,0.25)]';
 
 export function IsleTable({
   state,
@@ -375,47 +377,101 @@ function RoundButton({ label, onClick, children, active }: { label: string; onCl
   );
 }
 
-/** A resource card: the colour of its land, its picture, its name. */
-function ResCard({ r, n, dim, small, onClick, picked }: { r: Res; n?: number; dim?: boolean; small?: boolean; onClick?: () => void; picked?: boolean }) {
-  const info = RES_INFO[r];
+/** A card: its picture (scripts/blender/build_isle_art.py) in a cream-and-gold frame, its name on a band of its colour. */
+function ArtCard({
+  art,
+  label,
+  band,
+  n,
+  dim,
+  size = 'md',
+  onClick,
+  picked,
+  glow,
+  title,
+  disabled,
+}: {
+  art: string;
+  label: string;
+  band: string;
+  n?: number;
+  dim?: boolean;
+  size?: 'sm' | 'md';
+  onClick?: () => void;
+  picked?: boolean;
+  glow?: boolean;
+  title?: string;
+  disabled?: boolean;
+}) {
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag
       type={onClick ? 'button' : undefined}
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       className={cn(
-        'relative flex shrink-0 flex-col items-center justify-between rounded-[10px] border-2 border-[#FFF6E0] text-white transition',
-        small ? 'h-[60px] w-[44px] p-1' : 'h-[84px] w-[60px] p-1.5',
-        dim ? 'opacity-35 saturate-50' : 'shadow-[0_8px_16px_-8px_rgba(0,0,0,0.7)]',
-        onClick && 'hover:-translate-y-1 active:scale-95',
+        'relative shrink-0 rounded-[11px] bg-gradient-to-b from-[#FFF6DD] via-[#F1DDAE] to-[#D9B979] p-[3px] transition duration-200',
+        size === 'sm' ? 'h-[70px] w-[50px]' : 'h-[104px] w-[74px]',
+        dim ? 'opacity-35 saturate-50' : 'shadow-[0_10px_18px_-8px_rgba(0,0,0,0.75)]',
+        onClick && !disabled && 'hover:-translate-y-1.5 hover:shadow-[0_16px_24px_-10px_rgba(0,0,0,0.8)] active:scale-95',
         picked && '-translate-y-2 ring-2 ring-[#E8B84A]',
+        glow && 'shadow-[0_0_0_2px_#E8B84A,0_0_18px_2px_rgba(232,184,74,0.75)]',
       )}
-      style={{ background: `linear-gradient(160deg, ${info.color} 0%, ${info.dark} 100%)` }}
     >
-      <span className="mt-1 flex flex-1 items-center justify-center drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]">
-        <ResIcon r={r} size={small ? 22 : 32} />
-      </span>
-      <span className={cn('font-semibold tracking-wide text-white/90', small ? 'text-[9px]' : 'text-[10px]')}>{info.label}</span>
-      {n != null && n > 0 ? (
-        <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#FFF6E0] bg-[#E8B84A] px-1 text-[13px] font-bold text-[#3B2A1E] shadow">
-          {n}
+      <span className="relative block h-full w-full overflow-hidden rounded-[8px] ring-1 ring-[#A98142]/70">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={art} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
+        <span className="absolute inset-0 shadow-[inset_0_0_10px_rgba(60,35,10,0.45)]" />
+        <span
+          className={cn('absolute inset-x-0 bottom-0 flex items-end justify-center pb-[3px] pt-3 font-serif font-bold tracking-wide text-white', size === 'sm' ? 'text-[8.5px]' : 'text-[11px]')}
+          style={{ background: `linear-gradient(to bottom, transparent, ${band}E6 45%, ${band})`, textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
+        >
+          {label}
         </span>
-      ) : null}
+      </span>
+      {n != null && n > 0 ? <Coin n={n} small={size === 'sm'} /> : null}
     </Tag>
   );
 }
 
+/** A gold coin with a count on it, pinned to a card's corner. */
+function Coin({ n, small }: { n: number; small?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'absolute -right-2 -top-2 flex items-center justify-center rounded-full border-2 border-[#FFF3CF] bg-[radial-gradient(circle_at_35%_30%,#FCE39A,#E0A93A_60%,#B57E1E)] font-serif font-bold text-[#3B2A1E] shadow-[0_2px_4px_rgba(0,0,0,0.45)]',
+        small ? 'h-5 min-w-5 px-1 text-[11px]' : 'h-7 min-w-7 px-1 text-[14px]',
+      )}
+    >
+      {n}
+    </span>
+  );
+}
+
+const resArt = (r: Res) => `/isle/art/card_${r}.jpg`;
+const devArt = (d: Dev) => `/isle/art/dev_${d}.jpg`;
+
+/** A resource card. */
+function ResCard({ r, n, dim, small, onClick, picked }: { r: Res; n?: number; dim?: boolean; small?: boolean; onClick?: () => void; picked?: boolean }) {
+  const info = RES_INFO[r];
+  return <ArtCard art={resArt(r)} label={info.label} band={info.dark} n={n} dim={dim} size={small ? 'sm' : 'md'} onClick={onClick} picked={picked} title={info.label} />;
+}
+
+/** What something costs: a little picture of each card it takes. */
 function Cost({ cost, size = 14 }: { cost: Partial<Hand>; size?: number }) {
   return (
-    <span className="flex items-center gap-0.5">
+    <span className="flex items-center gap-[3px]">
       {RESOURCES.flatMap((r) =>
         Array.from({ length: cost[r] ?? 0 }, (_, i) => (
           <span
             key={`${r}${i}`}
-            className="flex items-center justify-center rounded-[4px] border border-white/60"
-            style={{ background: RES_INFO[r].color, width: size + 4, height: size + 6 }}
+            title={RES_INFO[r].label}
+            className="relative overflow-hidden rounded-[3px] ring-1 ring-[#F1DDAE]/90 shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
+            style={{ width: size + 2, height: size + 8 }}
           >
-            <ResIcon r={r} size={size - 2} className="text-white" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={resArt(r)} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
           </span>
         )),
       )}
@@ -430,8 +486,10 @@ function Prompt({ view, thinking }: { view: TableView; thinking: string | null }
   return (
     <div
       className={cn(
-        'pointer-events-none mt-1 flex items-center gap-2 rounded-full px-5 py-2 text-[15px] font-semibold',
-        mine ? 'bg-[#E8B84A] text-[#3B2A1E] shadow-[0_8px_22px_-8px_rgba(232,184,74,0.9)]' : 'bg-[#2A1A10]/80 text-[#FBEFD5]',
+        'pointer-events-none mt-1 flex items-center gap-2 rounded-[10px] border-2 px-6 py-2 font-serif text-[16px] font-bold tracking-wide',
+        mine
+          ? 'border-[#8A6420] bg-gradient-to-b from-[#FCE6A2] to-[#E3B24A] text-[#3B2A1E] shadow-[0_10px_24px_-8px_rgba(232,184,74,0.9),inset_0_0_0_1px_#FFF3CF]'
+          : 'border-[#2A180B] bg-gradient-to-b from-[#4A2E18]/95 to-[#2E1C0E]/95 text-[#FBEFD5] shadow-[0_8px_20px_-8px_rgba(0,0,0,0.7),inset_0_0_0_1px_rgba(232,184,74,0.35)]',
       )}
     >
       {thinking ? <Bot size={16} /> : null}
@@ -467,40 +525,42 @@ function SeatPanel({ s, thinking }: { s: SeatView; thinking: boolean }) {
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-[16px] p-2 pl-3 text-[#FBEFD5] transition-all',
+        'relative overflow-hidden rounded-[16px] py-2 pl-2 pr-3 text-[#FBEFD5] transition-all duration-300',
         WOOD,
-        s.turn && 'scale-[1.03] ring-2 ring-[#E8B84A] shadow-[0_0_24px_-4px_rgba(232,184,74,0.8)]',
+        s.turn && 'translate-x-[-6px] shadow-[0_0_0_2px_#E8B84A,0_0_26px_-2px_rgba(232,184,74,0.85)]',
       )}
     >
-      <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: s.color }} />
-      <div className="flex items-center gap-2">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#FFF6E0]/80 text-[15px] font-bold shadow-inner"
-          style={{ background: s.color, color: s.color === '#EFE8D8' ? '#3B2A1E' : '#fff' }}
-        >
-          {s.bot ? <Bot size={18} /> : s.real.slice(0, 1).toUpperCase()}
+      <div className="flex items-center gap-2.5">
+        {/* A medallion in their colour with a gold rim. */}
+        <span className="rounded-full bg-gradient-to-b from-[#F6DE9C] via-[#C99A42] to-[#8A6420] p-[2px] shadow-[0_3px_6px_rgba(0,0,0,0.5)]">
+          <span
+            className="flex h-10 w-10 items-center justify-center rounded-full font-serif text-[17px] font-bold shadow-[inset_0_2px_3px_rgba(255,255,255,0.35),inset_0_-3px_5px_rgba(0,0,0,0.3)]"
+            style={{ background: `radial-gradient(circle at 35% 30%, ${s.color}, ${s.color} 45%, #00000055)`, color: s.color === '#EFE8D8' ? '#3B2A1E' : '#fff' }}
+          >
+            {s.bot ? <Bot size={19} /> : s.real.slice(0, 1).toUpperCase()}
+          </span>
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1 truncate text-[14px] font-semibold">
+          <div className="flex items-center gap-1 truncate font-serif text-[15px] font-bold tracking-wide">
             {s.name}
             {thinking ? <Dots /> : null}
           </div>
-          <div className="mt-0.5 flex items-center gap-2.5 text-[12px] text-[#FBEFD5]/80">
+          <div className="mt-0.5 flex items-center gap-2.5 text-[12px] text-[#FBEFD5]/75">
             <Stat icon={<Layers size={12} />} n={s.cards} hot={s.cards > 7} title="Cards in hand" />
             <Stat icon={<Sparkles size={12} />} n={s.dev} title="Development cards" />
-            <Stat icon={<Shield size={12} />} n={s.knights} title="Knights played" />
-            <Stat icon={<Route size={12} />} n={s.road} title="Longest road" />
+            <Stat icon={<Shield size={12} />} n={s.knights} gold={s.army} title="Knights played" />
+            <Stat icon={<Route size={12} />} n={s.road} gold={s.longest} title="Longest road" />
           </div>
         </div>
-        <div className="flex flex-col items-center">
-          <span className="flex items-center gap-0.5 font-serif text-[24px] font-bold leading-none text-[#F4D27A]">
-            {s.points}
-          </span>
-          <span className="text-[9px] uppercase tracking-wider text-[#FBEFD5]/60">points</span>
-        </div>
+        {/* Points on a small gold shield. */}
+        <span className="relative flex h-11 w-10 flex-col items-center justify-center">
+          <span className="absolute inset-0 bg-gradient-to-b from-[#F6DE9C] via-[#D9A846] to-[#9A6E22] [clip-path:polygon(0_0,100%_0,100%_62%,50%_100%,0_62%)]" />
+          <span className="absolute inset-[2px] bg-gradient-to-b from-[#4A2E18] to-[#2E1C0E] [clip-path:polygon(0_0,100%_0,100%_62%,50%_100%,0_62%)]" />
+          <span className="relative -mt-1 font-serif text-[20px] font-bold leading-none text-[#F4D27A]">{s.points}</span>
+        </span>
       </div>
       {s.longest || s.army ? (
-        <div className="mt-1.5 flex gap-1.5 pl-11">
+        <div className="mt-1.5 flex gap-1.5 pl-[52px]">
           {s.longest ? <Badge icon={<Route size={11} />} text="Longest road" /> : null}
           {s.army ? <Badge icon={<Shield size={11} />} text="Largest army" /> : null}
         </div>
@@ -509,9 +569,9 @@ function SeatPanel({ s, thinking }: { s: SeatView; thinking: boolean }) {
   );
 }
 
-function Stat({ icon, n, hot, title }: { icon: ReactNode; n: number; hot?: boolean; title: string }) {
+function Stat({ icon, n, hot, gold, title }: { icon: ReactNode; n: number; hot?: boolean; gold?: boolean; title: string }) {
   return (
-    <span title={title} className={cn('flex items-center gap-0.5', hot && 'font-bold text-[#FF9B7A]')}>
+    <span title={title} className={cn('flex items-center gap-0.5', hot && 'font-bold text-[#FF9B7A]', gold && 'font-bold text-[#F4D27A]')}>
       {icon}
       {n}
     </span>
@@ -520,7 +580,7 @@ function Stat({ icon, n, hot, title }: { icon: ReactNode; n: number; hot?: boole
 
 function Badge({ icon, text }: { icon: ReactNode; text: string }) {
   return (
-    <span className="flex items-center gap-1 rounded-full bg-[#E8B84A] px-2 py-0.5 text-[10px] font-bold text-[#3B2A1E]">
+    <span className="flex items-center gap-1 rounded-full bg-gradient-to-b from-[#F6DE9C] to-[#D9A846] px-2 py-0.5 font-serif text-[10px] font-bold text-[#3B2A1E] shadow-[0_1px_2px_rgba(0,0,0,0.4)]">
       {icon}
       {text} +2
     </span>
@@ -534,7 +594,7 @@ const BUILD_ICON = { road: Route, settle: House, city: Castle, dev: Sparkles } a
 function BuildBar({ view, mode, onPick }: { view: TableView; mode: Mode; onPick: (what: 'road' | 'settle' | 'city' | 'dev') => void }) {
   return (
     <div className={cn('pointer-events-auto flex flex-col gap-1 rounded-[18px] p-2', WOOD)}>
-      <span className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#FBEFD5]/60">Build</span>
+      <span className="px-1 font-serif text-[11px] font-bold uppercase tracking-[0.18em] text-[#E8B84A]/80">Build</span>
       {view.build.map((b) => {
         const Icon = BUILD_ICON[b.what];
         const on = mode.k === 'build' && mode.what === b.what;
@@ -551,7 +611,7 @@ function BuildBar({ view, mode, onPick }: { view: TableView; mode: Mode; onPick:
             )}
           >
             <Icon size={18} />
-            <span className="w-12 text-[13px] font-semibold">{b.label}</span>
+            <span className="w-12 font-serif text-[14px] font-bold">{b.label}</span>
             <Cost cost={b.cost} />
             <span className="ml-auto pl-1 text-[10px] opacity-60">{b.left}</span>
           </button>
@@ -560,8 +620,6 @@ function BuildBar({ view, mode, onPick }: { view: TableView; mode: Mode; onPick:
     </div>
   );
 }
-
-const DEV_ICON: Record<Dev, typeof Shield> = { knight: Shield, vp: Star, roads: Route, plenty: Sparkles, monopoly: Coins };
 
 function HandRow({ view, onPlay }: { view: TableView; state: IsleState; me: number; onPlay: (card: Dev) => void }) {
   const [bump, setBump] = useState<Partial<Record<Res, number>>>({});
@@ -572,87 +630,118 @@ function HandRow({ view, onPlay }: { view: TableView; state: IsleState; me: numb
     last.current = view.hand;
     if (Object.keys(up).length) setBump((b) => ({ ...b, ...up }));
   }, [view.hand]);
+  const held = RESOURCES.filter((r) => view.hand[r] > 0);
   return (
     <div className="pointer-events-auto flex items-end gap-3">
-      <div className={cn('flex items-end gap-2 rounded-[20px] px-3 pb-2 pt-3', WOOD)}>
-        {RESOURCES.map((r) => (
-          <div key={`${r}${bump[r] ?? ''}`} className={cn(bump[r] && 'animate-[isle-pop_0.5s_ease-out]')}>
-            <ResCard r={r} n={view.hand[r]} dim={!view.hand[r]} />
-          </div>
-        ))}
+      <div className={cn('flex min-h-[124px] items-end gap-3 rounded-[22px] px-4 pb-3 pt-4', WOOD)}>
+        {held.length ? (
+          held.map((r) => (
+            <div key={`${r}${bump[r] ?? ''}`} className={cn('relative isolate', bump[r] && 'animate-[isle-pop_0.5s_ease-out]')}>
+              {/* The stack behind: deeper the more of them there are. */}
+              {Array.from({ length: Math.min(3, view.hand[r] - 1) }, (_, i) => (
+                <span
+                  key={i}
+                  className="absolute h-[104px] w-[74px] rounded-[11px] bg-gradient-to-b from-[#F1DDAE] to-[#C9A66B] shadow-[0_4px_8px_-4px_rgba(0,0,0,0.6)]"
+                  style={{ left: (i + 1) * 4, top: -(i + 1) * 3, zIndex: -1 - i, transform: `rotate(${(i + 1) * 2.5}deg)` }}
+                />
+              ))}
+              <ResCard r={r} n={view.hand[r]} />
+            </div>
+          ))
+        ) : (
+          <span className="flex h-[104px] w-[220px] items-center justify-center rounded-[12px] border border-dashed border-[#F1DDAE]/30 font-serif text-[13px] italic text-[#FBEFD5]/55">
+            No cards yet
+          </span>
+        )}
       </div>
       {view.dev.length ? (
-        <div className={cn('flex items-end gap-2 rounded-[20px] px-3 pb-2 pt-3', WOOD)}>
-          {view.dev.map((d) => {
-            const Icon = DEV_ICON[d.card];
-            return (
-              <button
-                key={d.card}
-                type="button"
-                disabled={!d.playable}
-                onClick={() => onPlay(d.card)}
-                title={`${DEV_INFO[d.card].label}: ${DEV_INFO[d.card].text}${d.fresh ? ' (new cards can be played from your next turn)' : ''}`}
-                className={cn(
-                  'relative flex h-[84px] w-[60px] flex-col items-center justify-between rounded-[10px] border-2 border-[#FFF6E0] bg-gradient-to-b from-[#6C4BA8] to-[#352057] p-1.5 text-white transition',
-                  d.playable ? 'shadow-[0_0_16px_-2px_rgba(232,184,74,0.9)] hover:-translate-y-1' : 'opacity-60',
-                )}
-              >
-                <span className="mt-1 flex flex-1 items-center">
-                  <Icon size={28} />
-                </span>
-                <span className="text-center text-[9px] font-semibold leading-tight">{DEV_INFO[d.card].label}</span>
-                <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#FFF6E0] bg-[#E8B84A] px-1 text-[13px] font-bold text-[#3B2A1E]">
-                  {d.ready + d.fresh}
-                </span>
-              </button>
-            );
-          })}
+        <div className={cn('flex items-end gap-3 rounded-[22px] px-4 pb-3 pt-4', WOOD)}>
+          {view.dev.map((d) => (
+            <ArtCard
+              key={d.card}
+              art={devArt(d.card)}
+              label={DEV_INFO[d.card].label}
+              band="#4B2E78"
+              n={d.ready + d.fresh}
+              onClick={() => onPlay(d.card)}
+              disabled={!d.playable}
+              dim={!d.playable && d.card !== 'vp'}
+              glow={d.playable}
+              title={`${DEV_INFO[d.card].label}: ${DEV_INFO[d.card].text}${d.fresh ? ' (new cards can be played from your next turn)' : ''}`}
+            />
+          ))}
         </div>
       ) : null}
-      <style>{`@keyframes isle-pop { 0% { transform: translateY(0) scale(1) } 35% { transform: translateY(-14px) scale(1.12) } 100% { transform: translateY(0) scale(1) } }`}</style>
+      <style>{`@keyframes isle-pop { 0% { transform: translateY(0) scale(1) } 35% { transform: translateY(-16px) scale(1.1) } 100% { transform: translateY(0) scale(1) } }`}</style>
     </div>
+  );
+}
+
+/** A round wooden button with a gold rim, like a turned medallion. */
+function Medallion({
+  label,
+  text,
+  onClick,
+  disabled,
+  big,
+  tone = 'wood',
+  active,
+  pulse,
+  children,
+}: {
+  label: string;
+  text: string;
+  onClick: () => void;
+  disabled?: boolean;
+  big?: boolean;
+  tone?: 'wood' | 'gold' | 'green';
+  active?: boolean;
+  pulse?: boolean;
+  children: ReactNode;
+}) {
+  const face = {
+    wood: 'bg-[radial-gradient(circle_at_35%_28%,#8A5C35,#5A3820_55%,#3A2313)] text-[#FBEFD5]',
+    gold: 'bg-[radial-gradient(circle_at_35%_28%,#FCE39A,#E3AE3F_55%,#A8721A)] text-[#3B2A1E]',
+    green: 'bg-[radial-gradient(circle_at_35%_28%,#8DC77E,#4D8C43_55%,#2C5A25)] text-white',
+  }[tone];
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'flex flex-col items-center justify-center rounded-full p-[3px] transition active:scale-95 disabled:opacity-40',
+        'bg-gradient-to-b from-[#F6DE9C] via-[#C99A42] to-[#8A6420] shadow-[0_12px_24px_-10px_rgba(0,0,0,0.75)]',
+        big ? 'h-[84px] w-[84px]' : 'h-[58px] w-[58px]',
+        active && 'ring-2 ring-[#FFF3CF]',
+        pulse && 'animate-[isle-glow_1.6s_ease-in-out_infinite]',
+      )}
+    >
+      <span className={cn('flex h-full w-full flex-col items-center justify-center rounded-full shadow-[inset_0_2px_3px_rgba(255,255,255,0.25),inset_0_-3px_6px_rgba(0,0,0,0.35)]', face)}>
+        {children}
+        <span className={cn('font-serif font-bold', big ? 'text-[11px]' : 'text-[9px]')}>{text}</span>
+      </span>
+    </button>
   );
 }
 
 function Actions({ view, onRoll, onEnd, onTrade, trading }: { view: TableView; onRoll: () => void; onEnd: () => void; onTrade: () => void; trading: boolean }) {
   return (
-    <div className="pointer-events-auto flex items-end gap-2.5">
-      <button
-        type="button"
-        disabled={!view.canTrade}
-        onClick={onTrade}
-        className={cn('flex h-14 w-14 flex-col items-center justify-center rounded-full text-[#FBEFD5] transition active:scale-95 disabled:opacity-40', WOOD, trading && 'ring-2 ring-[#E8B84A]')}
-        aria-label="Trade"
-      >
+    <div className="pointer-events-auto flex items-end gap-3">
+      <Medallion label="Trade" text="Trade" onClick={onTrade} disabled={!view.canTrade} active={trading}>
         <ArrowLeftRight size={20} />
-        <span className="text-[9px] font-semibold">Trade</span>
-      </button>
+      </Medallion>
       {view.canRoll ? (
-        <button
-          type="button"
-          onClick={onRoll}
-          className="flex h-[76px] w-[76px] animate-[isle-glow_1.6s_ease-in-out_infinite] flex-col items-center justify-center rounded-full border-2 border-[#FFF6E0] bg-gradient-to-b from-[#F6CF62] to-[#C88E1E] text-[#3B2A1E] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6)] transition active:scale-95"
-          aria-label="Roll the dice"
-        >
-          <Dice5 size={30} />
-          <span className="text-[11px] font-bold">Roll</span>
-        </button>
+        <Medallion label="Roll the dice" text="Roll" onClick={onRoll} big tone="gold" pulse>
+          <Dice5 size={32} />
+        </Medallion>
       ) : (
-        <button
-          type="button"
-          disabled={!view.canEnd}
-          onClick={onEnd}
-          className={cn(
-            'flex h-[76px] w-[76px] flex-col items-center justify-center rounded-full border-2 transition active:scale-95 disabled:opacity-40',
-            view.canEnd ? 'border-[#FFF6E0] bg-gradient-to-b from-[#5E9E52] to-[#2F6A2A] text-white shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6)]' : cn(WOOD, 'text-[#FBEFD5]'),
-          )}
-          aria-label="End your turn"
-        >
+        <Medallion label="End your turn" text="End turn" onClick={onEnd} disabled={!view.canEnd} big tone={view.canEnd ? 'green' : 'wood'}>
           <Hourglass size={26} />
-          <span className="text-[11px] font-bold">End turn</span>
-        </button>
+        </Medallion>
       )}
-      <style>{`@keyframes isle-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(246,207,98,0.0), 0 10px 24px -8px rgba(0,0,0,0.6) } 50% { box-shadow: 0 0 0 10px rgba(246,207,98,0.35), 0 10px 24px -8px rgba(0,0,0,0.6) } }`}</style>
+      <style>{`@keyframes isle-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(246,207,98,0.0), 0 12px 24px -10px rgba(0,0,0,0.75) } 50% { box-shadow: 0 0 0 12px rgba(246,207,98,0.35), 0 12px 24px -10px rgba(0,0,0,0.75) } }`}</style>
     </div>
   );
 }

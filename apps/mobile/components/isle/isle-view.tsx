@@ -8,10 +8,11 @@ import { phoneIsleSound } from '@/lib/isle-sound';
 import { Text } from '../ui/text';
 import { IsleTable } from './isle-table';
 
-/** The two bots who make up the table. */
+/** The bots who make up the table: two when we play together, all three when one of us plays alone. */
 const BOTS: Seat[] = [
   { id: 'bot:meera', name: 'Meera', bot: true },
   { id: 'bot:kabir', name: 'Kabir', bot: true },
+  { id: 'bot:tara', name: 'Tara', bot: true },
 ];
 
 /**
@@ -19,9 +20,9 @@ const BOTS: Seat[] = [
  * (or when nothing's being played) a fresh island is dealt at once. Loaded
  * only when the island opens (see app/(app)/isle.tsx).
  */
-export function IsleView() {
+export function IsleView({ solo = false }: { solo?: boolean }) {
   const { me, partner } = useCouple();
-  const { store, snap } = useIsle();
+  const { store, snap } = useIsle({ solo });
   const [problem, setProblem] = useState<string | null>(null);
   const starting = useRef(false);
   // Sound: on unless turned off here (remembered on this phone); the tune can go on its own.
@@ -50,11 +51,11 @@ export function IsleView() {
     if (!store || starting.current) return;
     starting.current = true;
     store
-      .start([
-        { id: me.id, name: me.display_name || 'You', bot: false },
-        { id: partner.id, name: partner.display_name || 'Partner', bot: false },
-        ...BOTS,
-      ])
+      .start(
+        solo
+          ? [{ id: me.id, name: me.display_name || 'You', bot: false }, ...BOTS]
+          : [{ id: me.id, name: me.display_name || 'You', bot: false }, { id: partner.id, name: partner.display_name || 'Partner', bot: false }, ...BOTS.slice(0, 2)],
+      )
       .catch(() => setProblem('Couldn’t deal a new island. Try again in a moment.'))
       .finally(() => (starting.current = false));
   };

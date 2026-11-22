@@ -30,7 +30,6 @@ import {
   Castle,
   Check,
   ChevronLeft,
-  Coins,
   Crown,
   Dice5,
   Hourglass,
@@ -45,14 +44,13 @@ import {
   ScrollText,
   Shield,
   Sparkles,
-  Star,
   Trophy,
   Volume2,
   VolumeX,
   X,
 } from 'lucide-react-native';
-import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { PixelRatio, Pressable, ScrollView, View } from 'react-native';
+import { Component, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Image, PixelRatio, Pressable, ScrollView, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -225,150 +223,158 @@ export function IsleTable({
   const pad = { l: Math.max(insets.left, 12), r: Math.max(insets.right, 12), t: Math.max(insets.top, 8), b: Math.max(insets.bottom, 8) };
 
   return (
-    <View className="flex-1 bg-[#A9D8E8]" onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
-      {size.w > 0 && !broken ? (
-        <GestureDetector gesture={gestures}>
-          <View className="flex-1 overflow-hidden" collapsable={false}>
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                width: size.w * scale,
-                height: size.h * scale,
-                left: (size.w * (1 - scale)) / 2,
-                top: (size.h * (1 - scale)) / 2,
-                transform: [{ scale: 1 / scale }],
-              }}
-            >
-              <Catch onError={setBroken}>
-                <Canvas shadows={quality !== 'low'} camera={{ fov: 45, near: 0.1, far: 120 }} events={noEvents}>
-                  <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} art={art?.board} />
-                </Canvas>
-              </Catch>
+    <CardArt.Provider value={art?.cards ?? NO_ART}>
+      <View className="flex-1 bg-[#A9D8E8]" onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+        {size.w > 0 && !broken ? (
+          <GestureDetector gesture={gestures}>
+            <View className="flex-1 overflow-hidden" collapsable={false}>
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  width: size.w * scale,
+                  height: size.h * scale,
+                  left: (size.w * (1 - scale)) / 2,
+                  top: (size.h * (1 - scale)) / 2,
+                  transform: [{ scale: 1 / scale }],
+                }}
+              >
+                <Catch onError={setBroken}>
+                  <Canvas shadows={quality !== 'low'} camera={{ fov: 45, near: 0.1, far: 120 }} events={noEvents}>
+                    <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} art={art?.board} />
+                  </Canvas>
+                </Catch>
+              </View>
             </View>
+          </GestureDetector>
+        ) : null}
+        {broken ? <Problem error={broken} onExit={onExit} /> : null}
+
+        {/* Top: leave, log, what's happening. */}
+        <View pointerEvents="box-none" style={{ position: 'absolute', top: pad.t, left: pad.l, right: pad.r }} className="flex-row items-start justify-between">
+          <View className="flex-row gap-2">
+            {onExit ? (
+              <RoundButton label="Leave the table" onPress={onExit}>
+                <ChevronLeft size={20} color={CREAM} />
+              </RoundButton>
+            ) : null}
+            <RoundButton label="Game log" onPress={() => setShowLog((v) => !v)} active={showLog}>
+              <ScrollText size={18} color={CREAM} />
+            </RoundButton>
+            <RoundButton label={top ? 'Tilted view' : 'Top view'} onPress={() => setTop(api.current?.toggleTop() === 'top')} active={top}>
+              {top ? <Rotate3d size={18} color={CREAM} /> : <MapIcon size={18} color={CREAM} />}
+            </RoundButton>
+            {onToggleSound ? (
+              <RoundButton label={muted ? 'Sound on' : 'Sound off'} onPress={onToggleSound}>
+                {muted ? <VolumeX size={18} color={CREAM} /> : <Volume2 size={18} color={CREAM} />}
+              </RoundButton>
+            ) : null}
+            {onToggleMusic && !muted ? (
+              <RoundButton label={music ? 'Music off' : 'Music on'} onPress={onToggleMusic} active={music}>
+                <Music size={17} color={music ? CREAM : 'rgba(251,239,213,0.4)'} />
+              </RoundButton>
+            ) : null}
           </View>
-        </GestureDetector>
-      ) : null}
-      {broken ? <Problem error={broken} onExit={onExit} /> : null}
-
-      {/* Top: leave, log, what's happening. */}
-      <View pointerEvents="box-none" style={{ position: 'absolute', top: pad.t, left: pad.l, right: pad.r }} className="flex-row items-start justify-between">
-        <View className="flex-row gap-2">
-          {onExit ? (
-            <RoundButton label="Leave the table" onPress={onExit}>
-              <ChevronLeft size={20} color={CREAM} />
-            </RoundButton>
-          ) : null}
-          <RoundButton label="Game log" onPress={() => setShowLog((v) => !v)} active={showLog}>
-            <ScrollText size={18} color={CREAM} />
-          </RoundButton>
-          <RoundButton label={top ? 'Tilted view' : 'Top view'} onPress={() => setTop(api.current?.toggleTop() === 'top')} active={top}>
-            {top ? <Rotate3d size={18} color={CREAM} /> : <MapIcon size={18} color={CREAM} />}
-          </RoundButton>
-          {onToggleSound ? (
-            <RoundButton label={muted ? 'Sound on' : 'Sound off'} onPress={onToggleSound}>
-              {muted ? <VolumeX size={18} color={CREAM} /> : <Volume2 size={18} color={CREAM} />}
-            </RoundButton>
-          ) : null}
-          {onToggleMusic && !muted ? (
-            <RoundButton label={music ? 'Music off' : 'Music on'} onPress={onToggleMusic} active={music}>
-              <Music size={17} color={music ? CREAM : 'rgba(251,239,213,0.4)'} />
-            </RoundButton>
-          ) : null}
+          <Prompt view={view} thinking={botThinking != null ? state.players[botThinking]!.name : null} />
+          <View style={{ width: 172 }} />
         </View>
-        <Prompt view={view} thinking={botThinking != null ? state.players[botThinking]!.name : null} />
-        <View style={{ width: 172 }} />
-      </View>
 
-      <View pointerEvents="none" style={{ position: 'absolute', top: pad.t, right: pad.r, width: 172 }} className="gap-1.5">
-        {view.seats.map((s) => (
-          <SeatPanel key={s.seat} s={s} thinking={botThinking === s.seat} />
-        ))}
-      </View>
+        <View pointerEvents="none" style={{ position: 'absolute', top: pad.t, right: pad.r, width: 172 }} className="gap-1.5">
+          {view.seats.map((s) => (
+            <SeatPanel key={s.seat} s={s} thinking={botThinking === s.seat} />
+          ))}
+        </View>
 
-      {showLog ? <Log state={state} me={me} top={pad.t + 48} left={pad.l} onClose={() => setShowLog(false)} /> : null}
+        {showLog ? <Log state={state} me={me} top={pad.t + 48} left={pad.l} onClose={() => setShowLog(false)} /> : null}
 
-      {/* Bottom: build bar, hand, actions. */}
-      <View pointerEvents="box-none" style={{ position: 'absolute', bottom: pad.b, left: pad.l, right: pad.r }} className="flex-row items-end justify-between">
-        <BuildBar
-          view={view}
-          mode={live}
-          onPick={(what) => {
-            if (what === 'dev') move({ t: 'buy' });
-            else {
+        {/* Bottom: build bar, hand, actions. */}
+        <View pointerEvents="box-none" style={{ position: 'absolute', bottom: pad.b, left: pad.l, right: pad.r }} className="flex-row items-end justify-between">
+          <BuildBar
+            view={view}
+            mode={live}
+            onPick={(what) => {
+              if (what === 'dev') move({ t: 'buy' });
+              else {
+                tick();
+                setMode(live.k === 'build' && live.what === what ? IDLE : { k: 'build', what });
+              }
+            }}
+          />
+          <HandRow
+            view={view}
+            onPlay={(card) => {
+              if (card === 'knight') move({ t: 'knight' });
+              else if (card === 'roads') move({ t: 'roads' });
+              else if (card === 'plenty') setMode({ k: 'plenty' });
+              else if (card === 'monopoly') setMode({ k: 'monopoly' });
+            }}
+          />
+          <Actions
+            view={view}
+            trading={live.k === 'trade'}
+            onRoll={() => move({ t: 'roll' })}
+            onEnd={() => move({ t: 'end' })}
+            onTrade={() => {
               tick();
-              setMode(live.k === 'build' && live.what === what ? IDLE : { k: 'build', what });
-            }
-          }}
-        />
-        <HandRow
-          view={view}
-          onPlay={(card) => {
-            if (card === 'knight') move({ t: 'knight' });
-            else if (card === 'roads') move({ t: 'roads' });
-            else if (card === 'plenty') setMode({ k: 'plenty' });
-            else if (card === 'monopoly') setMode({ k: 'monopoly' });
-          }}
-        />
-        <Actions
-          view={view}
-          trading={live.k === 'trade'}
-          onRoll={() => move({ t: 'roll' })}
-          onEnd={() => move({ t: 'end' })}
-          onTrade={() => {
-            tick();
-            setMode(live.k === 'trade' ? IDLE : { k: 'trade' });
-          }}
-        />
+              setMode(live.k === 'trade' ? IDLE : { k: 'trade' });
+            }}
+          />
+        </View>
+
+        {view.discard > 0 ? <DiscardPanel hand={view.hand} owed={view.discard} onDone={(cards) => move({ t: 'discard', cards })} /> : null}
+        {live.k === 'steal' ? (
+          <StealPanel view={view} from={live.from} onPick={(from) => move({ t: 'robber', h: live.h, from }) && setMode(IDLE)} onCancel={() => setMode(IDLE)} />
+        ) : null}
+        {live.k === 'plenty' ? (
+          <PickPanel
+            title={DEV_INFO.plenty.label}
+            text="Choose two cards from the bank."
+            count={2}
+            onCancel={() => setMode(IDLE)}
+            onDone={([a, b]) => move({ t: 'plenty', a: a!, b: b! }) && setMode(IDLE)}
+          />
+        ) : null}
+        {live.k === 'monopoly' ? (
+          <PickPanel
+            title={DEV_INFO.monopoly.label}
+            text="Name a card. Everyone gives you all of theirs."
+            count={1}
+            onCancel={() => setMode(IDLE)}
+            onDone={([r]) => move({ t: 'monopoly', r: r! }) && setMode(IDLE)}
+          />
+        ) : null}
+        {live.k === 'trade' || view.outgoing ? (
+          <TradePanel state={state} view={view} onMove={move} onClose={() => (view.outgoing ? move({ t: 'cancel' }) : setMode(IDLE))} />
+        ) : null}
+        {view.incoming ? <Incoming state={state} view={view} top={pad.t + 44} onAnswer={(yes) => move({ t: 'reply', yes })} /> : null}
+        {view.over ? <Results state={state} view={view} onNewGame={onNewGame} onExit={onExit} /> : null}
+
+        <GainChips state={state} me={me} bottom={pad.b + 110} />
+
+        {problem ? (
+          <Animated.View entering={FadeIn} exiting={FadeOut} pointerEvents="none" style={{ position: 'absolute', top: pad.t + 50, alignSelf: 'center' }} className="rounded-full bg-[#2A1A10]/90 px-4 py-2">
+            <Text className="font-sans-bold text-[13px]" style={{ color: CREAM }}>
+              {problem}
+            </Text>
+          </Animated.View>
+        ) : null}
       </View>
-
-      {view.discard > 0 ? <DiscardPanel hand={view.hand} owed={view.discard} onDone={(cards) => move({ t: 'discard', cards })} /> : null}
-      {live.k === 'steal' ? (
-        <StealPanel view={view} from={live.from} onPick={(from) => move({ t: 'robber', h: live.h, from }) && setMode(IDLE)} onCancel={() => setMode(IDLE)} />
-      ) : null}
-      {live.k === 'plenty' ? (
-        <PickPanel
-          title={DEV_INFO.plenty.label}
-          text="Choose two cards from the bank."
-          count={2}
-          onCancel={() => setMode(IDLE)}
-          onDone={([a, b]) => move({ t: 'plenty', a: a!, b: b! }) && setMode(IDLE)}
-        />
-      ) : null}
-      {live.k === 'monopoly' ? (
-        <PickPanel
-          title={DEV_INFO.monopoly.label}
-          text="Name a card. Everyone gives you all of theirs."
-          count={1}
-          onCancel={() => setMode(IDLE)}
-          onDone={([r]) => move({ t: 'monopoly', r: r! }) && setMode(IDLE)}
-        />
-      ) : null}
-      {live.k === 'trade' || view.outgoing ? (
-        <TradePanel state={state} view={view} onMove={move} onClose={() => (view.outgoing ? move({ t: 'cancel' }) : setMode(IDLE))} />
-      ) : null}
-      {view.incoming ? <Incoming state={state} view={view} top={pad.t + 44} onAnswer={(yes) => move({ t: 'reply', yes })} /> : null}
-      {view.over ? <Results state={state} view={view} onNewGame={onNewGame} onExit={onExit} /> : null}
-
-      <GainChips state={state} me={me} bottom={pad.b + 110} />
-
-      {problem ? (
-        <Animated.View entering={FadeIn} exiting={FadeOut} pointerEvents="none" style={{ position: 'absolute', top: pad.t + 50, alignSelf: 'center' }} className="rounded-full bg-[#2A1A10]/90 px-4 py-2">
-          <Text className="font-sans-bold text-[13px]" style={{ color: CREAM }}>
-            {problem}
-          </Text>
-        </Animated.View>
-      ) : null}
-    </View>
+    </CardArt.Provider>
   );
 }
 
 // ---- Small pieces --------------------------------------------------------------------
 
+/** The card pictures (lib/isle-art.ts), once they're on the phone; cards show their colour until then. */
+const NO_ART: Record<string, string> = {};
+const CardArt = createContext<Record<string, string>>(NO_ART);
+
+/** Dark wood with a gold hairline just inside its edge. */
 function Wood({ children, radius = 16, className, style }: { children: ReactNode; radius?: number; className?: string; style?: object }) {
   return (
-    <View style={[{ borderRadius: radius, borderWidth: 1, borderColor: 'rgba(154,107,63,0.7)', overflow: 'hidden' }, style]}>
+    <View style={[{ borderRadius: radius, borderWidth: 1, borderColor: '#2A180B', overflow: 'hidden' }, style]}>
       <GradientView from={WOOD_FROM} to={WOOD_TO} radius={radius} className={className}>
+        <View pointerEvents="none" style={{ position: 'absolute', left: 1, right: 1, top: 1, bottom: 1, borderRadius: radius - 1, borderWidth: 1, borderColor: 'rgba(232,184,74,0.35)' }} />
         {children}
       </GradientView>
     </View>
@@ -393,44 +399,94 @@ function RoundButton({ label, onPress, children, active }: { label: string; onPr
   );
 }
 
-function ResCard({ r, n, dim, small, onPress, picked }: { r: Res; n?: number; dim?: boolean; small?: boolean; onPress?: () => void; picked?: boolean }) {
-  const info = RES_INFO[r];
-  const w = small ? 40 : 46;
-  const h = small ? 56 : 64;
-  const card = (
-    <View style={{ width: w, height: h, opacity: dim ? 0.35 : 1, transform: [{ translateY: picked ? -6 : 0 }] }}>
-      <GradientView from={info.color} to={info.dark} radius={8} className="flex-1 items-center justify-between p-1" style={{ borderWidth: 2, borderColor: picked ? GOLD : '#FFF6E0' }}>
-        <View className="flex-1 items-center justify-center">
-          <ResIcon r={r} size={small ? 20 : 24} />
-        </View>
-        <Text className="font-sans-bold text-[8px] text-white/90">{info.label}</Text>
+/** A gold coin with a count, pinned to a card's corner. */
+function Coin({ n, small }: { n: number; small?: boolean }) {
+  const d = small ? 18 : 22;
+  return (
+    <View style={{ position: 'absolute', right: -6, top: -6, minWidth: d, height: d, borderRadius: d / 2, borderWidth: 2, borderColor: '#FFF3CF', overflow: 'hidden' }}>
+      <GradientView from="#FCE39A" to="#B57E1E" radius={d / 2} className="flex-1 items-center justify-center px-1">
+        <Text className="font-sans-bold" style={{ color: INK, fontSize: small ? 10 : 12 }}>
+          {n}
+        </Text>
       </GradientView>
-      {n != null && n > 0 ? (
-        <View style={{ position: 'absolute', right: -6, top: -6, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: GOLD, borderWidth: 2, borderColor: '#FFF6E0' }} className="items-center justify-center px-1">
-          <Text className="font-sans-bold text-[11px]" style={{ color: INK }}>
-            {n}
-          </Text>
+    </View>
+  );
+}
+
+/** A card: its picture in a cream-and-gold frame, its name on a band of its colour. */
+function ArtCard({
+  art,
+  fallback,
+  label,
+  band,
+  n,
+  dim,
+  small,
+  onPress,
+  picked,
+  glow,
+  disabled,
+  a11y,
+}: {
+  art: string;
+  fallback: string;
+  label: string;
+  band: string;
+  n?: number;
+  dim?: boolean;
+  small?: boolean;
+  onPress?: () => void;
+  picked?: boolean;
+  glow?: boolean;
+  disabled?: boolean;
+  a11y?: string;
+}) {
+  const pictures = useContext(CardArt);
+  const uri = pictures[art];
+  const w = small ? 42 : 52;
+  const h = small ? 58 : 72;
+  const card = (
+    <View style={{ width: w, height: h, opacity: dim ? 0.4 : 1, transform: [{ translateY: picked ? -6 : 0 }] }}>
+      <GradientView from="#FFF6DD" to="#D9B979" radius={8} className="flex-1 p-[2px]" style={glow || picked ? { borderWidth: 1.5, borderColor: GOLD } : undefined}>
+        <View style={{ flex: 1, borderRadius: 6, overflow: 'hidden', backgroundColor: fallback, borderWidth: 0.5, borderColor: 'rgba(169,129,66,0.8)' }}>
+          {uri ? <Image source={{ uri }} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} resizeMode="cover" /> : null}
+          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: band, paddingTop: 1, paddingBottom: 2 }} className="items-center">
+            <Text className="font-display-italic text-white" style={{ fontSize: small ? 8 : 9.5 }} numberOfLines={1}>
+              {label}
+            </Text>
+          </View>
         </View>
-      ) : null}
+      </GradientView>
+      {n != null && n > 0 ? <Coin n={n} small={small} /> : null}
     </View>
   );
   if (!onPress) return card;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={info.label} onPress={onPress} style={({ pressed }) => [pressed && { transform: [{ scale: 0.94 }] }]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={a11y ?? label} onPress={onPress} disabled={disabled} style={({ pressed }) => [pressed && { transform: [{ scale: 0.94 }] }]}>
       {card}
     </Pressable>
   );
 }
 
+function ResCard({ r, n, dim, small, onPress, picked }: { r: Res; n?: number; dim?: boolean; small?: boolean; onPress?: () => void; picked?: boolean }) {
+  const info = RES_INFO[r];
+  return <ArtCard art={`card_${r}`} fallback={info.color} label={info.label} band={info.dark} n={n} dim={dim} small={small} onPress={onPress} picked={picked} />;
+}
+
+/** What something costs: a little picture of each card it takes. */
 function Cost({ cost, size = 11 }: { cost: Partial<Hand>; size?: number }) {
+  const pictures = useContext(CardArt);
   return (
-    <View className="flex-row gap-0.5">
+    <View className="flex-row gap-[2px]">
       {RESOURCES.flatMap((r) =>
-        Array.from({ length: cost[r] ?? 0 }, (_, i) => (
-          <View key={`${r}${i}`} style={{ width: size + 4, height: size + 6, borderRadius: 3, backgroundColor: RES_INFO[r].color, borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)' }} className="items-center justify-center">
-            <ResIcon r={r} size={size - 1} />
-          </View>
-        )),
+        Array.from({ length: cost[r] ?? 0 }, (_, i) => {
+          const uri = pictures[`card_${r}`];
+          return (
+            <View key={`${r}${i}`} style={{ width: size + 2, height: size + 8, borderRadius: 2, overflow: 'hidden', backgroundColor: RES_INFO[r].color, borderWidth: 0.5, borderColor: '#F1DDAE' }}>
+              {uri ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : null}
+            </View>
+          );
+        }),
       )}
     </View>
   );
@@ -449,12 +505,14 @@ function Dots({ color = CREAM }: { color?: string }) {
 function Prompt({ view, thinking }: { view: TableView; thinking: string | null }) {
   const mine = !!(view.marks || view.canRoll || view.canEnd || view.discard > 0 || view.incoming);
   return (
-    <View pointerEvents="none" className="mt-1 flex-row items-center gap-1.5 rounded-full px-4 py-1.5" style={{ backgroundColor: mine ? GOLD : 'rgba(42,26,16,0.82)' }}>
-      {thinking ? <Bot size={14} color={mine ? INK : CREAM} /> : null}
-      <Text className="font-sans-bold text-[13px]" style={{ color: mine ? INK : CREAM }}>
-        {view.prompt}
-      </Text>
-      {thinking ? <Dots color={mine ? INK : CREAM} /> : null}
+    <View pointerEvents="none" className="mt-1" style={{ borderRadius: 9, borderWidth: 1.5, borderColor: mine ? '#8A6420' : '#2A180B', overflow: 'hidden' }}>
+      <GradientView from={mine ? '#FCE6A2' : '#4A2E18'} to={mine ? '#E3B24A' : '#2E1C0E'} radius={8} className="flex-row items-center gap-1.5 px-4 py-1.5">
+        {thinking ? <Bot size={14} color={mine ? INK : CREAM} /> : null}
+        <Text className="font-sans-bold text-[13px]" style={{ color: mine ? INK : CREAM }}>
+          {view.prompt}
+        </Text>
+        {thinking ? <Dots color={mine ? INK : CREAM} /> : null}
+      </GradientView>
     </View>
   );
 }
@@ -463,16 +521,20 @@ function Prompt({ view, thinking }: { view: TableView; thinking: string | null }
 
 function SeatPanel({ s, thinking }: { s: SeatView; thinking: boolean }) {
   return (
-    <Wood radius={12} className="flex-row items-center gap-2 py-1.5 pl-2.5 pr-2" style={s.turn ? { borderColor: GOLD, borderWidth: 2 } : undefined}>
-      <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: s.color }} />
-      <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: s.color, borderWidth: 1.5, borderColor: 'rgba(255,246,224,0.8)' }} className="items-center justify-center">
-        {s.bot ? (
-          <Bot size={14} color="#fff" />
-        ) : (
-          <Text className="font-sans-bold text-[12px]" style={{ color: s.color === '#EFE8D8' ? INK : '#fff' }}>
-            {s.real.slice(0, 1).toUpperCase()}
-          </Text>
-        )}
+    <Wood radius={12} className="flex-row items-center gap-2 py-1.5 pl-1.5 pr-2" style={s.turn ? { borderColor: GOLD, borderWidth: 2, transform: [{ translateX: -4 }] } : undefined}>
+      {/* A medallion in their colour with a gold rim. */}
+      <View style={{ width: 30, height: 30, borderRadius: 15, overflow: 'hidden' }}>
+        <GradientView from="#F6DE9C" to="#8A6420" radius={15} className="flex-1 items-center justify-center">
+          <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: s.color }} className="items-center justify-center">
+            {s.bot ? (
+              <Bot size={14} color={s.color === '#EFE8D8' ? INK : '#fff'} />
+            ) : (
+              <Text className="font-sans-bold text-[13px]" style={{ color: s.color === '#EFE8D8' ? INK : '#fff' }}>
+                {s.real.slice(0, 1).toUpperCase()}
+              </Text>
+            )}
+          </View>
+        </GradientView>
       </View>
       <View className="flex-1">
         <View className="flex-row items-center">
@@ -488,9 +550,16 @@ function SeatPanel({ s, thinking }: { s: SeatView; thinking: boolean }) {
           <Mini icon={<Route size={9} color={s.longest ? GOLD : CREAM} />} n={s.road} gold={s.longest} />
         </View>
       </View>
-      <Text className="font-sans-bold text-[20px]" style={{ color: '#F4D27A' }}>
-        {s.points}
-      </Text>
+      {/* Points on a gold-rimmed badge. */}
+      <View style={{ width: 28, height: 28, borderRadius: 6, overflow: 'hidden' }}>
+        <GradientView from="#F6DE9C" to="#9A6E22" radius={6} className="flex-1 items-center justify-center p-[2px]">
+          <View style={{ flex: 1, alignSelf: 'stretch', borderRadius: 4, backgroundColor: '#2E1C0E' }} className="items-center justify-center">
+            <Text className="font-sans-bold text-[15px]" style={{ color: '#F4D27A' }}>
+              {s.points}
+            </Text>
+          </View>
+        </GradientView>
+      </View>
     </Wood>
   );
 }
@@ -535,86 +604,112 @@ function BuildBar({ view, mode, onPick }: { view: TableView; mode: Mode; onPick:
   );
 }
 
-const DEV_ICON: Record<Dev, typeof Shield> = { knight: Shield, vp: Star, roads: Route, plenty: Sparkles, monopoly: Coins };
-
 function HandRow({ view, onPlay }: { view: TableView; onPlay: (card: Dev) => void }) {
+  const held = RESOURCES.filter((r) => view.hand[r] > 0);
   return (
     <View className="flex-row items-end gap-2">
-      <Wood radius={16} className="flex-row items-end gap-1.5 px-2 pb-1.5 pt-2.5">
-        {RESOURCES.map((r) => (
-          <ResCard key={r} r={r} n={view.hand[r]} dim={!view.hand[r]} />
-        ))}
+      <Wood radius={16} className="min-h-[92px] flex-row items-end gap-2 px-2.5 pb-2 pt-3">
+        {held.length ? (
+          held.map((r) => (
+            <View key={r}>
+              {/* The stack behind: deeper the more of them there are. */}
+              {Array.from({ length: Math.min(3, view.hand[r] - 1) }, (_, i) => (
+                <View
+                  key={i}
+                  style={{ position: 'absolute', width: 52, height: 72, borderRadius: 8, backgroundColor: '#E2C78E', borderWidth: 0.5, borderColor: '#A98142', left: (i + 1) * 3, top: -(i + 1) * 2.5, transform: [{ rotate: `${(i + 1) * 2.5}deg` }] }}
+                />
+              ))}
+              <ResCard r={r} n={view.hand[r]} />
+            </View>
+          ))
+        ) : (
+          <View style={{ width: 150, height: 72, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(241,221,174,0.3)' }} className="items-center justify-center">
+            <Text className="font-display-italic text-[12px]" style={{ color: 'rgba(251,239,213,0.55)' }}>
+              No cards yet
+            </Text>
+          </View>
+        )}
       </Wood>
       {view.dev.length ? (
-        <Wood radius={16} className="flex-row items-end gap-1.5 px-2 pb-1.5 pt-2.5">
-          {view.dev.map((d) => {
-            const Icon = DEV_ICON[d.card];
-            return (
-              <Pressable
-                key={d.card}
-                accessibilityRole="button"
-                accessibilityLabel={`${DEV_INFO[d.card].label}: ${DEV_INFO[d.card].text}`}
-                disabled={!d.playable}
-                onPress={() => onPlay(d.card)}
-                style={({ pressed }) => [{ opacity: d.playable ? 1 : 0.6 }, pressed && { transform: [{ scale: 0.94 }] }]}
-              >
-                <View style={{ width: 46, height: 64 }}>
-                  <GradientView from="#6C4BA8" to="#352057" radius={8} className="flex-1 items-center justify-between p-1" style={{ borderWidth: 2, borderColor: d.playable ? GOLD : '#FFF6E0' }}>
-                    <View className="flex-1 items-center justify-center">
-                      <Icon size={20} color="#fff" />
-                    </View>
-                    <Text className="text-center font-sans-bold text-[7px] text-white" numberOfLines={1}>
-                      {DEV_INFO[d.card].label}
-                    </Text>
-                  </GradientView>
-                  <View style={{ position: 'absolute', right: -6, top: -6, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: GOLD, borderWidth: 2, borderColor: '#FFF6E0' }} className="items-center justify-center px-1">
-                    <Text className="font-sans-bold text-[11px]" style={{ color: INK }}>
-                      {d.ready + d.fresh}
-                    </Text>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
+        <Wood radius={16} className="flex-row items-end gap-2 px-2.5 pb-2 pt-3">
+          {view.dev.map((d) => (
+            <ArtCard
+              key={d.card}
+              art={`dev_${d.card}`}
+              fallback="#6C4BA8"
+              label={DEV_INFO[d.card].label}
+              band="#4B2E78"
+              n={d.ready + d.fresh}
+              onPress={() => onPlay(d.card)}
+              disabled={!d.playable}
+              dim={!d.playable && d.card !== 'vp'}
+              glow={d.playable}
+              a11y={`${DEV_INFO[d.card].label}: ${DEV_INFO[d.card].text}`}
+            />
+          ))}
         </Wood>
       ) : null}
     </View>
   );
 }
 
+/** A round wooden button with a gold rim, like a turned medallion. */
+function Medallion({
+  label,
+  text,
+  onPress,
+  disabled,
+  big,
+  tone = 'wood',
+  active,
+  children,
+}: {
+  label: string;
+  text: string;
+  onPress: () => void;
+  disabled?: boolean;
+  big?: boolean;
+  tone?: 'wood' | 'gold' | 'green';
+  active?: boolean;
+  children: ReactNode;
+}) {
+  const d = big ? 66 : 48;
+  const face = { wood: ['#8A5C35', '#3A2313'], gold: ['#FCE39A', '#A8721A'], green: ['#8DC77E', '#2C5A25'] }[tone];
+  const ink = tone === 'gold' ? INK : tone === 'green' ? '#fff' : CREAM;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} style={({ pressed }) => [{ opacity: disabled ? 0.4 : 1 }, pressed && { transform: [{ scale: 0.94 }] }]}>
+      <View style={{ width: d, height: d, borderRadius: d / 2, overflow: 'hidden', borderWidth: active ? 2 : 0, borderColor: '#FFF3CF' }}>
+        <GradientView from="#F6DE9C" to="#8A6420" radius={d / 2} className="flex-1 p-[3px]">
+          <View style={{ flex: 1, borderRadius: d / 2, overflow: 'hidden' }}>
+            <GradientView from={face[0]!} to={face[1]!} radius={d / 2} className="flex-1 items-center justify-center">
+              {children}
+              <Text className="font-sans-bold" style={{ color: ink, fontSize: big ? 9.5 : 8 }}>
+                {text}
+              </Text>
+            </GradientView>
+          </View>
+        </GradientView>
+      </View>
+    </Pressable>
+  );
+}
+
 function Actions({ view, trading, onRoll, onEnd, onTrade }: { view: TableView; trading: boolean; onRoll: () => void; onEnd: () => void; onTrade: () => void }) {
   return (
     <View className="flex-row items-end gap-2">
-      <Pressable accessibilityRole="button" accessibilityLabel="Trade" disabled={!view.canTrade} onPress={onTrade} style={({ pressed }) => [{ opacity: view.canTrade ? 1 : 0.4 }, pressed && { transform: [{ scale: 0.94 }] }]}>
-        <Wood radius={24} className="h-12 w-12 items-center justify-center" style={trading ? { borderColor: GOLD, borderWidth: 2 } : undefined}>
-          <ArrowLeftRight size={18} color={CREAM} />
-          <Text className="font-sans-bold text-[8px]" style={{ color: CREAM }}>
-            Trade
-          </Text>
-        </Wood>
-      </Pressable>
+      <Medallion label="Trade" text="Trade" onPress={onTrade} disabled={!view.canTrade} active={trading}>
+        <ArrowLeftRight size={17} color={CREAM} />
+      </Medallion>
       {view.canRoll ? (
         <Animated.View entering={ZoomIn}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Roll the dice" onPress={onRoll} style={({ pressed }) => [pressed && { transform: [{ scale: 0.94 }] }]}>
-            <View style={{ borderRadius: 34, borderWidth: 2, borderColor: '#FFF6E0', overflow: 'hidden' }}>
-              <GradientView from="#F6CF62" to="#C88E1E" radius={34} className="h-[64px] w-[64px] items-center justify-center">
-                <Dice5 size={26} color={INK} />
-                <Text className="font-sans-bold text-[10px]" style={{ color: INK }}>
-                  Roll
-                </Text>
-              </GradientView>
-            </View>
-          </Pressable>
+          <Medallion label="Roll the dice" text="Roll" onPress={onRoll} big tone="gold">
+            <Dice5 size={26} color={INK} />
+          </Medallion>
         </Animated.View>
       ) : (
-        <Pressable accessibilityRole="button" accessibilityLabel="End your turn" disabled={!view.canEnd} onPress={onEnd} style={({ pressed }) => [{ opacity: view.canEnd ? 1 : 0.4 }, pressed && { transform: [{ scale: 0.94 }] }]}>
-          <View style={{ borderRadius: 34, borderWidth: 2, borderColor: view.canEnd ? '#FFF6E0' : 'rgba(154,107,63,0.7)', overflow: 'hidden' }}>
-            <GradientView from={view.canEnd ? '#5E9E52' : WOOD_FROM} to={view.canEnd ? '#2F6A2A' : WOOD_TO} radius={34} className="h-[64px] w-[64px] items-center justify-center">
-              <Hourglass size={22} color="#fff" />
-              <Text className="font-sans-bold text-[9px] text-white">End turn</Text>
-            </GradientView>
-          </View>
-        </Pressable>
+        <Medallion label="End your turn" text="End turn" onPress={onEnd} disabled={!view.canEnd} big tone={view.canEnd ? 'green' : 'wood'}>
+          <Hourglass size={21} color={view.canEnd ? '#fff' : CREAM} />
+        </Medallion>
       )}
     </View>
   );

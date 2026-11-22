@@ -299,4 +299,30 @@ describe('isle store', () => {
     await later.open();
     expect(stateOf(later)).toEqual(stateOf(a));
   });
+
+  it('alone against three bots: this phone plays them all, to the end', async () => {
+    const clock = new Clock();
+    const server = new Server();
+    // As useIsle sets up a game alone: a link that goes nowhere.
+    const silent: IsleLink = { send: () => {}, on: () => () => {} };
+    const solo = new IsleStore(server.api(), silent, 'a', clock);
+    await solo.open();
+    await solo.start(
+      [
+        { id: 'a', name: 'A', bot: false },
+        { id: 'bot:meera', name: 'Meera', bot: true },
+        { id: 'bot:kabir', name: 'Kabir', bot: true },
+        { id: 'bot:tara', name: 'Tara', bot: true },
+      ],
+      31,
+    );
+    expect(solo.drivesBots()).toBe(true);
+    for (let i = 0; i < 20000 && stateOf(solo).phase !== 'over'; i++) {
+      playHumans(solo);
+      await clock.run(400);
+    }
+    await clock.run(3000);
+    expect(stateOf(solo).phase).toBe('over');
+    expect([...server.games.values()][0]!.state).toEqual(stateOf(solo));
+  }, 60000);
 });

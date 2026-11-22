@@ -649,6 +649,8 @@ export type Database = {
           state: Json;
           version: number;
           status: 'playing' | 'over' | 'abandoned';
+          /** Null for the game the two of us share; set for one person's game alone. */
+          owner: string | null;
           created_by: string | null;
           updated_by: string | null;
           created_at: string;
@@ -764,7 +766,7 @@ export type Database = {
       current_partner_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       set_couple_photo: { Args: { p_path: string | null }; Returns: Database['public']['Tables']['couples']['Row'] };
       set_house_item: { Args: { p_key: string; p_state: Json | null; p_version: number }; Returns: number };
-      start_isle: { Args: { p_state: Json }; Returns: string };
+      start_isle: { Args: { p_state: Json; p_solo?: boolean }; Returns: string };
       save_isle: { Args: { p_id: string; p_state: Json }; Returns: number };
       pick_decision: {
         Args: { p_category: string };

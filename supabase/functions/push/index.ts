@@ -368,6 +368,8 @@ Deno.serve(async (req) => {
       .select('id, state, updated_by, updated_at')
       .eq('couple_id', coupleId)
       .eq('status', 'playing')
+      // The game we share; a game played alone never nudges the other.
+      .is('owner', null)
       .maybeSingle();
     const players = ((g?.state as { players?: { id?: string }[] } | null)?.players ?? []).map((p) => p.id);
     if (!g || !players.includes(userId) || !players.includes(partnerId)) return json({ error: 'forbidden' }, 403);

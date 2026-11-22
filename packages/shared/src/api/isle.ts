@@ -3,15 +3,16 @@ import { StaleIsleError, type IsleApi, type IsleGame } from '../isle/store';
 import type { IsleState } from '../isle/rules';
 import type { UsClient } from '../supabase';
 
-/** Isle on the server: the game being played (isle_games), started and saved through start_isle / save_isle. */
-export function isleApi(sb: UsClient, coupleId: string): IsleApi {
+/**
+ * Isle on the server: the game being played (isle_games), started and saved
+ * through start_isle / save_isle. With an owner it's that person's game
+ * alone against three bots; without, the game the two of us share.
+ */
+export function isleApi(sb: UsClient, coupleId: string, owner: string | null = null): IsleApi {
   return {
     async load(): Promise<IsleGame | null> {
-      const { data, error } = await sb
-        .from('isle_games')
-        .select('id, state')
-        .eq('couple_id', coupleId)
-        .in('status', ['playing', 'over'])
+      const q = sb.from('isle_games').select('id, state').eq('couple_id', coupleId).in('status', ['playing', 'over']);
+      const { data, error } = await (owner ? q.eq('owner', owner) : q.is('owner', null))
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -19,7 +20,7 @@ export function isleApi(sb: UsClient, coupleId: string): IsleApi {
       return data ? { id: data.id, state: data.state as unknown as IsleState } : null;
     },
     async start(state) {
-      const { data, error } = await sb.rpc('start_isle', { p_state: state as unknown as Json });
+      const { data, error } = await sb.rpc('start_isle', { p_state: state as unknown as Json, p_solo: owner != null });
       if (error) throw error;
       return data;
     },

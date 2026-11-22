@@ -125,21 +125,26 @@ const pill = 'mt-1.5 inline-flex self-start rounded-full px-3.5 py-[7px] text-[1
 
 /** In through the front door: a home with a garden and a pool, where we both walk around. */
 /** Isle: a board game for the two of us and two bots, straight onto the island. */
+/** Isle: a board game, together with two bots or alone against three, straight onto the island. */
 function IsleCard() {
   return (
-    <Link
-      href="/isle"
-      className={cn('flex min-h-[132px] items-center gap-4 rounded-[26px] bg-gradient-to-br from-[#3FB0BE] to-[#1C6A8A] p-4 text-white shadow-[0_14px_26px_-16px_rgba(28,106,138,0.8)]', HOVER)}
-    >
+    <div className="flex min-h-[132px] items-center gap-4 rounded-[26px] bg-gradient-to-br from-[#3FB0BE] to-[#1C6A8A] p-4 text-white shadow-[0_14px_26px_-16px_rgba(28,106,138,0.8)]">
       <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[22px] bg-white/20">
         <Sailboat size={44} strokeWidth={1.7} />
       </span>
       <span className="flex flex-1 flex-col gap-1">
         <span className="text-[18px] font-bold">Isle</span>
-        <span className="line-clamp-2 text-[13px] text-white/90">Build, trade and race to 10 points against Meera and Kabir</span>
-        <span className={cn(pill, 'bg-[#F6CF62] text-[#3B2A1E]')}>Play</span>
+        <span className="line-clamp-2 text-[13px] text-white/90">Build, trade and race to 10 points on a new island every game</span>
+        <span className="flex flex-wrap gap-2">
+          <Link href="/isle" className={cn(pill, 'bg-[#F6CF62] text-[#3B2A1E]', HOVER)}>
+            Play together
+          </Link>
+          <Link href="/isle?solo=1" className={cn(pill, 'bg-white/90 text-[#1C6A8A]', HOVER)}>
+            Play alone
+          </Link>
+        </span>
       </span>
-    </Link>
+    </div>
   );
 }
 
