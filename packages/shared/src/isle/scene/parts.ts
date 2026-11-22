@@ -237,15 +237,39 @@ export function dieFacing(value: number): THREE.Quaternion {
   }
 }
 
-/** A harbour pier: planks out to a little platform, on posts. Along +x, out to sea. */
-export function pierGeometry() {
+/** A plank (or any box) laid from one point to another, sloping if they differ in height. */
+function beam(from: THREE.Vector3, to: THREE.Vector3, width: number, depth: number, color: string) {
+  const d = new THREE.Vector3().subVectors(to, from);
+  const g = new THREE.BoxGeometry(d.length(), depth, width);
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), d.clone().normalize());
+  const e = new THREE.Euler().setFromQuaternion(q);
+  const mid = from.clone().add(to).multiplyScalar(0.5);
+  return piece(g, color, { at: [mid.x, mid.y, mid.z], rot: [e.x, e.y, e.z] });
+}
+
+/**
+ * A harbour: a little landing stage just off the coast, lying along it, with
+ * a plank down to it from each of the harbour's two corners. Built where it
+ * stands (board coordinates), from the corners and the way out to sea.
+ */
+export function harbourGeometry(a: { x: number; y: number }, b: { x: number; y: number }, out: { x: number; y: number }) {
   const parts: THREE.BufferGeometry[] = [];
-  for (const side of [-1, 1]) {
-    parts.push(piece(new THREE.BoxGeometry(0.42, 0.03, 0.08), '#A47148', { at: [0.2, 0.13, side * 0.22], rot: [0, side * -0.55, 0] }));
+  const mx = (a.x + b.x) / 2 + out.x * 0.5;
+  const mz = (a.y + b.y) / 2 + out.y * 0.5;
+  const along = Math.atan2(b.y - a.y, b.x - a.x);
+  const deck = 0.13;
+  parts.push(piece(new THREE.BoxGeometry(0.46, 0.035, 0.3), '#B07B4E', { at: [mx, deck, mz], rot: [0, -along, 0] }));
+  // The stage's posts, down into the water.
+  const ca = Math.cos(along);
+  const sa = Math.sin(along);
+  for (const [u, v] of [[-0.2, -0.12], [0.2, -0.12], [-0.2, 0.12], [0.2, 0.12]] as const) {
+    parts.push(piece(new THREE.CylinderGeometry(0.02, 0.02, 0.2, 6), '#6E4A2E', { at: [mx + u * ca + v * out.x, 0.05, mz + u * sa + v * out.y] }));
   }
-  parts.push(piece(new THREE.BoxGeometry(0.34, 0.035, 0.34), '#B07B4E', { at: [0.48, 0.13, 0] }));
-  for (const [x, z] of [[0.33, -0.15], [0.33, 0.15], [0.63, -0.15], [0.63, 0.15]] as const) {
-    parts.push(piece(new THREE.CylinderGeometry(0.022, 0.022, 0.2, 6), '#6E4A2E', { at: [x, 0.06, z] }));
+  // A plank from each corner of the coast down to the stage's near edge.
+  for (const [c, side] of [[a, -1], [b, 1]] as const) {
+    const from = new THREE.Vector3(c.x, TILE_TOP - 0.02, c.y);
+    const to = new THREE.Vector3(mx + side * 0.17 * ca - out.x * 0.12, deck + 0.01, mz + side * 0.17 * sa - out.y * 0.12);
+    parts.push(beam(from, to, 0.08, 0.03, '#A47148'));
   }
   return merge(parts);
 }

@@ -27,11 +27,11 @@ import {
   dieFacing,
   dieGeometry,
   duneGeometry,
+  harbourGeometry,
   merge,
   palmGeometry,
   peakGeometry,
   piece,
-  pierGeometry,
   PLAYER_COLORS,
   roadGeometry,
   robberGeometry,
@@ -425,7 +425,6 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
     }
     still.push(placed(g, h.x, TILE_TOP + 0.002, h.y));
   });
-  const pier = pierGeometry();
   for (const port of board.ports) {
     const e = TOPOLOGY.edges[port.edge]!;
     const h = hexes[e.hexes[0]!]!;
@@ -434,12 +433,11 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
     const len = Math.hypot(nx, nz);
     const ux = nx / len;
     const uz = nz / len;
-    still.push(placed(pier, e.x, 0.04, e.y, -Math.atan2(uz, ux)));
+    still.push(harbourGeometry(TOPOLOGY.verts[e.v[0]]!, TOPOLOGY.verts[e.v[1]]!, { x: ux, y: uz }));
     const label = portLabel(port.kind === 'any' ? '3:1' : '2:1', port.kind === 'any' ? COLORS.wood : COLORS.terrain[port.kind]);
-    still.push(placed(label, e.x + ux * 0.48, 0.19, e.y + uz * 0.48));
+    still.push(placed(label, e.x + ux * 0.5, 0.17, e.y + uz * 0.5));
     label.dispose();
   }
-  pier.dispose();
   for (const g of tokenGeo.values()) g.dispose();
   const fixtures = merge(still);
   geos.push(fixtures);
