@@ -10,8 +10,8 @@
  * pick() where on the board a tap lands (see IsleBoardApi) and turns that
  * into a move with pickMark (isle/pick.ts).
  */
-import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react';
+import { useFrame, useLoader, useThree } from '@react-three/fiber';
+import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import * as THREE from 'three';
 import type { Quality } from '../../house/scene/materials';
 import { mulberry32 } from '../../rng';
@@ -73,6 +73,8 @@ export interface IsleBoardProps {
   onReady?: (api: IsleBoardApi) => void;
   /** The dice have landed (after a roll's tumble). */
   onRolled?: (total: number) => void;
+  /** Pictures for the lands' tiles; a land without one is drawn in 3D. */
+  hexArt?: HexArt;
 }
 
 function useMaterial(quality: Quality, params: THREE.MeshStandardMaterialParameters = {}) {
@@ -97,7 +99,7 @@ export function lastRoll(s: IsleState): { key: number; d: [number, number] } | n
   return null;
 }
 
-export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled }: IsleBoardProps) {
+export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled, hexArt }: IsleBoardProps) {
   const glow = useRef<{ total: number; at: number } | null>(null);
   const clock = useThree((t) => t.clock);
   return (
@@ -106,7 +108,8 @@ export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled 
       <fog attach="fog" args={[SKY, 20, 42]} />
       <Lights quality={quality} />
       <Sea />
-      <Island board={state.board} seed={state.seed} robber={state.robber} quality={quality} glow={glow} />
+      <Island board={state.board} seed={state.seed} robber={state.robber} quality={quality} glow={glow} pictured={hexArt} />
+      {hexArt ? <HexPictures board={state.board} art={hexArt} robber={state.robber} glow={glow} /> : null}
       <Pieces state={state} quality={quality} />
       <Robber hex={state.robber} quality={quality} />
       <MarkSpots marks={marks} />
@@ -250,16 +253,20 @@ function Island({
   robber,
   quality,
   glow,
+  pictured,
 }: {
   board: Board;
   seed: number;
   robber: number;
   quality: Quality;
   glow: RefObject<{ total: number; at: number } | null>;
+  /** Lands with a picture on their tiles: their 3D trees, sheep and so on aren't drawn. */
+  pictured?: HexArt;
 }) {
   const mat = useMaterial(quality);
   const tileMat = useMaterial(quality, { roughness: 0.92 });
-  const built = useMemo(() => buildIsland(board, seed, mat, tileMat), [board, seed, mat, tileMat]);
+  const plain = useMemo(() => new Set((Object.keys(pictured ?? {}) as Terrain[]).filter((t) => pictured?.[t] != null)), [pictured]);
+  const built = useMemo(() => buildIsland(board, seed, mat, tileMat, plain), [board, seed, mat, tileMat, plain]);
   useEffect(() => () => built.dispose(), [built]);
 
   const base = useMemo(() => board.terrain.map((t) => new THREE.Color(COLORS.terrain[t])), [board]);
@@ -295,7 +302,7 @@ function Island({
   );
 }
 
-function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: THREE.Material) {
+function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: THREE.Material, pictured: ReadonlySet<Terrain>) {
   const objects: THREE.Object3D[] = [];
   const geos: THREE.BufferGeometry[] = [];
   const { hexes } = TOPOLOGY;
@@ -360,6 +367,8 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
     taken.length = 0;
     // Keep the middle clear for the number token.
     taken.push({ x: h.x, z: h.y, r: 0.28 });
+    // Its picture shows what grows there.
+    if (pictured.has(land)) return;
     if (land === 'grain') {
       const turn = random() * Math.PI;
       for (let row = -2; row <= 2; row++) {
@@ -477,6 +486,128 @@ function portLabel(text: string, color: string) {
     piece(new THREE.CylinderGeometry(0.17, 0.17, 0.035, 24), COLORS.cream, { at: [0, 0.01, 0] }),
     piece(textGeometry(text, 0.12, 0.16, 0.012), COLORS.ink, { at: [0, 0.028, 0] }),
   ]);
+}
+
+// ---- Pictures on the tiles -------------------------------------------------------
+
+/** Each land's picture (a pointy-topped hex, top and bottom corners touching the image's edges): a URL, or on a phone a bundled module. */
+export type HexArt = Partial<Record<Terrain, string | number>>;
+
+/** The pictures' file names (scripts/build-isle-hexes.mjs). */
+export const HEX_FILES: Record<Terrain, string> = { wood: 'forest', wool: 'pasture', grain: 'fields', brick: 'hills', ore: 'mountains', desert: 'desert' };
+
+/** The pictures served from one folder (the web's public/isle/hex). */
+export const hexArtAt = (base: string): HexArt =>
+  Object.fromEntries((Object.entries(HEX_FILES) as [Terrain, string][]).map(([t, name]) => [t, `${base}/${name}.png`]));
+
+/** How much of each picture shows: just inside its painted rim, so its rounded corners never peek out. */
+const PICTURE_ZOOM = 0.97;
+/** The tile's flat top (the bevelled top's upper face). */
+const TOP_R = 0.9;
+const TOP_Y = TILE_TOP + 0.04 + 0.002;
+
+/** A flat hex lying face up with UVs that put a hex picture on it, north at the top. */
+function pictureHexGeometry(y = TOP_Y) {
+  const pos: number[] = [0, y, 0];
+  const uv: number[] = [0.5, 0.5];
+  for (let i = 0; i < 6; i++) {
+    const a = ((60 * i - 90) * Math.PI) / 180;
+    const x = Math.cos(a) * TOP_R;
+    const z = Math.sin(a) * TOP_R;
+    pos.push(x, y, z);
+    uv.push(0.5 + (x / TOP_R) * 0.5 * PICTURE_ZOOM, 0.5 - (z / TOP_R) * 0.5 * PICTURE_ZOOM);
+  }
+  const index: number[] = [];
+  for (let i = 0; i < 6; i++) index.push(0, 1 + ((i + 1) % 6), 1 + i);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(index);
+  return g;
+}
+
+/** Keeps a picture that won't load from taking the board with it: that land just stays plain. */
+class PictureCatch extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: Error) {
+    console.warn('[isle] a tile picture failed', error);
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+/** The pictures on every tile that has one, and their glow when a roll pays them. */
+function HexPictures({
+  board,
+  art,
+  robber,
+  glow,
+}: {
+  board: Board;
+  art: HexArt;
+  robber: number;
+  glow: RefObject<{ total: number; at: number } | null>;
+}) {
+  const lands = (Object.keys(art) as Terrain[]).filter((t) => art[t] != null && board.terrain.includes(t));
+  const glowMat = useMemo(
+    () => new THREE.MeshBasicMaterial({ color: '#FFF1B8', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+    [],
+  );
+  useEffect(() => () => glowMat.dispose(), [glowMat]);
+  const glowShape = useMemo(() => pictureHexGeometry(TOP_Y + 0.003), []);
+  useEffect(() => () => glowShape.dispose(), [glowShape]);
+  const [lit, setLit] = useState<number[]>([]);
+  const litKey = useRef('');
+  useFrame(({ clock }) => {
+    const g = glow.current;
+    const t = g ? clock.elapsedTime - g.at : Infinity;
+    const now = t > 2.2 ? [] : board.numbers.flatMap((n, h) => (n === g!.total && h !== robber && art[board.terrain[h]!] != null ? [h] : []));
+    if (now.join() !== litKey.current) {
+      litKey.current = now.join();
+      setLit(now);
+    }
+    // Two soft pulses of light over the picture.
+    glowMat.opacity = t > 2.2 ? 0 : Math.max(0, Math.sin((t / 2.2) * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5) * (1 - t / 2.2) * 0.5;
+  });
+  return (
+    <group>
+      {lands.map((land) => (
+        <PictureCatch key={land}>
+          <Suspense fallback={null}>
+            <LandPictures source={art[land]!} hexes={board.terrain.flatMap((t, h) => (t === land ? [h] : []))} />
+          </Suspense>
+        </PictureCatch>
+      ))}
+      {lit.map((h) => (
+        <mesh key={h} geometry={glowShape} material={glowMat} position={[TOPOLOGY.hexes[h]!.x, 0, TOPOLOGY.hexes[h]!.y]} renderOrder={2} />
+      ))}
+    </group>
+  );
+}
+
+/** One land's picture on all of its tiles, upright (they're painted with a horizon): one draw. */
+function LandPictures({ source, hexes }: { source: string | number; hexes: number[] }) {
+  // On a phone the source is a bundled module; three's loader there takes it as it is.
+  const tex = useLoader(THREE.TextureLoader, source as unknown as string);
+  const mat = useMemo(() => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
+  }, [tex]);
+  useEffect(() => () => mat.dispose(), [mat]);
+  const geo = useMemo(() => pictureHexGeometry(), []);
+  useEffect(() => () => geo.dispose(), [geo]);
+  const mesh = useMemo(() => {
+    const im = new THREE.InstancedMesh(geo, mat, hexes.length);
+    const m = new THREE.Matrix4();
+    hexes.forEach((h, i) => im.setMatrixAt(i, m.makeTranslation(TOPOLOGY.hexes[h]!.x, 0, TOPOLOGY.hexes[h]!.y)));
+    return im;
+  }, [geo, mat, hexes]);
+  useEffect(() => () => mesh.dispose(), [mesh]);
+  return <primitive object={mesh} />;
 }
 
 // ---- Pieces --------------------------------------------------------------------

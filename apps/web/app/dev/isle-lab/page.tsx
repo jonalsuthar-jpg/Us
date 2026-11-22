@@ -17,6 +17,7 @@ import { QUALITIES, type Quality } from '@us/shared/house';
 import {
   apply,
   hardMove,
+  hexArtAt,
   IsleBoard,
   newGame,
   nearestEdge,
@@ -205,7 +206,7 @@ function BoardLab() {
       onPointerUp={() => (drag.current = null)}
     >
       <Canvas shadows={quality !== 'low'} dpr={[1, 2]} camera={{ fov: 45, near: 0.1, far: 120 }} style={{ pointerEvents: 'none' }}>
-        <IsleBoard state={s} marks={marks} quality={quality} onReady={onReady} />
+        <IsleBoard state={s} marks={marks} quality={quality} onReady={onReady} hexArt={hexArtAt('/isle/hex')} />
         <Counter onCount={setCount} />
       </Canvas>
       <div

@@ -17,6 +17,7 @@ import type { Quality } from '@us/shared/house';
 import {
   cuesFor,
   DEV_INFO,
+  hexArtAt,
   IDLE,
   IsleBoard,
   logLines,
@@ -82,6 +83,9 @@ export interface IsleTableProps {
   onToggleSound?: () => void;
   onToggleMusic?: () => void;
 }
+
+/** The tiles' pictures, from public/isle/hex (scripts/build-isle-hexes.mjs). */
+const HEX_ART = hexArtAt('/isle/hex');
 
 /** Dark carved wood with a fine grain and a gold hairline inside its edge. */
 const WOOD =
@@ -180,7 +184,7 @@ export function IsleTable({
     <div className="fixed inset-0 z-50 select-none overflow-hidden bg-[#A9D8E8] font-sans">
       <BoardSurface api={api} onTap={tap}>
         <Canvas shadows={quality !== 'low'} dpr={[1, 2]} camera={{ fov: 45, near: 0.1, far: 120 }} resize={{ debounce: 0 }} style={{ pointerEvents: 'none' }}>
-          <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} />
+          <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} hexArt={HEX_ART} />
         </Canvas>
       </BoardSurface>
 

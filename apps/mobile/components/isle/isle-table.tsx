@@ -55,7 +55,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { useIsleArt } from '@/lib/isle-art';
+import { HEX_ART, useIsleArt } from '@/lib/isle-art';
 import { GradientView } from '../plan/art';
 import { Text } from '../ui/text';
 
@@ -241,7 +241,7 @@ export function IsleTable({
               >
                 <Catch onError={setBroken}>
                   <Canvas shadows={quality !== 'low'} camera={{ fov: 45, near: 0.1, far: 120 }} events={noEvents}>
-                    <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} />
+                    <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} hexArt={HEX_ART} />
                   </Canvas>
                 </Catch>
               </View>

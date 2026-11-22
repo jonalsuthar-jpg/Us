@@ -1,5 +1,19 @@
+import type { HexArt } from '@us/shared/isle';
 import { Asset } from 'expo-asset';
 import { useEffect, useState } from 'react';
+
+/**
+ * The tiles' pictures, bundled with the app (scripts/build-isle-hexes.mjs).
+ * The board's texture loader takes these modules as they are.
+ */
+export const HEX_ART: HexArt = {
+  wood: require('../assets/isle/hex/forest.png'),
+  wool: require('../assets/isle/hex/pasture.png'),
+  grain: require('../assets/isle/hex/fields.png'),
+  brick: require('../assets/isle/hex/hills.png'),
+  ore: require('../assets/isle/hex/mountains.png'),
+  desert: require('../assets/isle/hex/desert.png'),
+};
 
 /** Isle's card pictures, bundled with the app (scripts/build-isle-art.mjs). */
 const FILES: Record<string, number> = {
