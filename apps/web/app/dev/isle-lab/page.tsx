@@ -16,7 +16,6 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { QUALITIES, type Quality } from '@us/shared/house';
 import {
   apply,
-  artAt,
   hardMove,
   IsleBoard,
   newGame,
@@ -206,7 +205,7 @@ function BoardLab() {
       onPointerUp={() => (drag.current = null)}
     >
       <Canvas shadows={quality !== 'low'} dpr={[1, 2]} camera={{ fov: 45, near: 0.1, far: 120 }} style={{ pointerEvents: 'none' }}>
-        <IsleBoard state={s} marks={marks} quality={quality} onReady={onReady} art={artAt('/isle/art')} />
+        <IsleBoard state={s} marks={marks} quality={quality} onReady={onReady} />
         <Counter onCount={setCount} />
       </Canvas>
       <div

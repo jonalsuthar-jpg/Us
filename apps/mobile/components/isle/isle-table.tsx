@@ -241,7 +241,7 @@ export function IsleTable({
               >
                 <Catch onError={setBroken}>
                   <Canvas shadows={quality !== 'low'} camera={{ fov: 45, near: 0.1, far: 120 }} events={noEvents}>
-                    <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} art={art?.board} />
+                    <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} />
                   </Canvas>
                 </Catch>
               </View>

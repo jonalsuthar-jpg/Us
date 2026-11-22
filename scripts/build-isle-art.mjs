@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Isle's art for the apps: takes the Blender renders in assets-build/isle/
- * (scripts/blender/build_isle_art.py), gives each land its final colour, and
- * writes small JPEGs to apps/mobile/assets/isle/art/ (bundled with the app)
+ * Isle's card pictures for the apps: takes the Blender renders in
+ * assets-build/isle/ (scripts/blender/build_isle_art.py), gives each its final
+ * colour, and writes small JPEGs to apps/mobile/assets/isle/art/ (bundled with the app)
  * and apps/web/public/isle/art/.
  *
  *   node scripts/build-isle-art.mjs
@@ -26,9 +26,10 @@ const GRADE = {
   default: { saturation: 1.08, brightness: 1, contrast: 1.04 },
 };
 
-const SIZE = { tile: [640, 640], card: [360, 480], dev: [360, 480], sea: [512, 512] };
+const SIZE = { card: [360, 480], dev: [360, 480] };
 
-for (const file of readdirSync(src).filter((f) => f.endsWith('.png'))) {
+// The board draws its own 3D lands, so only the cards' pictures ship.
+for (const file of readdirSync(src).filter((f) => /^(card|dev)_.*\.png$/.test(f))) {
   const name = file.replace(/\.png$/, '');
   const [kind, land] = name.split('_');
   const g = GRADE[land] ?? GRADE.default;
