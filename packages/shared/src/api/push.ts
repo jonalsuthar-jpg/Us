@@ -23,7 +23,8 @@ export type PushCategory =
   | 'doodle' // my partner left me a doodle
   | 'guess_turn' // my partner drew their Draw & Guess turn
   | 'quiz_ready' // my partner started a quiz for me, or finished one
-  | 'house'; // Our House: a gift left, your turn, I'm in, a letter
+  | 'house' // Our House: a gift left, your turn, I'm in, a letter
+  | 'isle'; // Isle: my partner played and it's their turn
 
 export type PushRequest =
   | { category: 'new_message'; messageId: string }
@@ -37,7 +38,8 @@ export type PushRequest =
   | { category: 'doodle'; drawingId: string }
   | { category: 'guess_turn'; drawingId: string }
   | { category: 'quiz_ready'; roundId: string }
-  | { category: 'house'; event: 'gift' | 'turn' | 'in' | 'letter' };
+  | { category: 'house'; event: 'gift' | 'turn' | 'in' | 'letter' }
+  | { category: 'isle' };
 
 /** Payload attached to every notification (`data`) for deep-link routing. */
 export interface PushData {

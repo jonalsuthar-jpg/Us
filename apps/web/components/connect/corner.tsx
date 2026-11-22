@@ -2,7 +2,7 @@
 
 import { dailyState, QUIZ_INFO, quizState, quizVerdict, rateGap, roundScore, type QuizKind, type QuizRound } from '@us/shared';
 import { useCouple, useCoupleLive, useDailyDoodle, useDrawGames, useDrawings, useFeature, usePartnerDrawing, usePartnerInHouse, useQuizzes } from '@us/shared/react';
-import { Check, House, Lock, Play, Plus } from 'lucide-react';
+import { Check, House, Lock, Play, Plus, Sailboat } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { Initial } from '@/components/plan/bits';
@@ -32,6 +32,7 @@ export function ConnectCorner({ settings }: { settings?: ReactNode }) {
   const draw = useFeature('draw');
   const quizzesOn = useFeature('quizzes');
   const houseOn = useFeature('house');
+  const isleOn = useFeature('isle');
   const dailyOn = useFeature('daily_question');
   const quizzes = useQuizzes(quizzesOn);
   const daily = useDaily();
@@ -66,6 +67,12 @@ export function ConnectCorner({ settings }: { settings?: ReactNode }) {
       {houseOn ? (
         <Section title="Our house" bar="bg-[#2F7FA8]">
           <HouseCard />
+        </Section>
+      ) : null}
+
+      {isleOn ? (
+        <Section title="Isle" bar="bg-[#C88E1E]">
+          <IsleCard />
         </Section>
       ) : null}
 
@@ -117,6 +124,25 @@ function Section({ title, bar, right, children }: { title: string; bar: string; 
 const pill = 'mt-1.5 inline-flex self-start rounded-full px-3.5 py-[7px] text-[13px] font-bold';
 
 /** In through the front door: a home with a garden and a pool, where we both walk around. */
+/** Isle: a board game for the two of us and two bots, straight onto the island. */
+function IsleCard() {
+  return (
+    <Link
+      href="/isle"
+      className={cn('flex min-h-[132px] items-center gap-4 rounded-[26px] bg-gradient-to-br from-[#3FB0BE] to-[#1C6A8A] p-4 text-white shadow-[0_14px_26px_-16px_rgba(28,106,138,0.8)]', HOVER)}
+    >
+      <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[22px] bg-white/20">
+        <Sailboat size={44} strokeWidth={1.7} />
+      </span>
+      <span className="flex flex-1 flex-col gap-1">
+        <span className="text-[18px] font-bold">Isle</span>
+        <span className="line-clamp-2 text-[13px] text-white/90">Build, trade and race to 10 points against Meera and Kabir</span>
+        <span className={cn(pill, 'bg-[#F6CF62] text-[#3B2A1E]')}>Play</span>
+      </span>
+    </Link>
+  );
+}
+
 function HouseCard() {
   const { partner } = useCouple();
   const inside = usePartnerInHouse();

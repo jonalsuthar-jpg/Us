@@ -20,6 +20,7 @@ export type FeatureKey =
   | 'draw'
   | 'quizzes'
   | 'house'
+  | 'isle'
   | 'call_cards'
   | 'calendar'
   | 'lists'
@@ -54,6 +55,7 @@ export const FEATURES: FeatureInfo[] = [
   { key: 'draw', label: 'Draw together', group: 'connect' },
   { key: 'quizzes', label: 'Couple quizzes', group: 'connect' },
   { key: 'house', label: 'Our house', group: 'connect' },
+  { key: 'isle', label: 'Isle', group: 'connect' },
   { key: 'calendar', label: 'Calendar', group: 'plan' },
   { key: 'lists', label: 'Lists', group: 'plan' },
   { key: 'decide', label: 'Decision picker', group: 'plan' },
@@ -79,7 +81,7 @@ export const featureLabel = (key: string) => FEATURES.find((f) => f.key === key)
 /** The app tabs, and the features that make each one worth showing. */
 export const TAB_FEATURES: Record<'talk' | 'connect' | 'plan' | 'memory', FeatureKey[]> = {
   talk: ['chat', 'calls'],
-  connect: ['daily_question', 'draw', 'house'],
+  connect: ['daily_question', 'draw', 'house', 'isle'],
   plan: ['calendar', 'lists', 'decide', 'labour', 'costs'],
   memory: ['memories'],
 };

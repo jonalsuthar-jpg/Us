@@ -5,6 +5,8 @@
  * same order from the same seed.
  */
 
+import { mulberry32, shuffled } from '../rng';
+
 export type DeckId = 'deep' | 'truth_dare' | 'would_you_rather' | 'spicy';
 
 export interface Deck {
@@ -152,19 +154,10 @@ export const deckById = (id: DeckId) => DECKS.find((d) => d.id === id)!;
 
 /** The same shuffle on both phones: a small seeded generator (mulberry32). */
 export function seededOrder(length: number, seed: number): number[] {
-  let a = seed >>> 0;
-  const random = () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let x = Math.imul(a ^ (a >>> 15), 1 | a);
-    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
-  const out = Array.from({ length }, (_, i) => i);
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [out[i], out[j]] = [out[j]!, out[i]!];
-  }
-  return out;
+  return shuffled(
+    Array.from({ length }, (_, i) => i),
+    mulberry32(seed),
+  );
 }
 
 /** What's on the table: which deck, its shuffle, and the card that's up. */

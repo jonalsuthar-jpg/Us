@@ -169,6 +169,7 @@ export default function AppLayout() {
           <Stack.Screen name="play/quiz/[id]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="memory-story/[id]" options={{ animation: 'fade_from_bottom' }} />
           <Stack.Screen name="house" options={{ animation: 'fade' }} />
+          <Stack.Screen name="isle" options={{ animation: 'fade' }} />
         </Stack>
         <TapHeart />
         <ChatKeyApproval />

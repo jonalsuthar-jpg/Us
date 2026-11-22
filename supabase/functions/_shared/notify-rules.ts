@@ -27,6 +27,7 @@ export const GROUP_OF: Record<string, string> = {
   guess_turn: 'games',
   quiz_ready: 'games',
   house: 'games',
+  isle: 'games',
   location_shared: 'location',
   memory_resurfaced: 'memories',
   letter_unlocked: 'memories',

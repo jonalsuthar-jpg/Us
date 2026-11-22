@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { packSize } from '@us/shared/house/light';
 import * as Network from 'expo-network';
-import { Check, Download, House, Lock, Pause, Play, Plus } from 'lucide-react-native';
+import { Check, Download, House, Lock, Pause, Play, Plus, Sailboat } from 'lucide-react-native';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, Pressable, View, type ViewStyle } from 'react-native';
 import { packSizeToFetch, pausePackDownload, startPackDownload } from '@/lib/house-pack';
@@ -43,6 +43,7 @@ export function ConnectCorner({ daily, settings }: { daily: ReturnType<typeof us
   const draw = useFeature('draw');
   const quizzesOn = useFeature('quizzes');
   const houseOn = useFeature('house');
+  const isleOn = useFeature('isle');
   const dailyOn = useFeature('daily_question');
   const quizzes = useQuizzes(quizzesOn);
   const { partner } = useCouple();
@@ -79,6 +80,12 @@ export function ConnectCorner({ daily, settings }: { daily: ReturnType<typeof us
       {houseOn ? (
         <Section title="Our house" bar="bg-[#2F7FA8]">
           <HouseCard />
+        </Section>
+      ) : null}
+
+      {isleOn ? (
+        <Section title="Isle" bar="bg-[#C88E1E]">
+          <IsleCard />
         </Section>
       ) : null}
 
@@ -163,6 +170,32 @@ function HouseCard() {
         </View>
       </GradientView>
       <HousePackRow />
+    </Pressable>
+  );
+}
+
+/** Isle: a board game for the two of us and two bots, straight onto the island. */
+function IsleCard() {
+  const line = 'Build, trade and race to 10 points against Meera and Kabir';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Isle. ${line}`}
+      onPress={tap(() => router.push('/isle'))}
+      style={({ pressed }) => [{ borderRadius: 26, backgroundColor: '#1C6A8A' }, lift('#1C6A8A', 0.35), pressed && { transform: [{ scale: 0.98 }] }]}
+    >
+      <GradientView from="#3FB0BE" to="#1C6A8A" radius={26} className="min-h-[132px] flex-row items-center gap-4 p-4">
+        <View className="h-20 w-20 items-center justify-center rounded-[22px] bg-white/20">
+          <Sailboat size={44} color="#fff" strokeWidth={1.7} />
+        </View>
+        <View className="flex-1 gap-1">
+          <Text className="font-sans-bold text-[18px] text-white">Isle</Text>
+          <Text className="text-[13px] text-white/90" numberOfLines={2}>
+            {line}
+          </Text>
+          <Pill label="Play" className="bg-[#F6CF62]" textClass="text-[#3B2A1E]" />
+        </View>
+      </GradientView>
     </Pressable>
   );
 }

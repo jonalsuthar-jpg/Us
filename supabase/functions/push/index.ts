@@ -39,7 +39,8 @@ type Category =
   | 'doodle'
   | 'guess_turn'
   | 'quiz_ready'
-  | 'house';
+  | 'house'
+  | 'isle';
 
 /** The feature our couple needs for each push (see public.features). */
 const FEATURE: Record<Category, string> = {
@@ -60,6 +61,7 @@ const FEATURE: Record<Category, string> = {
   guess_turn: 'draw',
   quiz_ready: 'quizzes',
   house: 'house',
+  isle: 'isle',
 };
 
 interface Style {
@@ -107,6 +109,8 @@ const CATEGORIES: Record<Category, Style> = {
   guess_turn: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'draw' },
   quiz_ready: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'quizzes' },
   house: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', threadId: 'house' },
+  // "Your turn" in a game that's on: useful for a while, not for days.
+  isle: { iosSound: 'us_chime.wav', priority: 5, iosInterruption: 'active', ttl: 6 * 3600, threadId: 'isle' },
 };
 
 Deno.serve(async (req) => {
@@ -357,6 +361,21 @@ Deno.serve(async (req) => {
     content = content0;
     collapseId = `house-${body.event}-${userId}`;
     data = { category, url: '/house' };
+  } else if (body.category === 'isle') {
+    // Only for a game we're both at the table of, saved by me in the last few minutes.
+    const { data: g } = await admin
+      .from('isle_games')
+      .select('id, state, updated_by, updated_at')
+      .eq('couple_id', coupleId)
+      .eq('status', 'playing')
+      .maybeSingle();
+    const players = ((g?.state as { players?: { id?: string }[] } | null)?.players ?? []).map((p) => p.id);
+    if (!g || !players.includes(userId) || !players.includes(partnerId)) return json({ error: 'forbidden' }, 403);
+    if (g.updated_by !== userId || Date.now() - Date.parse(g.updated_at) > 5 * 60_000) return json({ skipped: 'stale' });
+    category = 'isle';
+    content = 'played. It’s your turn on the island ⛵';
+    collapseId = `isle-${g.id}`;
+    data = { category, url: '/isle' };
   } else {
     return json({ error: 'unknown_category' }, 400);
   }

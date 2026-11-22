@@ -642,6 +642,22 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      isle_games: {
+        Row: {
+          id: string;
+          couple_id: string;
+          state: Json;
+          version: number;
+          status: 'playing' | 'over' | 'abandoned';
+          created_by: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       draw_secrets: {
         Row: { drawing_id: string; couple_id: string; word: string };
         Insert: { drawing_id: string; couple_id: string; word: string };
@@ -748,6 +764,8 @@ export type Database = {
       current_partner_id: { Args: Record<PropertyKey, never>; Returns: string | null };
       set_couple_photo: { Args: { p_path: string | null }; Returns: Database['public']['Tables']['couples']['Row'] };
       set_house_item: { Args: { p_key: string; p_state: Json | null; p_version: number }; Returns: number };
+      start_isle: { Args: { p_state: Json }; Returns: string };
+      save_isle: { Args: { p_id: string; p_state: Json }; Returns: number };
       pick_decision: {
         Args: { p_category: string };
         Returns: Database['public']['Tables']['decision_options']['Row'];

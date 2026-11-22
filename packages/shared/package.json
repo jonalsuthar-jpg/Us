@@ -10,6 +10,7 @@
     "./react": "./src/react/index.ts",
     "./house": "./src/house/index.ts",
     "./house/light": "./src/house/light.ts",
+    "./isle": "./src/isle/index.ts",
     "./tokens": "./src/tokens.js",
     "./theme": "./src/theme.js",
     "./tailwind-preset": "./tailwind-preset.js",
