@@ -146,7 +146,13 @@ export function IsleTable({
   const move = useCallback(
     (a: IsleAction) => {
       sound?.play('click', 0.3);
-      const why = onMove(a);
+      let why: string | null;
+      try {
+        why = onMove(a);
+      } catch (e) {
+        console.warn('[isle] move failed', e);
+        why = 'That didn’t work. Try again';
+      }
       if (why) setProblem(why);
       return !why;
     },

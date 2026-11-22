@@ -427,6 +427,13 @@ export function waitingOn(s: IsleState): number[] {
 // ---- Moves ----------------------------------------------------------------
 
 /**
+ * A deep copy of a state. The state is plain JSON, so a JSON round trip is
+ * the whole copy; structuredClone would do too, but phones (Hermes) don't
+ * have it, and a missing function there closes the app.
+ */
+export const cloneState = (s: IsleState): IsleState => JSON.parse(JSON.stringify(s)) as IsleState;
+
+/**
  * The next state after a seat's move, or why it can't be made. Never changes
  * the state given. The id (any short string) is kept in recent, so the same
  * move arriving twice can be spotted.
@@ -435,7 +442,7 @@ export function apply(prev: IsleState, seat: number, a: IsleAction, id?: string)
   if (prev.phase === 'over') return 'the game is over';
   if (!Number.isInteger(seat) || seat < 0 || seat > 3) return 'not at the table';
   if (!a || typeof a !== 'object') return 'not a move';
-  const s = structuredClone(prev);
+  const s = cloneState(prev);
   const why = step(s, seat, a);
   if (why) return why;
   checkWin(s);

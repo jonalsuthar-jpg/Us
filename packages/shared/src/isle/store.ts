@@ -192,7 +192,16 @@ export class IsleStore {
     return null;
   }
 
+  /** Something from my partner's phone. A bad message is dropped, never thrown at the channel. */
   receive(w: IsleWire) {
+    try {
+      this.take(w);
+    } catch (e) {
+      console.warn('[isle] message dropped', e);
+    }
+  }
+
+  private take(w: IsleWire) {
     if (w.from === this.me || this.closed) return;
     this.partnerSeenAt = this.clock.now();
     switch (w.k) {
@@ -360,8 +369,13 @@ export class IsleStore {
       this.botTimer = null;
       this.botFor = -1;
       const now = this.game?.state;
-      if (now && now.mv === mv && this.drivesBots()) this.botMove(now, seat);
-      else this.changed();
+      // This runs from a timer: anything thrown here would close the app on a phone.
+      try {
+        if (now && now.mv === mv && this.drivesBots()) this.botMove(now, seat);
+        else this.changed();
+      } catch (e) {
+        console.warn('[isle] bot move failed', e);
+      }
     }, botDelay(s!));
   }
 

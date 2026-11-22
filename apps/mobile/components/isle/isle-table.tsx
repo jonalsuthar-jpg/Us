@@ -165,7 +165,14 @@ export function IsleTable({
     (a: IsleAction) => {
       tick();
       sound?.play('click', 0.3);
-      const why = onMove(a);
+      // A bug in a move must not close the app (taps run outside any error boundary).
+      let why: string | null;
+      try {
+        why = onMove(a);
+      } catch (e) {
+        console.warn('[isle] move failed', e);
+        why = 'That didn’t work. Try again';
+      }
       if (why) setProblem(why);
       return !why;
     },
