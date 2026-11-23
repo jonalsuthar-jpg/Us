@@ -225,6 +225,8 @@ export const CYCLE = {
 } as const;
 export const SWINGS = { x: 31, z: 54, seats: [53.35, 54.65] } as const;
 export const KITES = { x: 42, z: 70 } as const;
+/** The cricket pitch in the park, along z: the stumps and the batter's crease, and where the bowler bowls from. */
+export const PITCH = { x: 50, stumps: 45.6, bat: 46.4, bowl: 55.2 } as const;
 
 /** The flower stall on the square. */
 export const STALL = { x: -8, z: 53, ry: Math.PI / 2 } as const;
@@ -332,6 +334,7 @@ export function obstacles(inside: (x: number, z: number) => boolean): [number, n
     [SWINGS.x, SWINGS.z - 1.2, 0.2],
     [SWINGS.x, SWINGS.z + 1.2, 0.2],
     [KITES.x, KITES.z, 0.2],
+    [PITCH.x, PITCH.stumps, 0.2],
   ];
 }
 

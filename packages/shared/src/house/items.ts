@@ -19,7 +19,7 @@
  * while a date is on (the picnic blanket, the candles): see placeItems.
  */
 import { floorY, FLOOR_H, regionAt, type RegionId } from './layout';
-import { BENCHES, CAFE_TABLES, groundY, HILL, KITES, LAMPS, LOUNGERS } from './village';
+import { BENCHES, CAFE_TABLES, groundY, HILL, KITES, LAMPS, LOUNGERS, PITCH } from './village';
 
 /** How high the ground is under a thing out in the village: the hill, the jetty, the shallows. */
 const villageY = (x: number, z: number) => {
@@ -43,7 +43,7 @@ export type ItemModel =
   | 'balconyTable' | 'lounger' | 'umbrella' | 'frontDoor' | 'balconyDoor' | 'mug' | 'book' | 'pillow' | 'ball' | 'teddy'
   | 'vase' | 'wateringCan' | 'frame' | 'gardenPlant' | 'beanbag' | 'dish'
   | 'firePit' | 'logBench' | 'hotTub' | 'telescope' | 'gardenBed' | 'swing' | 'mailbox' | 'fairyLights' | 'picnic' | 'popcorn'
-  | 'blanket' | 'candles' | 'balloons' | 'cake' | 'ceilingLight' | 'gardenLamp' | 'breadBag' | 'bouquet' | 'puriPlate' | 'kulfi' | 'kiteReel'
+  | 'blanket' | 'candles' | 'balloons' | 'cake' | 'ceilingLight' | 'gardenLamp' | 'breadBag' | 'bouquet' | 'puriPlate' | 'kulfi' | 'kiteReel' | 'bat' | 'cricketBall'
   /** A seat in the village whose look is in the village art (a bench, a café chair): nothing more to draw. */
   | 'villageSeat';
 
@@ -153,6 +153,9 @@ export const ITEMS: ItemDef[] = [
   { key: KULFI, kind: 'carry', model: 'kulfi', label: 'Kulfi', x: 0, y: 0, z: 0, ry: 0, hw: 0.04, hd: 0.04, bought: true },
   // The kites' reels, hanging on the kite post in the park (scene/park.tsx flies them).
   { key: 'kite_1', kind: 'carry', model: 'kiteReel', label: 'Kite', x: KITES.x + 0.18, y: 1.0, z: KITES.z + 0.08, ry: 0, hw: 0.06, hd: 0.06 },
+  // Park cricket (scene/cricket.tsx): the bat by the stumps, the ball at the bowler's end.
+  { key: 'cricket_bat', kind: 'carry', model: 'bat', label: 'Bat', x: PITCH.x + 0.7, y: 0, z: PITCH.stumps + 0.3, ry: 0.4, hw: 0.08, hd: 0.08 },
+  { key: 'cricket_ball', kind: 'carry', model: 'cricketBall', label: 'Cricket ball', x: PITCH.x + 0.6, y: 0, z: PITCH.bowl, ry: 0, hw: 0.05, hd: 0.05 },
   { key: 'kite_2', kind: 'carry', model: 'kiteReel', label: 'Kite', x: KITES.x - 0.18, y: 1.0, z: KITES.z + 0.08, ry: 0, hw: 0.06, hd: 0.06 },
 
   // Ceiling lights, switched by each room's door; on until we switch them off. And lamps along the garden paths.

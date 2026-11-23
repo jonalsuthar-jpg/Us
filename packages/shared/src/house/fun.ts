@@ -320,6 +320,24 @@ export const MOODS = [
 export type Mood = (typeof MOODS)[number]['key'];
 export const moodOf = (k: string | undefined) => MOODS.find((m) => m.key === k);
 
+// ------------------------------------------------------------------- cricket
+
+/** How long a ball takes from the bowler's hand to the bat, seconds. */
+export const BALL_S = 1.5;
+
+/**
+ * A shot, from when "Hit!" was tapped against when the ball arrived (seconds; negative is early).
+ * Right on it: six. Close: four, then two, then a single. Too early or too late: bowled.
+ */
+export function cricketShot(err: number): { runs: number; out: boolean } {
+  if (err > 0.15 || err < -0.45) return { runs: 0, out: true };
+  const a = Math.abs(err + 0.03);
+  if (a < 0.07) return { runs: 6, out: false };
+  if (a < 0.15) return { runs: 4, out: false };
+  if (a < 0.26) return { runs: 2, out: false };
+  return { runs: 1, out: false };
+}
+
 // -------------------------------------------------------------------- dinner
 
 /** What a recipe needs from the kitchen: bread from the bakery, spices from the market, vegetables from the garden. */

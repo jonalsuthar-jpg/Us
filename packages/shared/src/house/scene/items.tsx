@@ -388,6 +388,16 @@ function Model({ look }: { look: Look }): ReactNode {
         </>
       );
     }
+    case 'bat':
+      // A cricket bat: blade and handle.
+      return (
+        <>
+          <B a={[-0.055, 0, -0.02]} b={[0.055, 0.55, 0.02]} m="cushion" />
+          <B a={[-0.018, 0.55, -0.018]} b={[0.018, 0.85, 0.018]} m="black" />
+        </>
+      );
+    case 'cricketBall':
+      return <FunBall at={[0, 0.036, 0]} r={0.036} c="#B22222" />;
     case 'kiteReel':
       // A wooden reel of kite string.
       return (

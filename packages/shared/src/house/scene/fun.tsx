@@ -64,6 +64,7 @@ import { DANCE_S, HEART_S } from './avatar';
 import { colour, FunBall, FunFlames, funSphere, Near } from './fun-models';
 import { useOutdoors } from './outdoors';
 import { usePark } from './park';
+import { useCricket } from './cricket';
 import { KULFI_S, type HousePhoto } from './items';
 
 /** A card the screens draw the same way on the phone and the web: some words, a picture, buttons, maybe a box to type in. */
@@ -480,6 +481,7 @@ export function useFun(h: FunHost) {
   // The lake and the hill (outdoors.tsx).
   const outdoors = useOutdoors({ h, raw, set, partnerHere, openPanel: (id) => void (ui.panel = id) });
   const park = usePark({ h, raw, set, partnerHere });
+  const cricket = useCricket({ h, raw, set, partnerHere });
   const dist2 = (x: number, z: number) => Math.hypot(x - h.me.pos.x, z - h.me.pos.z);
   const close = (x: number, y: number, z: number, r = NEAR) => dist2(x, z) < r && Math.abs(y - h.me.pos.y) < 1.6;
   const item = (key: string) => fresh().find((i) => i.key === key);
@@ -998,7 +1000,7 @@ export function useFun(h: FunHost) {
   /** What the action button does here, if it's one of ours. */
   function focus(): { label: string; run: () => void } | null {
     if (ui.board || ui.scope) return null;
-    const outside = outdoors.focus() ?? park.focus();
+    const outside = outdoors.focus() ?? park.focus() ?? cricket.focus();
     if (outside) return outside;
     const game = readGame(raw(GAME_KEY));
     const treasure = readTreasure();
@@ -1507,6 +1509,8 @@ export function useFun(h: FunHost) {
     if (!hud.banner && outside.banner) hud.banner = outside.banner;
     const play = park.frame(dt);
     if (!hud.banner && play.banner) hud.banner = play.banner;
+    const match = cricket.frame();
+    if (!hud.banner && match.banner) hud.banner = match.banner;
 
     // Sounds: the fire crackling and the hot tub bubbling, close by.
     if (h.sound) {
@@ -1640,6 +1644,7 @@ export function useFun(h: FunHost) {
       {h.night ? <NightSky /> : null}
       {outdoors.scene}
       {park.scene}
+      {cricket.scene}
       {coffee ? (
         <Near near={h.me.pos} x={CAFE_TABLES[coffee.table]![0]} z={CAFE_TABLES[coffee.table]![1]} r={30}>
           <CoffeeCups x={CAFE_TABLES[coffee.table]![0]} z={CAFE_TABLES[coffee.table]![1]} left={coffee.left} />

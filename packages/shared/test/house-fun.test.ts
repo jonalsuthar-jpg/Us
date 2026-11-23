@@ -151,3 +151,15 @@ describe('house: cooking with what we have', () => {
     for (const w of ['chicken', 'fish', 'meat', 'mutton', 'egg', 'prawn', 'beef', 'pork']) expect(words).not.toContain(w);
   });
 });
+
+describe('house: park cricket', () => {
+  it('scores by timing', async () => {
+    const { cricketShot } = await import('../src/house/fun');
+    expect(cricketShot(-0.03)).toEqual({ runs: 6, out: false });
+    expect(cricketShot(0.05)).toEqual({ runs: 4, out: false });
+    expect(cricketShot(-0.2)).toEqual({ runs: 2, out: false });
+    expect(cricketShot(-0.38)).toEqual({ runs: 1, out: false });
+    expect(cricketShot(0.3)).toEqual({ runs: 0, out: true });
+    expect(cricketShot(-0.6)).toEqual({ runs: 0, out: true });
+  });
+});

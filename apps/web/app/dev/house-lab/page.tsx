@@ -391,6 +391,16 @@ export default function HouseLab() {
         [62500, () => cb.cmds.push({ t: 'walkTo', x: 54, y: 0, z: 64 })],
         [70000, () => ((ca.yaw = 2.2 + Math.PI), (ca.pitch = -0.1), (cb.yaw = 2.2 + Math.PI), (cb.pitch = -0.1))],
       ]);
+    if (scene === 'cricket')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 50.7, y: 0, z: 46.1, use: 'cricket_bat' })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 50.6, y: 0, z: 55.4, use: 'cricket_ball' })],
+        [50000, () => ca.cmds.push({ t: 'walkTo', x: 50, y: 0, z: 46.6 })],
+        [51000, () => cb.cmds.push({ t: 'walkTo', x: 50, y: 0, z: 55.2 })],
+        [54000, () => cb.cmds.push({ t: 'use' })],
+        [55470, () => ca.cmds.push({ t: 'use' })],
+        [55500, () => ((ca.yaw = 0.3), (ca.pitch = 0.2), (cb.yaw = Math.PI - 0.3), (cb.pitch = 0.2))],
+      ]);
     if (scene === 'chaat')
       run([
         [800, () => ca.cmds.push({ t: 'walkTo', x: 7.4, y: 0, z: 40.2 })],
