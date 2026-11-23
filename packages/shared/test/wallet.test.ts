@@ -4,8 +4,8 @@ import { formatRupees, PRICES, REWARDS, walletLineText, walletRef } from '../src
 // The migration itself (Node's fs, loaded at run time: the shared package has no Node types).
 const { readFileSync } = (await import('node:fs' as string)) as { readFileSync: (p: URL, enc: 'utf8') => string };
 // The rewards and the prices as the latest migration defines them.
-const sql = readFileSync(new URL('../../../supabase/migrations/20261122000800_rupees.sql', import.meta.url), 'utf8');
-const rewardsSql = readFileSync(new URL('../../../supabase/migrations/20261122000800_rupees.sql', import.meta.url), 'utf8');
+const sql = readFileSync(new URL('../../../supabase/migrations/20261123000900_village_food.sql', import.meta.url), 'utf8');
+const rewardsSql = readFileSync(new URL('../../../supabase/migrations/20261123000900_village_food.sql', import.meta.url), 'utf8');
 
 describe('our money', () => {
   it('shows the same rewards as the server pays', () => {

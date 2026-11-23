@@ -144,12 +144,13 @@ const PAIRED = new Date(Date.now() - 400 * 86_400_000).toISOString();
 // ?phone=1: the house behaves as on a phone (no shadows, nearer drawing), to measure it.
 if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('phone')) (window as unknown as { __US_PHONE__?: boolean }).__US_PHONE__ = true;
 
-/** A pretend couple whose world clock says late morning right now (shops open, daylight); ?night=1 for evening. */
+/** A pretend couple whose world clock says ?hour= right now (default late morning: shops open, daylight; ?night=1 for evening). */
 const LAB_COUPLE = (() => {
-  const want = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('night') ? [20, 21.5] : [10, 13];
-  for (let i = 0; i < 500; i++) {
+  const q = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const want = Number(q?.get('hour') ?? (q?.get('night') ? 20.5 : 11.5));
+  for (let i = 0; i < 2000; i++) {
     const h = worldHours(Date.now(), `lab-${i}`);
-    if (h > want[0]! && h < want[1]!) return `lab-${i}`;
+    if (Math.abs(h - want) < 0.5) return `lab-${i}`;
   }
   return '';
 })();
@@ -362,6 +363,22 @@ export default function HouseLab() {
         [800, () => ca.cmds.push({ t: 'walkTo', x: -52.5, y: 0, z: 55.5 })],
         [900, () => cb.cmds.push({ t: 'walkTo', x: -55, y: 0, z: 49 })],
         [62000, () => ((ca.yaw = Math.PI - 0.5), (ca.pitch = 0.2), (cb.yaw = Math.PI + 0.15), (cb.pitch = 0.2))],
+      ]);
+    if (scene === 'chaat')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 7.4, y: 0, z: 40.2 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 6.6, y: 0, z: 41.1 })],
+        [30000, () => ca.cmds.push({ t: 'use' })],
+        [32000, () => ca.cmds.push({ t: 'use' })],
+        [33000, () => ((ca.yaw = -2.2), (ca.pitch = 0.3), (cb.yaw = 1.0), (cb.pitch = 0.3))],
+      ]);
+    if (scene === 'kulfi')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 42, y: 0, z: 40.9 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 42.8, y: 0, z: 41.6 })],
+        [45000, () => ca.cmds.push({ t: 'use' })],
+        [47000, () => ca.cmds.push({ t: 'use' })],
+        [47500, () => ((ca.yaw = Math.PI - 0.5), (ca.pitch = 0.3), (cb.yaw = Math.PI + 0.4), (cb.pitch = 0.3))],
       ]);
     if (scene === 'coffee')
       run([

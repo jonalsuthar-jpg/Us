@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import * as sky from '../src/house/sky';
 import { findPath, floorY, OBSTACLES, region, regionAt, REGIONS, walkStep, type RegionId } from '../src/house/layout';
-import { BENCHES, BUILDINGS, CAFE_TABLES, FOUNTAIN, GO_TO, LAMPS, POND, TREES, VILLAGE_PORTALS, VILLAGE_REGIONS, ZONES } from '../src/house/village';
+import { BENCHES, BUILDINGS, CAFE_TABLES, FOUNTAIN, GO_TO, STALLS, LAMPS, POND, TREES, VILLAGE_PORTALS, VILLAGE_REGIONS, ZONES } from '../src/house/village';
 
 const inRect = (r: { x0: number; x1: number; z0: number; z1: number }, x: number, z: number, pad = 0) => x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad;
 
@@ -225,5 +226,37 @@ describe('the village: what people say', () => {
     expect(lines.every((l) => l.startsWith('Asha: '))).toBe(true);
     // Without the time, just hello.
     expect(villagerHello(baker, 0)).not.toContain('Good');
+  });
+});
+
+describe('the village: stalls and carts', () => {
+  it('each can be walked up to, and its keeper stands behind it', async () => {
+    const { VILLAGERS } = await import('../src/house/villagers');
+    for (const [id, s] of Object.entries(STALLS)) {
+      const r = regionAt(s.to.x, 0.1, s.to.z);
+      expect(r, id).not.toBeNull();
+      for (const [x, z, rad] of OBSTACLES) expect(Math.hypot(x - s.to.x, z - s.to.z), `${id} spot blocked`).toBeGreaterThan(rad + 0.25);
+      expect(findPath('living', { region: r!.id, x: s.to.x, z: s.to.z }).length, id).toBeGreaterThan(0);
+      const keeper = VILLAGERS.find((v) => v.id === id)!;
+      expect(Math.hypot(keeper.post!.x - s.to.x, keeper.post!.z - s.to.z), id).toBeLessThan(2.6);
+    }
+  });
+
+  it('the market is only there at weekends', async () => {
+    const { VILLAGERS, villagerAt } = await import('../src/house/villagers');
+    const spices = VILLAGERS.find((v) => v.id === 'spices')!;
+    // Find a moment in the market's hours on a Saturday and on a Monday.
+    const at = (day: number) => {
+      for (let t = Date.UTC(2026, 10, 1); t < Date.UTC(2026, 11, 1); t += 10 * 60_000) {
+        const d = new Date(t);
+        if (d.getDay() !== day) continue;
+        const { worldHours } = sky;
+        const h = worldHours(t, 'c1');
+        if (h > 10 && h < 14) return t;
+      }
+      throw new Error('no time');
+    };
+    expect(villagerAt(spices, at(6), 'c1')).not.toBeNull();
+    expect(villagerAt(spices, at(1), 'c1')).toBeNull();
   });
 });

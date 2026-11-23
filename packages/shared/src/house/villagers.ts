@@ -13,8 +13,8 @@ export interface Villager {
   /** What they say when you come up to them. */
   hello: string[];
   look: LookState;
-  /** Someone at work: where they stand, facing which way, and when (world hours). */
-  post?: { x: number; z: number; h: number; from: number; to: number };
+  /** Someone at work: where they stand, facing which way, and when (world hours; `days`: only on these real weekdays, 0 Sunday). */
+  post?: { x: number; z: number; h: number; from: number; to: number; days?: number[] };
   /** Someone out walking: a loop, how fast, and when they're out (world hours). */
   route?: { points: [number, number][]; speed: number; from: number; to: number; offset: number };
 }
@@ -40,6 +40,34 @@ export const VILLAGERS: Villager[] = [
     hello: ['Roses are fresh today.', 'Flowers for someone special?', 'Tulips came in this morning.'],
     look: { skin: '#A26B48', hair: '#3B2416', shirt: '#E3A13B', pants: '#4F6D4A', body: 'f', style: 'Hair_Long', shoes: '#B5524A' },
     post: { x: -9.1, z: 53, h: Math.PI / 2, from: 8, to: 18 },
+  },
+  {
+    id: 'chaat',
+    name: 'Raju',
+    hello: ['Pani puri, fresh and spicy!', 'Extra imli chutney for you two.', 'Sweet or spicy pani?'],
+    look: { skin: '#9A6A44', hair: '#1E1612', shirt: '#F2F0EA', pants: '#4E6E8E', body: 'm', style: 'Hair_Buzzed', beard: true, shoes: '#6B4423' },
+    post: { x: 9.6, z: 40.2, h: -Math.PI / 2, from: 13, to: 21.5 },
+  },
+  {
+    id: 'kulfi',
+    name: 'Kamla',
+    hello: ['Kulfi! Malai and pista.', 'Cold kulfi on a warm day.', 'One each?'],
+    look: { skin: '#B07A52', hair: '#2A1A10', shirt: '#4AA8E8', pants: '#33415C', body: 'f', style: 'Hair_Long', shoes: '#B5524A' },
+    post: { x: 42, z: 38.6, h: 0, from: 10, to: 18 },
+  },
+  {
+    id: 'spices',
+    name: 'Sunita',
+    hello: ['Garam masala, ground this morning.', 'Haldi, jeera, elaichi: take your pick.', 'The weekend market is busy today!'],
+    look: { skin: '#A26B48', hair: '#1E1612', shirt: '#B5524A', pants: '#6B5A45', body: 'f', style: 'Hair_Buns', shoes: '#6B4423' },
+    post: { x: -8.2, z: 39.6, h: Math.PI / 2, from: 8, to: 17, days: [0, 6] },
+  },
+  {
+    id: 'greens',
+    name: 'Gopal',
+    hello: ['I buy fresh vegetables: grown them yourselves?', 'Good prices for good tomatoes.', 'Nothing like home-grown.'],
+    look: { skin: '#7A4B30', hair: '#8A8A8A', shirt: '#7C9A3A', pants: '#2E2E38', body: 'm', style: 'Hair_SimpleParted', shoes: '#2E2E38' },
+    post: { x: 8.2, z: 55.4, h: -Math.PI / 2, from: 8, to: 17, days: [0, 6] },
   },
   {
     id: 'walker',
@@ -105,6 +133,7 @@ export function villagerAt(v: Villager, nowMs: number, coupleId = ''): VillagerP
   const hours = worldHours(nowMs, coupleId);
   if (v.post) {
     if (!onDuty(hours, v.post.from, v.post.to)) return null;
+    if (v.post.days && !v.post.days.includes(new Date(nowMs).getDay())) return null;
     return { x: v.post.x, z: v.post.z, h: v.post.h, moving: false, speed: 0 };
   }
   if (v.route) {

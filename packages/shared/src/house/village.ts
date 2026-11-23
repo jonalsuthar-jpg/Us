@@ -200,6 +200,18 @@ export const GROUNDS: (Rect & { kind: 'lanePath' | 'cobble' | 'squarePaving' | '
 
 export const FOUNTAIN = { x: 0, z: 47, r: 2.6 } as const;
 export const POND: Rect = { x0: 36.5, x1: 47.5, z0: 50.5, z1: 61.5 };
+/**
+ * Street food and the weekend market: where each stands, which way its front faces (ry), and where
+ * you stand to buy (to). The carts are drawn in code (scene/fun.tsx); the people are in villagers.ts.
+ */
+export const STALLS = {
+  chaat: { x: 8.6, z: 40.2, ry: -Math.PI / 2, to: { x: 7.4, z: 40.2 } },
+  kulfi: { x: 42, z: 39.6, ry: 0, to: { x: 42, z: 40.9 } },
+  spices: { x: -7.2, z: 39.6, ry: Math.PI / 2, to: { x: -6, z: 39.6 } },
+  greens: { x: 7.2, z: 55.4, ry: -Math.PI / 2, to: { x: 6, z: 55.4 } },
+} as const;
+export type StallId = keyof typeof STALLS;
+
 /** The flower stall on the square. */
 export const STALL = { x: -8, z: 53, ry: Math.PI / 2 } as const;
 
@@ -299,6 +311,9 @@ export function obstacles(inside: (x: number, z: number) => boolean): [number, n
     ...LAMPS.filter(([x, z]) => inside(x, z)).map(([x, z]): [number, number, number] => [x, z, 0.22]),
     // Nandi, seated in the temple hall.
     [TEMPLE.nandi.x, TEMPLE.nandi.z, 0.7],
+    // The street-food carts (there every day; the market's stalls only at weekends, so walk-through then).
+    [STALLS.chaat.x, STALLS.chaat.z, 0.75],
+    [STALLS.kulfi.x, STALLS.kulfi.z, 0.75],
   ];
 }
 

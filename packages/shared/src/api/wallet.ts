@@ -19,6 +19,9 @@ export const REWARDS = {
   treasure: { amount: 250, perDay: 3 },
   fish: { amount: 100, perDay: 8 },
   shells: { amount: 50, perDay: 8 },
+  breakfast: { amount: 150, perDay: 2 },
+  sell_veg: { amount: 50, perDay: 6 },
+  request: { amount: 200, perDay: 3 },
 } as const;
 export type Reward = keyof typeof REWARDS;
 
@@ -37,6 +40,9 @@ export const PRICES = {
   'furniture:bookshelf': 700,
   'furniture:coffeeTable': 350,
   bus_ticket: 150,
+  chaat: 60,
+  kulfi: 40,
+  spices: 50,
 } as const;
 export type Priced = keyof typeof PRICES;
 
@@ -103,6 +109,12 @@ export function walletLineText(l: Pick<WalletLine, 'reason' | 'delta'>): string 
     treasure: 'Finding the treasure',
     fish: 'Feeding the fish',
     shells: 'Shells from the beach',
+    breakfast: 'Breakfast together',
+    sell_veg: 'Vegetables sold at the market',
+    request: 'Helping in the village',
+    'spend:chaat': 'Pani puri',
+    'spend:kulfi': 'Kulfi',
+    'spend:spices': 'Spices',
     'spend:gift': 'A gift',
     'spend:bread': 'Bread',
     'spend:coffee': 'Coffee',

@@ -133,3 +133,21 @@ describe('gifts, the garden, unlocks, dinner', () => {
     expect(dinnerDone(d)).toBe(true);
   });
 });
+
+describe('house: cooking with what we have', () => {
+  it('needs bread for breakfast, spices for paneer, vegetables for parathas', async () => {
+    const { RECIPES, recipeBlocked } = await import('../src/house/fun');
+    const empty = { bread: false, spices: 0, veg: 0 };
+    expect(recipeBlocked('pasta', empty, 20)).toBeNull();
+    expect(recipeBlocked('dal', empty, 20)).toBeNull();
+    expect(recipeBlocked('breakfast', empty, 8)).toMatch(/bread/);
+    expect(recipeBlocked('breakfast', { ...empty, bread: true }, 8)).toBeNull();
+    expect(recipeBlocked('breakfast', { ...empty, bread: true }, 19)).toMatch(/morning/);
+    expect(recipeBlocked('paneer', empty, 20)).toMatch(/spices/);
+    expect(recipeBlocked('paneer', { ...empty, spices: 1 }, 20)).toBeNull();
+    expect(recipeBlocked('paratha', empty, 20)).toMatch(/vegetables/);
+    // Everything we cook is vegetarian.
+    const words = Object.values(RECIPES).flatMap((r) => [r.label, ...r.steps]).join(' ').toLowerCase();
+    for (const w of ['chicken', 'fish', 'meat', 'mutton', 'egg', 'prawn', 'beef', 'pork']) expect(words).not.toContain(w);
+  });
+});

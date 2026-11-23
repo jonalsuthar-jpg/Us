@@ -322,13 +322,46 @@ export const moodOf = (k: string | undefined) => MOODS.find((m) => m.key === k);
 
 // -------------------------------------------------------------------- dinner
 
-/** A dinner date: steps taken in turn, the next always the other's. */
+/** What a recipe needs from the kitchen: bread from the bakery, spices from the market, vegetables from the garden. */
+export type Needs = 'bread' | 'spices' | 'veg';
+
+interface RecipeDef {
+  label: string;
+  emoji: string;
+  steps: readonly string[];
+  needs?: Needs;
+  /** Breakfast: a morning thing (world time), and no candles. */
+  morning?: boolean;
+}
+
+/** A meal cooked together: steps taken in turn, the next always the other's. All vegetarian (we are). */
 export const RECIPES = {
-  pasta: { label: 'Pasta', steps: ['Chop the tomatoes', 'Boil the pasta', 'Stir the sauce', 'Plate up'] },
-  curry: { label: 'Curry', steps: ['Chop the onions', 'Fry the spices', 'Simmer the curry', 'Plate up'] },
-  salad: { label: 'Garden salad', steps: ['Wash the veg', 'Chop it all', 'Dress it', 'Plate up'] },
-} as const;
+  pasta: { label: 'Pasta', emoji: '🍝', steps: ['Chop the tomatoes', 'Boil the pasta', 'Stir the sauce', 'Plate up'] },
+  curry: { label: 'Veg curry', emoji: '🍛', steps: ['Chop the onions', 'Fry the spices', 'Simmer the curry', 'Plate up'] },
+  salad: { label: 'Garden salad', emoji: '🥗', steps: ['Wash the veg', 'Chop it all', 'Dress it', 'Plate up'] },
+  dal: { label: 'Dal chawal', emoji: '🍚', steps: ['Wash the dal', 'Cook it soft', 'Temper with jeera', 'Plate up'] },
+  paratha: { label: 'Aloo paratha', emoji: '🫓', steps: ['Mash the potatoes', 'Roll the dough', 'Fry the parathas', 'Plate up'], needs: 'veg' },
+  paneer: { label: 'Paneer butter masala', emoji: '🧈', steps: ['Cube the paneer', 'Fry the masala', 'Simmer with butter', 'Plate up'], needs: 'spices' },
+  breakfast: { label: 'Chai and toast', emoji: '☕', steps: ['Make the chai', 'Toast the bread'], needs: 'bread', morning: true },
+} as const satisfies Record<string, RecipeDef>;
 export type Recipe = keyof typeof RECIPES;
+
+/** What the kitchen has now. */
+export interface Pantry {
+  bread: boolean;
+  spices: number;
+  veg: number;
+}
+
+/** Why a recipe can't be cooked now ("needs bread from the bakery"), or null when it can. */
+export function recipeBlocked(r: Recipe, have: Pantry, worldHour: number): string | null {
+  const def: RecipeDef = RECIPES[r];
+  if (def.morning && (worldHour < 5 || worldHour >= 11)) return 'a morning thing';
+  if (def.needs === 'bread' && !have.bread) return 'needs bread from the bakery';
+  if (def.needs === 'spices' && have.spices < 1) return 'needs spices from the market';
+  if (def.needs === 'veg' && have.veg < 1) return 'needs vegetables from the garden';
+  return null;
+}
 
 export interface Dinner {
   recipe: Recipe;

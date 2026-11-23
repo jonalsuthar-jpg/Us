@@ -30,6 +30,9 @@ const villageY = (x: number, z: number) => {
 /** The bag of bread and the bouquet, while one of us has them (bought, not yet put away). */
 export const BREAD_BAG = 'bread_bag';
 export const BOUQUET = 'bouquet_carried';
+/** Street food, held while it's eaten: a plate of pani puri (how many left), a kulfi on a stick. */
+export const PURI_PLATE = 'puri_plate';
+export const KULFI = 'kulfi_stick';
 
 export type ItemKind = 'light' | 'door' | 'tv' | 'frame' | 'carry' | 'furniture' | 'stove' | 'plant' | 'fun';
 
@@ -40,7 +43,7 @@ export type ItemModel =
   | 'balconyTable' | 'lounger' | 'umbrella' | 'frontDoor' | 'balconyDoor' | 'mug' | 'book' | 'pillow' | 'ball' | 'teddy'
   | 'vase' | 'wateringCan' | 'frame' | 'gardenPlant' | 'beanbag' | 'dish'
   | 'firePit' | 'logBench' | 'hotTub' | 'telescope' | 'gardenBed' | 'swing' | 'mailbox' | 'fairyLights' | 'picnic' | 'popcorn'
-  | 'blanket' | 'candles' | 'balloons' | 'cake' | 'ceilingLight' | 'gardenLamp' | 'breadBag' | 'bouquet'
+  | 'blanket' | 'candles' | 'balloons' | 'cake' | 'ceilingLight' | 'gardenLamp' | 'breadBag' | 'bouquet' | 'puriPlate' | 'kulfi'
   /** A seat in the village whose look is in the village art (a bench, a café chair): nothing more to draw. */
   | 'villageSeat';
 
@@ -146,6 +149,8 @@ export const ITEMS: ItemDef[] = [
   // Bought in the village and carried home (scene/fun.tsx SHOPS).
   { key: BREAD_BAG, kind: 'carry', model: 'breadBag', label: 'Bread', x: 0, y: 0, z: 0, ry: 0, hw: 0.12, hd: 0.08, bought: true },
   { key: BOUQUET, kind: 'carry', model: 'bouquet', label: 'Flowers', x: 0, y: 0, z: 0, ry: 0, hw: 0.1, hd: 0.1, bought: true },
+  { key: PURI_PLATE, kind: 'carry', model: 'puriPlate', label: 'Pani puri', x: 0, y: 0, z: 0, ry: 0, hw: 0.12, hd: 0.12, bought: true },
+  { key: KULFI, kind: 'carry', model: 'kulfi', label: 'Kulfi', x: 0, y: 0, z: 0, ry: 0, hw: 0.04, hd: 0.04, bought: true },
 
   // Ceiling lights, switched by each room's door; on until we switch them off. And lamps along the garden paths.
   { key: 'ceiling_living', kind: 'light', model: 'ceilingLight', label: 'Ceiling light', x: -2.7, y: 0, z: 3.72, ry: 0, hw: 0.12, hd: 0.05, light: [0.2, 2.85, -3.72] },
@@ -242,6 +247,8 @@ export interface ItemState {
   /** A garden bed: what's planted, and the days it was watered. */
   crop?: string;
   days?: string[];
+  /** How many are left (a plate of pani puri). */
+  n?: number;
 }
 
 export interface PlacedItem extends ItemDef {
@@ -374,6 +381,7 @@ export function cleanState(s: unknown): ItemState | null {
   if (typeof o.growth === 'number' && Number.isInteger(o.growth) && o.growth >= 0 && o.growth <= 4) out.growth = o.growth;
   if (typeof o.watered === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.watered)) out.watered = o.watered;
   if (typeof o.crop === 'string' && /^[a-z]{3,12}$/.test(o.crop)) out.crop = o.crop;
+  if (typeof o.n === 'number' && Number.isInteger(o.n) && o.n >= 0 && o.n <= 20) out.n = o.n;
   if (Array.isArray(o.days) && o.days.length <= 12 && o.days.every((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))) out.days = o.days as string[];
   return out;
 }

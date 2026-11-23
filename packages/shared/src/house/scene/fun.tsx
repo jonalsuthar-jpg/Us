@@ -31,6 +31,7 @@ import {
   newTicTacToe,
   nextUnlock,
   RECIPES,
+  recipeBlocked,
   SEEK_S,
   seekPhase,
   throwTo,
@@ -50,10 +51,10 @@ import {
   type Throw,
   type TicTacToe,
 } from '../fun';
-import { BOUQUET, BREAD_BAG, DISH_KEY, isOn, MUSIC_KEY, placeItems, restingY, today, type PlacedItem } from '../items';
+import { BOUQUET, BREAD_BAG, DISH_KEY, KULFI, PURI_PLATE, isOn, MUSIC_KEY, placeItems, restingY, today, type PlacedItem } from '../items';
 import { FLOOR_H, POOL, regionAt, type RegionId } from '../layout';
 import { WORLD_DAY_MS, worldHours } from '../sky';
-import { CAFE_TABLES, GO_TO, TEMPLE } from '../village';
+import { CAFE_TABLES, GO_TO, STALLS, TEMPLE } from '../village';
 import type { Emote, Pose } from '../presence';
 import type { HouseSound } from '../sound';
 import type { HouseStore } from '../store';
@@ -62,7 +63,7 @@ import { VILLAGERS, villagerAt } from '../villagers';
 import { DANCE_S, HEART_S } from './avatar';
 import { colour, FunBall, FunFlames, funSphere, Near } from './fun-models';
 import { useOutdoors } from './outdoors';
-import type { HousePhoto } from './items';
+import { KULFI_S, type HousePhoto } from './items';
 
 /** A card the screens draw the same way on the phone and the web: some words, a picture, buttons, maybe a box to type in. */
 export interface FunPanel {
@@ -204,7 +205,12 @@ const SHOPS: { keeper: string; x: number; z: number; item: Priced; label: string
   { keeper: 'baker', x: -10.6, z: 43, item: 'bread', label: 'Buy fresh bread', done: 'Warm bread from Asha 🍞' },
   { keeper: 'barista', x: 20.6, z: 44, item: 'coffee', label: 'Order two coffees', done: 'Two coffees, just how you like them ☕' },
   { keeper: 'florist', x: -7.0, z: 53, item: 'bouquet', label: 'Buy flowers', done: 'Fresh flowers for the vase at home 💐' },
+  { keeper: 'chaat', ...STALLS.chaat.to, item: 'chaat', label: 'Pani puri for two', done: 'Pani puri, six on a plate 😋' },
+  { keeper: 'kulfi', ...STALLS.kulfi.to, item: 'kulfi', label: 'A kulfi', done: 'Malai kulfi on a stick 🍦' },
+  { keeper: 'spices', ...STALLS.spices.to, item: 'spices', label: 'Buy spices', done: 'Masala for the kitchen 🌶️' },
 ];
+/** Spices bought at the market, waiting in the kitchen (how many). */
+const SPICES_KEY = 'spices';
 
 /** Two coffees on a café table, one each side, emptying as they're drunk. */
 function CoffeeCups({ x, z, left }: { x: number; z: number; left: number }) {
@@ -250,6 +256,55 @@ function CounterThings({ counter, table, bread, veg }: { counter: PlacedItem | u
 const loafGeo = new THREE.SphereGeometry(0.08, 10, 8);
 const boardGeo = new THREE.BoxGeometry(0.22, 0.016, 0.34);
 const basketGeo = new THREE.CylinderGeometry(0.14, 0.11, 0.1, 12, 1, true);
+
+/** A street-food cart: a painted box on two wheels under a striped canopy, its front facing `ry`. */
+function Cart({ at, canopy, body, sign }: { at: { x: number; z: number; ry: number }; canopy: string; body: string; sign: string }) {
+  return (
+    <group position={[at.x, 0, at.z]} rotation={[0, at.ry, 0]}>
+      <mesh geometry={cartBox} material={colour(body)} position={[0, 0.62, 0]} />
+      <mesh geometry={cartTop} material={colour('#9A6A44')} position={[0, 0.95, 0]} />
+      <mesh geometry={cartSign} material={colour(sign)} position={[0, 0.62, 0.41]} />
+      {[-1, 1].map((sd) => (
+        <mesh key={sd} geometry={wheel} material={colour('#2E2E38')} position={[sd * 0.58, 0.28, 0]} rotation={[0, 0, Math.PI / 2]} />
+      ))}
+      {[-1, 1].map((sd) => (
+        <mesh key={`p${sd}`} geometry={pole} material={colour("#5E3B24")} position={[sd * 0.45, 1.33, -0.25]} />
+      ))}
+      <mesh geometry={canopyGeo} material={colour(canopy)} position={[0, 1.9, 0]} />
+    </group>
+  );
+}
+const cartBox = new THREE.BoxGeometry(1.1, 0.6, 0.8);
+const cartTop = new THREE.BoxGeometry(1.2, 0.06, 0.9);
+const cartSign = new THREE.BoxGeometry(0.7, 0.3, 0.02);
+const wheel = new THREE.CylinderGeometry(0.28, 0.28, 0.06, 14);
+const pole = new THREE.CylinderGeometry(0.025, 0.025, 1.0, 6);
+const canopyGeo = new THREE.ConeGeometry(0.95, 0.35, 8);
+
+/** A market stall: a trestle table of baskets under an awning. */
+function Stall({ at, goods }: { at: { x: number; z: number; ry: number }; goods: string[] }) {
+  return (
+    <group position={[at.x, 0, at.z]} rotation={[0, at.ry, 0]}>
+      <mesh geometry={stallTable} material={colour('#9A6A44')} position={[0, 0.78, 0]} />
+      {[-0.7, 0.7].map((x) => (
+        <mesh key={x} geometry={stallLeg} material={colour('#5E3B24')} position={[x, 0.39, 0]} />
+      ))}
+      {goods.map((c, i) => (
+        <group key={i} position={[(i % 3) * 0.5 - 0.5, 0.84, i < 3 ? -0.15 : 0.15]}>
+          <mesh geometry={basketGeo} material={colour('#B08850')} scale={0.9} position={[0, 0.03, 0]} />
+          <mesh geometry={funSphere} material={colour(c)} scale={[0.12, 0.05, 0.12]} position={[0, 0.08, 0]} />
+        </group>
+      ))}
+      {[-0.75, 0.75].map((x) => (
+        <mesh key={`p${x}`} geometry={pole} material={colour('#5E3B24')} position={[x, 1.3, -0.35]} scale={[1, 2.2, 1]} />
+      ))}
+      <mesh geometry={awning} material={colour('#E8B14A')} position={[0, 2.15, 0]} rotation={[-0.25, 0, 0]} />
+    </group>
+  );
+}
+const stallTable = new THREE.BoxGeometry(1.7, 0.06, 0.7);
+const stallLeg = new THREE.BoxGeometry(0.06, 0.78, 0.6);
+const awning = new THREE.BoxGeometry(1.9, 0.04, 1.1);
 
 /** The two players of a game, first one first. */
 function playersOf(g: Game): [string, string] {
@@ -600,8 +655,11 @@ export function useFun(h: FunHost) {
         return {
           id: p,
           title: 'What shall we cook?',
-          text: `Take turns at the stove: one step each.${basket() ? ` You have ${basket()} from the garden.` : ''}`,
-          options: (Object.keys(RECIPES) as Recipe[]).map((r) => opt(`cook:${r}`, RECIPES[r].label, r === 'pasta' ? '🍝' : r === 'curry' ? '🍛' : '🥗')),
+          text: `Take turns at the stove: one step each.${pantryText()}`,
+          options: (Object.keys(RECIPES) as Recipe[]).map((r) => {
+            const why = recipeBlocked(r, pantry(), worldHours(Date.now(), h.coupleId));
+            return opt(`cook:${r}`, why ? `${RECIPES[r].label} (${why})` : RECIPES[r].label, RECIPES[r].emoji);
+          }),
         };
       case 'leave':
         return {
@@ -708,6 +766,23 @@ export function useFun(h: FunHost) {
     };
   }
 
+  /** What's in the kitchen for cooking. */
+  function pantry() {
+    return { bread: breadHomeNow(), spices: spices(), veg: basket() };
+  }
+  function breadHomeNow() {
+    const v = raw(BREAD_KEY);
+    return !!v && isStr(v.at) && Date.now() - Date.parse(v.at) < BREAD_DAYS * 86_400_000;
+  }
+  function pantryText() {
+    const have = [breadHomeNow() ? 'bread' : '', spices() ? `${spices()} spices` : '', basket() ? `${basket()} from the garden` : ''].filter(Boolean);
+    return have.length ? ` In the kitchen: ${have.join(', ')}.` : '';
+  }
+
+  function spices() {
+    return Number(raw(SPICES_KEY)?.n ?? 0) || 0;
+  }
+
   function basket() {
     const n = raw(BASKET_KEY)?.n;
     return num(n) ? n : 0;
@@ -762,6 +837,8 @@ export function useFun(h: FunHost) {
     if (id === 'dinner') return void (ui.panel = 'recipes');
     if (id.startsWith('cook:')) {
       const recipe = id.slice(5) as Recipe;
+      const why = recipe in RECIPES ? recipeBlocked(recipe, pantry(), worldHours(Date.now(), h.coupleId)) : 'not a recipe';
+      if (why) return h.say(`${RECIPES[recipe]?.label ?? 'That'}: ${why}`);
       set(DINNER_KEY, { recipe, step: 0, first: meId, second: partnerHere() ? partnerId : meId, at: new Date().toISOString() });
       shut();
       const stove = item('counter');
@@ -980,6 +1057,25 @@ export function useFun(h: FunHost) {
         };
       return null;
     }
+    // Pani puri: one each, fed to each other, until the plate's empty.
+    if (me.hold?.key === PURI_PLATE) {
+      const left = Number(raw(PURI_PLATE)?.n ?? 6);
+      const eat = (feed: boolean) => {
+        const n = left - 1;
+        h.emote(feed ? 'feed' : 'sip');
+        h.sound?.play('pop', 0.3);
+        if (feed) h.moment(`puri:${String(raw(PURI_PLATE)?.at)}`, `Feeding ${partnerName} a pani puri 😋`);
+        if (n <= 0) {
+          me.hold = null;
+          set(PURI_PLATE, null);
+          h.say('All gone. Raju says come back tomorrow!');
+        } else set(PURI_PLATE, { ...(raw(PURI_PLATE) ?? {}), n });
+      };
+      if (p && h.them.shown && Math.hypot(p.x - me.pos.x, p.z - me.pos.z) < 1.6 && Math.abs(p.y - me.pos.y) < 1)
+        return { label: `Feed ${partnerName} a puri`, run: () => eat(true) };
+      return { label: `Eat a puri (${left} left)`, run: () => eat(false) };
+    }
+    if (me.hold?.key === KULFI) return { label: 'A bite of kulfi', run: () => h.emote('sip') };
     // Coffee at the café: a sip, sitting at our table.
     const coffee = readCoffee();
     if (coffee && me.seat?.key.startsWith(`cafe_chair_${coffee.table}_`))
@@ -1059,6 +1155,20 @@ export function useFun(h: FunHost) {
       }
     }
 
+    const greens = VILLAGERS.find((v) => v.id === 'greens');
+    if (greens && close(STALLS.greens.to.x, 0, STALLS.greens.to.z, 1.8) && villagerAt(greens, Date.now(), h.coupleId)) {
+      if (!basket()) return { label: 'Gopal buys what you grow', run: () => h.say('Gopal: Bring me vegetables from your garden, I pay well!') };
+      return {
+        label: `Sell a vegetable (+${formatRupees(50)})`,
+        run: () => {
+          set(BASKET_KEY, { n: basket() - 1 });
+          h.sound?.play('chime', 0.35);
+          h.wallet?.earn('sell_veg', walletRef('sell_veg', meId, Date.now()));
+          h.say(basket() > 1 ? `Sold! ${basket() - 1} left in the basket` : 'Sold the last one 🥕');
+        },
+      };
+    }
+
     for (const shop of SHOPS) {
       const keeper = VILLAGERS.find((v) => v.id === shop.keeper);
       if (!keeper || !close(shop.x, 0, shop.z, 1.8) || !villagerAt(keeper, Date.now(), h.coupleId)) continue;
@@ -1071,13 +1181,14 @@ export function useFun(h: FunHost) {
             h.sound?.play('chime', 0.4);
             h.moment(`buy:${shop.item}:${Date.now()}`, shop.done, partnerHere(), false);
             const at = new Date().toISOString();
-            if (shop.item === 'bread' || shop.item === 'bouquet') {
-              // Into my hand, to carry home (or to give).
-              const key = shop.item === 'bread' ? BREAD_BAG : BOUQUET;
+            if (shop.item === 'bread' || shop.item === 'bouquet' || shop.item === 'chaat' || shop.item === 'kulfi') {
+              // Into my hand, to carry home, to give, or to eat.
+              const key = shop.item === 'bread' ? BREAD_BAG : shop.item === 'bouquet' ? BOUQUET : shop.item === 'chaat' ? PURI_PLATE : KULFI;
               if (h.me.hold) h.say('Your hands are full: it’s waiting on the counter');
-              set(key, { at, x: shop.x + 0.6, y: 0.9, z: shop.z });
+              set(key, { at, x: shop.x + 0.6, y: 0.9, z: shop.z, ...(shop.item === 'chaat' ? { n: 6 } : {}) });
               if (!h.me.hold) h.me.hold = { key, since: Date.now() };
             }
+            if (shop.item === 'spices') set(SPICES_KEY, { n: spices() + 1 });
             if (shop.item === 'coffee') {
               // On the table nearest me; Leo brings them over.
               let table = 0;
@@ -1373,6 +1484,17 @@ export function useFun(h: FunHost) {
       h.moment(`flowers-got:${String(given.at)}`, `Flowers from ${partnerName} 💐`, true, false);
     }
 
+    // A kulfi lasts a minute and a half (eaten or not).
+    const kulfi = raw(KULFI);
+    if (kulfi && typeof kulfi.at === 'string' && Date.now() - Date.parse(kulfi.at) > KULFI_S * 1000 && !ui.told.has(`kulfi:${kulfi.at}`)) {
+      ui.told.add(`kulfi:${kulfi.at}`);
+      if (h.me.hold?.key === KULFI) {
+        h.me.hold = null;
+        h.say('Kulfi finished 🍦');
+      }
+      set(KULFI, null);
+    }
+
     // A coffee date: both of us sitting at the table our coffees are on.
     const cup = readCoffee();
     const theirSeat = h.them.pose?.a;
@@ -1401,13 +1523,23 @@ export function useFun(h: FunHost) {
     const next = dinnerStep(d, who);
     if (!next) return;
     if (dinnerDone(next)) {
-      set(DINNER_KEY, { ...next, done: true, at: new Date().toISOString() } as unknown as Record<string, unknown>);
+      const def = RECIPES[d.recipe];
+      const morning = 'morning' in def && def.morning;
+      set(DINNER_KEY, { ...next, done: true, at: new Date().toISOString(), ...(morning ? { morning: true } : {}) } as unknown as Record<string, unknown>);
       set(DISH_KEY, { on: true });
-      if (!raw(MUSIC_KEY)?.on) set(MUSIC_KEY, { on: true, at: new Date().toISOString() });
-      set('pendant', { ...(raw('pendant') ?? {}), on: false });
+      // What it used.
+      if ('needs' in def && def.needs === 'bread') set(BREAD_KEY, null);
+      if ('needs' in def && def.needs === 'spices') set(SPICES_KEY, { n: Math.max(0, spices() - 1) });
       if (basket()) set(BASKET_KEY, { n: basket() - 1 });
-      h.moment(`dinner:${d.at}`, `${RECIPES[d.recipe].label} by candlelight 🕯️`);
-      h.wallet?.earn('dinner', walletRef('dinner', d.at));
+      if (morning) {
+        h.moment(`dinner:${d.at}`, 'Chai and toast together ☕🍞');
+        h.wallet?.earn('breakfast', walletRef('breakfast', d.at));
+      } else {
+        if (!raw(MUSIC_KEY)?.on) set(MUSIC_KEY, { on: true, at: new Date().toISOString() });
+        set('pendant', { ...(raw('pendant') ?? {}), on: false });
+        h.moment(`dinner:${d.at}`, `${def.label} by candlelight 🕯️`);
+        h.wallet?.earn('dinner', walletRef('dinner', d.at));
+      }
     } else {
       set(DINNER_KEY, { ...next } as unknown as Record<string, unknown>);
       h.say(partnerHere() ? `${partnerName}’s turn: ${RECIPES[d.recipe].steps[next.step]!.toLowerCase()}` : `Next: ${RECIPES[d.recipe].steps[next.step]!.toLowerCase()}`);
@@ -1508,6 +1640,18 @@ export function useFun(h: FunHost) {
           <CoffeeCups x={CAFE_TABLES[coffee.table]![0]} z={CAFE_TABLES[coffee.table]![1]} left={coffee.left} />
         </Near>
       ) : null}
+      <Near near={h.me.pos} x={STALLS.chaat.x} z={STALLS.chaat.z} r={45}>
+        <Cart at={STALLS.chaat} canopy="#E8862A" body="#B5524A" sign="#FFC93C" />
+      </Near>
+      <Near near={h.me.pos} x={STALLS.kulfi.x} z={STALLS.kulfi.z} r={45}>
+        <Cart at={STALLS.kulfi} canopy="#4AA8E8" body="#F4F1EA" sign="#E84A6F" />
+      </Near>
+      {new Date().getDay() % 6 === 0 ? (
+        <Near near={h.me.pos} x={0} z={47} r={45}>
+          <Stall at={STALLS.spices} goods={['#C8102E', '#E8B14A', '#8A5A2B', '#D96F1C', '#7C9A3A', '#F2C14E']} />
+          <Stall at={STALLS.greens} goods={['#D94F3D', '#7CB342', '#E8862A', '#5E8E3D', '#9B5DE5', '#F2C14E']} />
+        </Near>
+      ) : null}
       <CounterThings counter={item('counter')} table={item('dining_table')} bread={breadHome} veg={basket()} />
       <Near near={h.me.pos} x={TEMPLE.lingam.x} z={TEMPLE.lingam.z} r={40}>
         <TempleThings lit={diyas().by.length} swing={bellSwing} aarti={aartiNow} barefoot={[h.me.at === 'templeHall', h.them.pose?.b === 1]} />
@@ -1529,7 +1673,8 @@ export function useUnlocked(store: HouseStore | null, pairedAt: string | undefin
   const dinner = store?.get(DINNER_KEY);
   const recent = (at: unknown) => isStr(at) && minute - Date.parse(at) < DATE_H * 3600_000;
   const dateKind = date && recent(date.at) && (date.kind === 'movie' || date.kind === 'picnic') ? date.kind : null;
-  const candles = !!dinner?.done && recent(dinner.at);
+  // Candles for a dinner, not for breakfast.
+  const candles = !!dinner?.done && dinner.morning !== true && recent(dinner.at);
   const days = pairedAt ? Math.floor((minute - Date.parse(pairedAt)) / 86_400_000) : -1;
   return useMemo(() => {
     const s = new Set<string>(pairedAt ? unlockedBy(pairedAt, new Date(minute)) : []);

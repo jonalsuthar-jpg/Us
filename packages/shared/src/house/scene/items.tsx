@@ -375,6 +375,21 @@ function Model({ look }: { look: Look }): ReactNode {
           <B a={[-0.06, 0.2, -0.04]} b={[0.07, 0.3, 0.04]} m="fabricWarm" />
         </>
       );
+    case 'puriPlate': {
+      // A leaf plate, the puris still on it.
+      const n = item.state.n ?? 6;
+      return (
+        <>
+          <mesh geometry={plateGeo} material={leafMat} position={[0, 0.01, 0]} />
+          {Array.from({ length: n }, (_, i) => {
+            const a = (i / 6) * Math.PI * 2;
+            return <FunBall key={i} at={[Math.cos(a) * 0.065, 0.04, Math.sin(a) * 0.065]} r={0.028} c="#D9A35B" />;
+          })}
+        </>
+      );
+    }
+    case 'kulfi':
+      return <Kulfi at={item.state.at} />;
     case 'bouquet':
       // Flowers wrapped in paper, held by the stems.
       return (
@@ -614,6 +629,30 @@ function Drawn({ it, assets, look }: { it: PlacedItem; assets?: string; look: Lo
     </Optional>
   );
 }
+
+const plateGeo = new THREE.CylinderGeometry(0.12, 0.1, 0.02, 14);
+const leafMat = new THREE.MeshLambertMaterial({ color: '#5E8E3D' });
+
+/** A kulfi on its stick, going as it's eaten (a minute and a half). */
+export const KULFI_S = 90;
+function Kulfi({ at }: { at?: string }) {
+  const g = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (!g.current) return;
+    const left = at ? 1 - (Date.now() - Date.parse(at)) / (KULFI_S * 1000) : 1;
+    g.current.scale.y = Math.max(0.15, left);
+  });
+  return (
+    <>
+      <B a={[-0.006, 0, -0.006]} b={[0.006, 0.08, 0.006]} m="wood" />
+      <group ref={g} position={[0, 0.07, 0]}>
+        <mesh geometry={kulfiGeo} material={kulfiMat} position={[0, 0.06, 0]} />
+      </group>
+    </>
+  );
+}
+const kulfiGeo = new THREE.CylinderGeometry(0.018, 0.026, 0.12, 10);
+const kulfiMat = new THREE.MeshLambertMaterial({ color: '#F2E3C0' });
 
 /** Flowers bought at the village stall stay fresh in the vase for three days. */
 const freshFlowers = (at?: string) => !!at && Date.now() - Date.parse(at) < 3 * 24 * 3600 * 1000;
