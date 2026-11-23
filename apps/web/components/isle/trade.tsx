@@ -407,25 +407,39 @@ export function IncomingOffer({ state, view, onAnswer, onCounter }: { state: Isl
   const o = view.incoming!;
   const from = view.seats[o.from]!;
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-[76px] z-20 flex justify-center">
-      <div className={cn('pointer-events-auto w-[440px] animate-[isle-rise-in_0.25s_ease-out] rounded-[16px] p-4', 'bg-[radial-gradient(ellipse_at_center,#FFF7E2_0%,#F6E6C0_60%,#E6CE98_100%)] border-[3px] border-[#8A6420] text-[#3B2A1E] shadow-[0_22px_48px_-16px_rgba(0,0,0,0.7),inset_0_0_0_2px_#F6DE9C]')}>
-        <div className="mb-3 flex items-center gap-2">
-          <Avatar s={from} size={28} />
-          <span className="font-serif text-[16px] font-bold">{state.players[o.from]!.name} offers a trade</span>
-        </div>
-        <Exchange left={o.give} right={o.want} leftLabel="You receive" rightLabel="You give" />
-        {!o.canAccept ? <p className="mt-2 text-center text-[12px] font-semibold text-[#A8432D]">You don’t have the cards they ask for: reject or counter.</p> : null}
-        <div className="mt-3 flex justify-center gap-2">
-          <PlainButton onClick={() => onAnswer(false)}>
-            <X size={15} /> Reject
-          </PlainButton>
-          <PlainButton onClick={onCounter}>
-            <ArrowLeftRight size={15} /> Counter
-          </PlainButton>
-          <GoldButton disabled={!o.canAccept} onClick={() => onAnswer(true)}>
-            <Check size={16} /> Accept
-          </GoldButton>
-        </div>
+    <div className="pointer-events-auto animate-[isle-rise-in_0.25s_ease-out] rounded-[14px] border-[3px] border-[#8A6420] bg-[radial-gradient(ellipse_at_center,#FFF7E2_0%,#F6E6C0_60%,#E6CE98_100%)] p-2.5 text-[#3B2A1E] shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7),inset_0_0_0_2px_#F6DE9C]">
+      <div className="mb-2 flex items-center gap-2">
+        <Avatar s={from} size={24} />
+        <span className="font-serif text-[14px] font-bold leading-tight">{state.players[o.from]!.name} offers a trade</span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <OfferRow label="You receive" h={o.give} />
+        <OfferRow label="You give" h={o.want} />
+      </div>
+      {!o.canAccept ? <p className="mt-1.5 text-[11px] font-semibold text-[#A8432D]">You don’t have the cards they ask for.</p> : null}
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
+        <PlainButton onClick={() => onAnswer(false)} className="px-1 py-1.5 text-[12px]">
+          <X size={13} /> Reject
+        </PlainButton>
+        <PlainButton onClick={onCounter} className="px-1 py-1.5 text-[12px]">
+          <ArrowLeftRight size={13} /> Counter
+        </PlainButton>
+        <GoldButton disabled={!o.canAccept} onClick={() => onAnswer(true)} className="px-1 py-1.5 text-[12px]">
+          <Check size={13} /> Accept
+        </GoldButton>
+      </div>
+    </div>
+  );
+}
+
+function OfferRow({ label, h }: { label: string; h: Partial<Hand> }) {
+  return (
+    <div className="flex items-center gap-2 rounded-[9px] bg-white/45 px-2 py-1">
+      <span className="w-[62px] text-[10px] font-bold uppercase leading-tight tracking-wider text-black/50">{label}</span>
+      <div className="flex gap-1">
+        {HAND_ORDER.filter((r) => h[r]).map((r) => (
+          <ResCard key={r} r={r} n={h[r]} size="xs" />
+        ))}
       </div>
     </div>
   );
@@ -436,18 +450,20 @@ export function AnsweredOffer({ view }: { view: TableView }) {
   const a = view.answered!;
   const from = view.seats[a.from]!;
   return (
-    <div className={cn('absolute left-1/2 top-[76px] z-20 flex -translate-x-1/2 items-center gap-2 rounded-full px-4 py-2 text-[13px] text-[#FBEFD5]', WOOD)}>
+    <div className={cn('pointer-events-auto flex items-center gap-2 rounded-[12px] px-3 py-2 text-[12px] leading-snug text-[#FBEFD5]', WOOD)}>
       <Avatar s={from} size={22} />
-      {a.counter ? (
-        <>
-          You countered {from.name}: give <b>{text(a.counter.give)}</b> for <b>{text(a.counter.want)}</b>
-        </>
-      ) : a.yes ? (
-        <>You accepted {from.name}’s offer</>
-      ) : (
-        <>You rejected {from.name}’s offer</>
-      )}
-      <span className="text-[#FBEFD5]/60">· waiting</span>
+      <span className="flex-1">
+        {a.counter ? (
+          <>
+            You countered {from.name}: give <b>{text(a.counter.give)}</b> for <b>{text(a.counter.want)}</b>
+          </>
+        ) : a.yes ? (
+          <>You accepted {from.name}’s offer</>
+        ) : (
+          <>You rejected {from.name}’s offer</>
+        )}
+        <span className="text-[#FBEFD5]/60"> · waiting</span>
+      </span>
       <Dots />
     </div>
   );

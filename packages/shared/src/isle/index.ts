@@ -5,7 +5,7 @@ export { hardMove, income, turnsFor } from './bots/hard';
 export { botDelay, IsleStore, StaleIsleError, type IsleApi, type IsleClock, type IsleGame, type IsleLink, type IsleSnapshot, type IsleWire } from './store';
 export * from './use-isle';
 export * from './pick';
-export { HEX_FILES, hexArtAt, IsleBoard, lastRoll, type HexArt, type Inset, type IsleBoardApi, type IsleBoardProps } from './scene/board';
+export { HEX_FILES, hexArtAt, IsleBoard, IslePerf, lastRoll, type HexArt, type Inset, type IsleBoardApi, type IsleBoardProps, type IsleStats } from './scene/board';
 export { PLAYER_COLORS } from './scene/parts';
 export * from './ui';
 export * from './notes';

@@ -144,48 +144,126 @@ export function palmGeometry() {
 // ---- Pieces ----------------------------------------------------------------
 
 /*
- * The pieces are white and greys, tinted with the seat's colour by their
- * material: white shows the colour itself, the greys its shades. Each stands
- * on a dark rim a little wider than itself, so it reads against any picture.
+ * The pieces are shaped like the wooden pieces of a board game: profiles
+ * extruded with rounded (bevelled) edges, so light rolls over them. They're
+ * white and greys, tinted with the seat's colour by their material: white
+ * shows the colour itself, the greys its shades, near-black the doors and
+ * windows. Each is built at its size on the board (a hex is one across from
+ * centre to corner), standing on y = 0.
  */
 
-/** A town: a house with a pitched roof and a chimney, on a dark rim. */
+/** A flat outline (x across, y up) pushed out to a depth along z, centred, its edges rounded. */
+function extruded(points: [number, number][], depth: number, bevel: number) {
+  const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
+  const g = new THREE.ExtrudeGeometry(shape, { depth: depth - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel * 0.8, bevelSegments: 3, curveSegments: 2 });
+  g.translate(0, 0, -(depth - bevel * 2) / 2);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A town: a little house with a steep roof, a door, windows and a chimney. */
 export function townGeometry() {
-  const roof = new THREE.CylinderGeometry(0.11, 0.11, 0.21, 3);
-  return merge([
-    piece(new THREE.CylinderGeometry(0.15, 0.16, 0.025, 6), '#3A3A3A', { at: [0, 0.0125, 0] }),
-    piece(new THREE.BoxGeometry(0.19, 0.12, 0.17), '#FFFFFF', { at: [0, 0.085, 0] }),
-    piece(roof, '#9C9C9C', { at: [0, 0.195, 0], rot: [0, 0, Math.PI / 2], scale: [0.85, 1, 1] }),
-    piece(new THREE.BoxGeometry(0.035, 0.07, 0.035), '#7A7A7A', { at: [0.05, 0.25, 0.04] }),
-    piece(new THREE.BoxGeometry(0.04, 0.06, 0.005), '#4A4A4A', { at: [0, 0.055, 0.0855] }),
-  ]);
+  const w = 0.13;
+  const depth = 0.24;
+  const parts = [
+    piece(extruded([[-w, 0.012], [w, 0.012], [w, 0.2], [0, 0.35], [-w, 0.2]], depth, 0.018), '#FFFFFF'),
+    // The roof's two slopes, a shade darker, sitting proud of the walls.
+    ...[-1, 1].map((side) =>
+      piece(new THREE.BoxGeometry(0.2, 0.022, depth + 0.03), '#B9B9B9', { at: [side * 0.068, 0.282, 0], rot: [0, 0, side * -Math.atan2(0.15, 0.13)] }),
+    ),
+    piece(new THREE.BoxGeometry(0.04, 0.09, 0.04), '#9A9A9A', { at: [0.07, 0.33, -0.05] }),
+    // Door and windows on the front and back.
+    ...[1, -1].flatMap((f) => [
+      piece(new THREE.BoxGeometry(0.05, 0.085, 0.006), '#262626', { at: [0, 0.055, f * (depth / 2 + 0.002)] }),
+      piece(new THREE.BoxGeometry(0.04, 0.035, 0.006), '#262626', { at: [-0.075, 0.14, f * (depth / 2 + 0.002)] }),
+      piece(new THREE.BoxGeometry(0.04, 0.035, 0.006), '#262626', { at: [0.075, 0.14, f * (depth / 2 + 0.002)] }),
+    ]),
+  ];
+  return merge(parts);
 }
 
-/** A city: a hall, a tall keep with battlements and a pointed roof, on a wider dark rim. */
+/** A city: a hall with a pitched roof beside a tall keep with battlements, windows and a gate. */
 export function cityGeometry() {
-  const parts = [
-    piece(new THREE.CylinderGeometry(0.22, 0.235, 0.025, 6), '#3A3A3A', { at: [0, 0.0125, 0] }),
-    piece(new THREE.BoxGeometry(0.3, 0.14, 0.19), '#FFFFFF', { at: [0.05, 0.095, 0] }),
-    piece(new THREE.CylinderGeometry(0.11, 0.11, 0.32, 3), '#9C9C9C', { at: [0.05, 0.21, 0], rot: [0, 0, Math.PI / 2], scale: [0.8, 1, 1] }),
-    piece(new THREE.BoxGeometry(0.14, 0.3, 0.16), '#F2F2F2', { at: [-0.12, 0.175, 0] }),
-    piece(new THREE.ConeGeometry(0.12, 0.15, 4), '#8C8C8C', { at: [-0.12, 0.4, 0], rot: [0, Math.PI / 4, 0] }),
-    piece(new THREE.BoxGeometry(0.045, 0.06, 0.005), '#4A4A4A', { at: [0.05, 0.06, 0.0955] }),
+  const depth = 0.27;
+  const profile: [number, number][] = [
+    [-0.27, 0.012],
+    [0.27, 0.012],
+    [0.27, 0.24],
+    [0.125, 0.37],
+    [-0.02, 0.24],
+    [-0.02, 0.5],
+    [-0.065, 0.5],
+    [-0.065, 0.455],
+    [-0.1, 0.455],
+    [-0.1, 0.5],
+    [-0.145, 0.5],
+    [-0.145, 0.455],
+    [-0.18, 0.455],
+    [-0.18, 0.5],
+    [-0.225, 0.5],
+    [-0.225, 0.455],
+    [-0.27, 0.455],
+    [-0.27, 0.5],
   ];
-  // Battlements round the keep's top.
-  for (const [x, z] of [[-0.175, -0.065], [-0.175, 0.065], [-0.065, -0.065], [-0.065, 0.065]] as const) {
-    parts.push(piece(new THREE.BoxGeometry(0.035, 0.04, 0.035), '#DADADA', { at: [x, 0.345, z] }));
-  }
+  const parts = [
+    piece(extruded(profile, depth, 0.016), '#FFFFFF'),
+    ...[-1, 1].map((side) =>
+      piece(new THREE.BoxGeometry(0.2, 0.022, depth + 0.03), '#B9B9B9', { at: [0.125 + side * 0.072, 0.31, 0], rot: [0, 0, side * -Math.atan2(0.13, 0.145)] }),
+    ),
+    ...[1, -1].flatMap((f) => {
+      const z = f * (depth / 2 + 0.002);
+      return [
+        piece(new THREE.BoxGeometry(0.07, 0.11, 0.006), '#262626', { at: [-0.145, 0.067, z] }),
+        piece(new THREE.BoxGeometry(0.03, 0.06, 0.006), '#262626', { at: [-0.2, 0.3, z] }),
+        piece(new THREE.BoxGeometry(0.03, 0.06, 0.006), '#262626', { at: [-0.09, 0.3, z] }),
+        piece(new THREE.BoxGeometry(0.045, 0.04, 0.006), '#262626', { at: [0.07, 0.14, z] }),
+        piece(new THREE.BoxGeometry(0.045, 0.04, 0.006), '#262626', { at: [0.185, 0.14, z] }),
+      ];
+    }),
+    // A pennant on the keep.
+    piece(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 5), '#7A7A7A', { at: [-0.145, 0.56, 0] }),
+    piece(new THREE.BoxGeometry(0.06, 0.035, 0.006), '#FFFFFF', { at: [-0.115, 0.6, 0] }),
+  ];
   return merge(parts);
 }
 
-/** A road: a wooden beam with a few plank joins across its top, on a dark rim. */
+/** A road: a wooden bar with rounded edges, laid along a side of a hex. */
 export function roadGeometry() {
-  const parts = [
-    piece(new THREE.BoxGeometry(0.64, 0.03, 0.14), '#333333', { at: [0, 0.015, 0] }),
-    piece(new THREE.BoxGeometry(0.6, 0.07, 0.11), '#E6E6E6', { at: [0, 0.06, 0] }),
-  ];
-  for (const x of [-0.15, 0, 0.15]) parts.push(piece(new THREE.BoxGeometry(0.01, 0.003, 0.112), '#C4C4C4', { at: [x, 0.096, 0] }));
-  return merge(parts);
+  return merge([piece(new RoundedBoxGeometry(0.6, 0.085, 0.125, 2, 0.028), '#FFFFFF', { at: [0, 0.0425 + 0.004, 0] })]);
+}
+
+/** A soft dark patch under a piece, so it sits on the board rather than floating: vertex alpha, no texture. */
+export function contactShadowGeometry(rx: number, rz: number) {
+  const n = 24;
+  const pos: number[] = [0, 0, 0];
+  const col: number[] = [0, 0, 0, 0.5];
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pos.push(Math.cos(a) * rx, 0, Math.sin(a) * rz);
+    col.push(0, 0, 0, 0);
+  }
+  const index: number[] = [];
+  for (let i = 1; i <= n; i++) index.push(0, i + 1, i);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+  g.setIndex(index);
+  return g;
+}
+
+/** A craggy rock for the coast: a squashed, lumpy dodecahedron in grey-brown. */
+export function coastRockGeometry() {
+  const g = new THREE.DodecahedronGeometry(0.12, 1);
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const k = 1 + 0.18 * Math.sin(x * 41 + z * 23) * Math.cos(y * 37);
+    pos.setXYZ(i, x * k, Math.max(-0.02, y * k * 0.75), z * k);
+  }
+  g.computeVertexNormals();
+  return piece(g, '#8C857A', { at: [0, 0.03, 0] });
 }
 
 /** A small sailing boat, bow along +x. */
@@ -299,22 +377,30 @@ function beam(from: THREE.Vector3, to: THREE.Vector3, width: number, depth: numb
  */
 export function harbourGeometry(a: { x: number; y: number }, b: { x: number; y: number }, out: { x: number; y: number }) {
   const parts: THREE.BufferGeometry[] = [];
-  const mx = (a.x + b.x) / 2 + out.x * 0.5;
-  const mz = (a.y + b.y) / 2 + out.y * 0.5;
+  const mx = (a.x + b.x) / 2 + out.x * 0.55;
+  const mz = (a.y + b.y) / 2 + out.y * 0.55;
   const along = Math.atan2(b.y - a.y, b.x - a.x);
-  const deck = 0.13;
-  parts.push(piece(new THREE.BoxGeometry(0.46, 0.035, 0.3), '#B07B4E', { at: [mx, deck, mz], rot: [0, -along, 0] }));
-  // The stage's posts, down into the water.
+  const deck = 0.14;
   const ca = Math.cos(along);
   const sa = Math.sin(along);
-  for (const [u, v] of [[-0.2, -0.12], [0.2, -0.12], [-0.2, 0.12], [0.2, 0.12]] as const) {
-    parts.push(piece(new THREE.CylinderGeometry(0.02, 0.02, 0.2, 6), '#6E4A2E', { at: [mx + u * ca + v * out.x, 0.05, mz + u * sa + v * out.y] }));
+  // The landing stage: planks across it, a darker frame round it.
+  parts.push(piece(new THREE.BoxGeometry(0.56, 0.03, 0.34), '#6E4A2E', { at: [mx, deck - 0.012, mz], rot: [0, -along, 0] }));
+  for (let i = -3; i <= 3; i++) {
+    const u = i * 0.075;
+    parts.push(piece(new THREE.BoxGeometry(0.065, 0.02, 0.32), i % 2 ? '#B07B4E' : '#A06C42', { at: [mx + u * ca, deck + 0.012, mz + u * sa], rot: [0, -along, 0] }));
+  }
+  // Posts down into the water, and two bollards at the sea end.
+  for (const [u, v] of [[-0.25, -0.15], [0.25, -0.15], [-0.25, 0.15], [0.25, 0.15], [0, 0.15]] as const) {
+    parts.push(piece(new THREE.CylinderGeometry(0.022, 0.026, 0.24, 6), '#5B3B24', { at: [mx + u * ca + v * out.x, 0.04, mz + u * sa + v * out.y] }));
+  }
+  for (const u of [-0.2, 0.2]) {
+    parts.push(piece(new THREE.CylinderGeometry(0.02, 0.024, 0.06, 8), '#3E2A1A', { at: [mx + u * ca + 0.13 * out.x, deck + 0.045, mz + u * sa + 0.13 * out.y] }));
   }
   // A plank from each corner of the coast down to the stage's near edge.
   for (const [c, side] of [[a, -1], [b, 1]] as const) {
     const from = new THREE.Vector3(c.x, TILE_TOP - 0.02, c.y);
-    const to = new THREE.Vector3(mx + side * 0.17 * ca - out.x * 0.12, deck + 0.01, mz + side * 0.17 * sa - out.y * 0.12);
-    parts.push(beam(from, to, 0.08, 0.03, '#A47148'));
+    const to = new THREE.Vector3(mx + side * 0.2 * ca - out.x * 0.14, deck + 0.012, mz + side * 0.2 * sa - out.y * 0.14);
+    parts.push(beam(from, to, 0.09, 0.03, '#A47148'));
   }
   return merge(parts);
 }

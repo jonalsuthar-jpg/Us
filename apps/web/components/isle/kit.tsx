@@ -46,6 +46,7 @@ export function Dots() {
 export const CARD = {
   xs: 'h-[42px] w-[28px] rounded-[4px]',
   sm: 'h-[72px] w-[48px] rounded-[6px]',
+  dock: 'h-[96px] w-[64px] rounded-[8px]',
   md: 'h-[114px] w-[76px] rounded-[9px]',
   lg: 'h-[330px] w-[220px] rounded-[18px]',
 } as const;
@@ -116,11 +117,11 @@ export function CardFace({
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={art} alt="" draggable={false} className={cn('absolute inset-0 h-full w-full object-contain', CARD[size])} />
-      {label && (size === 'md' || size === 'lg') ? (
+      {label && (size === 'md' || size === 'lg' || size === 'dock') ? (
         <span
           className={cn(
             'absolute inset-x-[14%] flex items-center justify-center font-serif font-bold leading-none text-[#4A2E14]',
-            size === 'lg' ? 'bottom-[5.5%] h-[10%] text-[20px]' : 'bottom-[5.5%] h-[10%] text-[11px]',
+            size === 'lg' ? 'bottom-[5.5%] h-[10%] text-[20px]' : size === 'dock' ? 'bottom-[5.5%] h-[10%] text-[9.5px]' : 'bottom-[5.5%] h-[10%] text-[11px]',
           )}
         >
           {label}
@@ -132,7 +133,7 @@ export function CardFace({
 }
 
 export function ResCard({ r, ...rest }: { r: Res } & Omit<Parameters<typeof CardFace>[0], 'art'>) {
-  return <CardFace art={resArt(r)} label={rest.size === 'lg' || rest.size == null || rest.size === 'md' ? RES_INFO[r].label : undefined} title={rest.title ?? RES_INFO[r].label} {...rest} />;
+  return <CardFace art={resArt(r)} label={rest.size === 'lg' || rest.size == null || rest.size === 'md' || rest.size === 'dock' ? RES_INFO[r].label : undefined} title={rest.title ?? RES_INFO[r].label} {...rest} />;
 }
 
 export function DevCard({ d, ...rest }: { d: Dev } & Omit<Parameters<typeof CardFace>[0], 'art'>) {

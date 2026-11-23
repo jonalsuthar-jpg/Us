@@ -1,10 +1,13 @@
 'use client';
 
 /**
- * The fixed parts of Isle's table around the board: the bar along the top
- * (whose turn, points, the round, the view and sound switches), the players
- * down the left, the build and trade actions down the right with the bank,
- * and along the bottom the dice, my resource cards and my development cards.
+ * The fixed parts of Isle's table around the board. On a wide screen: down
+ * the left, whose turn it is and what's happening, then the players; down
+ * the right, the dice with the turn's actions (roll, end turn, trade, the
+ * bank), then what I can build and what the bank has left; along the bottom
+ * between them, my resource cards and, apart from them, my development
+ * cards. Nothing sits over the board. A narrow screen keeps a bar along the
+ * top instead (TopBar) and folds the columns into drawers.
  */
 import {
   DEV_INFO,
@@ -155,6 +158,119 @@ export function TopBar({
   );
 }
 
+/** Whose turn: their medallion, name and points, the round, what's happening, and the robber's steps after a 7. */
+export function TurnCard({ view, state, thinking }: { view: TableView; state: IsleState; thinking: number | null }) {
+  const active = view.seats.find((s) => s.turn) ?? view.seats[state.turn]!;
+  const mine = !!(view.marks || view.canRoll || view.canEnd || view.discard > 0 || view.incoming);
+  const round = state.phase === 'setup' ? 'Opening' : `Round ${Math.max(1, Math.ceil(view.turnNo / 4))}`;
+  const rob = view.robber;
+  return (
+    <div
+      data-anchor="turn"
+      className={cn(
+        'pointer-events-auto rounded-[14px] p-2 transition-all duration-500',
+        WOOD,
+        active.you && state.phase !== 'over' && 'shadow-[0_0_0_2px_#E8B84A,0_0_26px_-2px_rgba(232,184,74,0.85)]',
+      )}
+    >
+      <div className="flex items-center gap-2.5">
+        <Avatar s={active} size={36} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-serif text-[15px] font-bold leading-tight text-[#FBEFD5]">{active.you ? 'Your turn' : `${active.name}’s turn`}</div>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#E8B84A]">{round}</span>
+        </div>
+        <PointsShield n={active.points} size="sm" />
+      </div>
+      <div className={cn('mt-1.5 flex items-start gap-1 rounded-[9px] bg-black/25 px-2 py-1.5 text-[12.5px] leading-snug', mine ? 'font-semibold text-[#F6CF62]' : 'text-[#FBEFD5]/85')}>
+        <span>{view.prompt}</span>
+        {thinking != null ? <Dots /> : null}
+      </div>
+      {rob ? (
+        <div className="mt-1.5 flex items-center gap-1 text-[10.5px] font-semibold">
+          {(rob.cause === 'seven' ? (['Give back', 'Move robber', 'Steal'] as const) : (['Move robber', 'Steal'] as const)).map((label, i, all) => {
+            const now = rob.step === 'discard' ? 0 : rob.cause === 'seven' ? 1 : 0;
+            const done = i < now;
+            return (
+              <span key={label} className="flex items-center gap-1">
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 py-[1px]',
+                    i === now ? 'bg-[#E2553B] text-white' : done ? 'bg-[#3F7A34]/70 text-[#D8F0C8]' : 'bg-black/30 text-[#FBEFD5]/50',
+                  )}
+                >
+                  {done ? '✓ ' : ''}
+                  {label}
+                </span>
+                {i < all.length - 1 ? <span className="text-[#FBEFD5]/40">›</span> : null}
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+      {rob?.step === 'discard' && rob.owing.length ? (
+        <div className="mt-1 text-[11px] text-[#FBEFD5]/70">Giving back: {rob.owing.map((o) => `${view.seats[o.p]!.name} ${o.n}`).join(', ')}</div>
+      ) : null}
+    </div>
+  );
+}
+
+/** The round buttons in a top corner: leave and the log on the left; the view and sound on the right. */
+export function CornerButtons({
+  side,
+  top,
+  muted,
+  music,
+  showLog,
+  onExit,
+  onLog,
+  onTop,
+  onToggleSound,
+  onToggleMusic,
+}: {
+  side: 'left' | 'right';
+  top: boolean;
+  muted: boolean;
+  music: boolean;
+  showLog: boolean;
+  onExit?: () => void;
+  onLog: () => void;
+  onTop: () => void;
+  onToggleSound?: () => void;
+  onToggleMusic?: () => void;
+}) {
+  if (side === 'left') {
+    return (
+      <div className="pointer-events-auto flex gap-2">
+        {onExit ? (
+          <RoundButton label="Leave the table" onClick={onExit}>
+            <ChevronLeft size={21} />
+          </RoundButton>
+        ) : null}
+        <RoundButton label="Game log" onClick={onLog} active={showLog}>
+          <ScrollText size={18} />
+        </RoundButton>
+      </div>
+    );
+  }
+  return (
+    <div className="pointer-events-auto flex justify-end gap-2">
+      <RoundButton label={top ? 'Tilted view' : 'Top view'} onClick={onTop} active={top}>
+        {top ? <Rotate3d size={18} /> : <MapIcon size={18} />}
+      </RoundButton>
+      {onToggleSound ? (
+        <RoundButton label={muted ? 'Sound on' : 'Sound off'} onClick={onToggleSound}>
+          {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </RoundButton>
+      ) : null}
+      {onToggleMusic && !muted ? (
+        <RoundButton label={music ? 'Music off' : 'Music on'} onClick={onToggleMusic} active={music}>
+          <Music size={17} className={music ? '' : 'opacity-40'} />
+        </RoundButton>
+      ) : null}
+    </div>
+  );
+}
+
 // ---- Players ---------------------------------------------------------------------------
 
 export function PlayerPanel({ seats, thinking, goal }: { seats: SeatView[]; thinking: number | null; goal: number }) {
@@ -243,11 +359,10 @@ export function BuildPanel({
   state: IsleState;
   mode: Mode;
   onPick: (what: BuildOption['what']) => void;
-  onTrade: () => void;
-  onBank: () => void;
+  /** Trading here too (the narrow screen's drawer); on a wide screen it's with the dice. */
+  onTrade?: () => void;
+  onBank?: () => void;
 }) {
-  const best = Math.min(...Object.values(view.rates));
-  const tradeWhy = view.canTrade ? null : view.build[0]!.why && !view.build[0]!.why.startsWith('Need') ? view.build[0]!.why : 'No cards to trade';
   return (
     <div className={cn('pointer-events-auto flex flex-col gap-1.5 rounded-[14px] p-2', WOOD)}>
       <span className={cn(CAPTION, 'px-1')}>Build</span>
@@ -285,13 +400,25 @@ export function BuildPanel({
         );
       })}
 
-      <span className={cn(CAPTION, 'mt-1 px-1')}>Trade</span>
-      <div className="grid grid-cols-2 gap-1.5">
-        <TradeButton icon={<ArrowLeftRight size={16} />} label="Players" sub="" onClick={onTrade} disabled={!view.canTrade} why={tradeWhy} />
-        <TradeButton icon={<Landmark size={16} />} label="Bank" sub={`Best ${best}:1`} onClick={onBank} disabled={!view.canTrade} why={tradeWhy} />
-      </div>
+      {onTrade && onBank ? (
+        <>
+          <span className={cn(CAPTION, 'mt-1 px-1')}>Trade</span>
+          <TradeButtons view={view} onTrade={onTrade} onBank={onBank} />
+        </>
+      ) : null}
 
       <Bank state={state} deck={view.deck} />
+    </div>
+  );
+}
+
+function TradeButtons({ view, onTrade, onBank }: { view: TableView; onTrade: () => void; onBank: () => void }) {
+  const best = Math.min(...Object.values(view.rates));
+  const why = view.canTrade ? null : view.build[0]!.why && !view.build[0]!.why.startsWith('Need') ? view.build[0]!.why : 'No cards to trade';
+  return (
+    <div className="grid grid-cols-2 gap-1.5">
+      <TradeButton icon={<ArrowLeftRight size={16} />} label="Trade" sub="" onClick={onTrade} disabled={!view.canTrade} why={why} />
+      <TradeButton icon={<Landmark size={16} />} label="Bank" sub={`${best}:1`} onClick={onBank} disabled={!view.canTrade} why={why} />
     </div>
   );
 }
@@ -354,32 +481,37 @@ export function ResourceHand({ view, picked, onPick }: { view: TableView; picked
   return (
     <div className={cn('pointer-events-auto flex flex-col rounded-[16px] px-3 pb-2.5 pt-1.5', WOOD)}>
       <div className="mb-1 flex items-center justify-between">
-        <span className={CAPTION}>Your cards</span>
+        <span className={CAPTION}>Resources</span>
         <span className={cn('text-[11px]', total > 7 ? 'font-bold text-[#FF9B7A]' : 'text-[#FBEFD5]/60')} title={total > 7 ? 'Over 7: on a 7 you give back half' : undefined}>
           {total} in hand
         </span>
       </div>
-      <div className="flex items-end gap-3">
+      <div className="flex items-end gap-2.5">
         {HAND_ORDER.map((r) => {
           const n = view.hand[r];
           return (
-            <div key={`${r}${bump[r] ?? ''}`} data-anchor={`hand-${r}`} className={cn('relative isolate', bump[r] && 'animate-[isle-pop_0.5s_ease-out]')}>
-              {/* The stack behind: deeper the more of them there are. */}
-              {Array.from({ length: Math.min(3, Math.max(0, n - 1)) }, (_, i) => (
-                <span
-                  key={i}
-                  className="absolute h-[114px] w-[76px] rounded-[9px] bg-gradient-to-b from-[#F1DDAE] to-[#C9A66B] shadow-[0_4px_8px_-4px_rgba(0,0,0,0.6)]"
-                  style={{ left: (i + 1) * 3, top: -(i + 1) * 3, zIndex: -1 - i, transform: `rotate(${(i + 1) * 2}deg)` }}
+            <div key={`${r}${bump[r] ?? ''}`} data-anchor={`hand-${r}`} className={cn('relative isolate flex flex-col items-center gap-1', bump[r] && 'animate-[isle-pop_0.5s_ease-out]')}>
+              <div className="relative">
+                {/* The stack behind: deeper the more of them there are. */}
+                {Array.from({ length: Math.min(3, Math.max(0, n - 1)) }, (_, i) => (
+                  <span
+                    key={i}
+                    className="absolute h-[96px] w-[64px] rounded-[8px] bg-gradient-to-b from-[#F1DDAE] to-[#C9A66B] shadow-[0_4px_8px_-4px_rgba(0,0,0,0.6)]"
+                    style={{ left: (i + 1) * 3, top: -(i + 1) * 3, zIndex: -1 - i, transform: `rotate(${(i + 1) * 2}deg)` }}
+                  />
+                ))}
+                <ResCard
+                  r={r}
+                  size="dock"
+                  dim={!n}
+                  picked={!!picked[r] && n > 0}
+                  onClick={n ? () => onPick(r) : undefined}
+                  title={`${RES_INFO[r].label}: ${n}${n ? ' (select to trade)' : ''}`}
                 />
-              ))}
-              <ResCard
-                r={r}
-                n={n}
-                dim={!n}
-                picked={!!picked[r] && n > 0}
-                onClick={n ? () => onPick(r) : undefined}
-                title={`${RES_INFO[r].label}: ${n}${n ? ' (select to trade)' : ''}`}
-              />
+              </div>
+              <span className={cn('min-w-[30px] rounded-full px-2 text-center font-serif text-[15px] font-bold leading-[20px]', n ? 'bg-gradient-to-b from-[#FCE39A] to-[#D9A846] text-[#3B2A1E] shadow-[0_2px_4px_rgba(0,0,0,0.4)]' : 'bg-black/30 text-[#FBEFD5]/40')}>
+                {n}
+              </span>
             </div>
           );
         })}
@@ -390,18 +522,23 @@ export function ResourceHand({ view, picked, onPick }: { view: TableView; picked
 
 export function DevelopmentCardHand({ view, onOpen }: { view: TableView; onOpen: (card: Dev) => void }) {
   return (
-    <div className={cn('pointer-events-auto flex flex-col rounded-[16px] px-3 pb-2.5 pt-1.5', WOOD)} data-anchor="dev-hand">
+    <div className={cn('group/dev pointer-events-auto flex flex-col rounded-[16px] px-3 pb-2.5 pt-1.5', WOOD)} data-anchor="dev-hand">
       <div className="mb-1 flex items-center justify-between gap-3">
         <span className={CAPTION}>Development</span>
         <span className="text-[11px] text-[#FBEFD5]/60">{view.dev.reduce((n, d) => n + d.ready + d.fresh, 0)} held</span>
       </div>
-      <div className="flex items-end gap-2.5">
+      {/* Fanned and overlapping to save room; they spread out under the pointer. */}
+      <div className="flex items-end pl-1">
         {view.dev.length ? (
-          view.dev.map((d) => (
-            <div key={d.card} className="relative">
+          view.dev.map((d, i) => (
+            <div
+              key={d.card}
+              className="relative transition-all duration-300 ease-out group-hover/dev:!ml-2 group-hover/dev:!rotate-0"
+              style={{ marginLeft: i ? -40 : 0, transform: `rotate(${(i - (view.dev.length - 1) / 2) * 4}deg)`, zIndex: i }}
+            >
               <DevCard
                 d={d.card}
-                size="md"
+                size="dock"
                 n={d.ready + d.fresh}
                 glow={d.playable}
                 onClick={() => onOpen(d.card)}
@@ -415,7 +552,7 @@ export function DevelopmentCardHand({ view, onOpen }: { view: TableView; onOpen:
             </div>
           ))
         ) : (
-          <span className="flex h-[114px] w-[150px] items-center justify-center rounded-[9px] border border-dashed border-[#F1DDAE]/30 px-3 text-center font-serif text-[12px] italic text-[#FBEFD5]/55">
+          <span className="flex h-[96px] w-[112px] items-center justify-center rounded-[9px] border border-dashed border-[#F1DDAE]/30 px-3 text-center font-serif text-[12px] italic text-[#FBEFD5]/55">
             Buy one for wool, grain and ore
           </span>
         )}
@@ -431,7 +568,7 @@ function Die({ v, rolling, delay }: { v: number; rolling: boolean; delay: number
   return (
     <span
       className={cn(
-        'grid h-[46px] w-[46px] grid-cols-3 grid-rows-3 gap-[2px] rounded-[10px] bg-gradient-to-br from-[#FFFDF6] via-[#F6EEDB] to-[#D9CBB0] p-[7px] shadow-[0_6px_10px_-4px_rgba(0,0,0,0.7),inset_0_-2px_3px_rgba(0,0,0,0.15),inset_0_2px_2px_rgba(255,255,255,0.9)]',
+        'grid h-[40px] w-[40px] grid-cols-3 grid-rows-3 gap-[2px] rounded-[9px] bg-gradient-to-br from-[#FFFDF6] via-[#F6EEDB] to-[#D9CBB0] p-[6px] shadow-[0_6px_10px_-4px_rgba(0,0,0,0.7),inset_0_-2px_3px_rgba(0,0,0,0.15),inset_0_2px_2px_rgba(255,255,255,0.9)]',
         rolling && 'animate-[isle-tumble_1.1s_cubic-bezier(.2,.7,.3,1)_both]',
       )}
       style={{ animationDelay: `${delay}ms` }}
@@ -450,7 +587,22 @@ function Die({ v, rolling, delay }: { v: number; rolling: boolean; delay: number
  * second, faces flickering, then lands on what the game rolled (the board
  * lights the lands that pay at the same moment).
  */
-export function DiceController({ state, view, onRoll, onEnd }: { state: IsleState; view: TableView; onRoll: () => void; onEnd: () => void }) {
+export function DiceController({
+  state,
+  view,
+  onRoll,
+  onEnd,
+  onTrade,
+  onBank,
+}: {
+  state: IsleState;
+  view: TableView;
+  onRoll: () => void;
+  onEnd: () => void;
+  /** With the turn's actions: trading sits by the dice and End turn. */
+  onTrade?: () => void;
+  onBank?: () => void;
+}) {
   const roll = lastRoll(state);
   const seen = useRef(roll?.key ?? null);
   const [rolling, setRolling] = useState(false);
@@ -479,7 +631,9 @@ export function DiceController({ state, view, onRoll, onEnd }: { state: IsleStat
   }, [key]);
   const total = state.dice ? state.dice[0] + state.dice[1] : null;
   return (
-    <div className={cn('pointer-events-auto flex items-center gap-3 rounded-[16px] px-3 py-2.5', WOOD)}>
+    <div className={cn('pointer-events-auto flex flex-col gap-2 rounded-[14px] p-2', WOOD)}>
+      <span className={cn(CAPTION, 'px-1')}>Your turn</span>
+      <div className="flex items-center justify-between gap-2">
       <div className="flex flex-col items-center gap-1.5">
         <div className="flex gap-2 rounded-[12px] bg-[#1E120A]/60 p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.6)]" data-anchor="dice">
           <Die v={faces[0]} rolling={rolling} delay={0} />
@@ -495,7 +649,7 @@ export function DiceController({ state, view, onRoll, onEnd }: { state: IsleStat
           onClick={onRoll}
           disabled={!view.canRoll}
           className={cn(
-            'flex h-[46px] w-[132px] items-center justify-center gap-2 rounded-[12px] border-2 font-serif text-[16px] font-bold transition active:scale-95',
+            'flex h-[44px] w-[122px] items-center justify-center gap-2 rounded-[12px] border-2 font-serif text-[16px] font-bold transition active:scale-95',
             view.canRoll
               ? 'animate-[isle-glow_1.6s_ease-in-out_infinite] border-[#FFF3CF] bg-gradient-to-b from-[#FCE39A] to-[#C88E1E] text-[#3B2A1E]'
               : 'cursor-not-allowed border-[#2A180B] bg-black/25 text-[#FBEFD5]/40',
@@ -508,7 +662,7 @@ export function DiceController({ state, view, onRoll, onEnd }: { state: IsleStat
           onClick={onEnd}
           disabled={!view.canEnd}
           className={cn(
-            'flex h-[40px] w-[132px] items-center justify-center gap-2 rounded-[12px] border-2 font-serif text-[14px] font-bold transition active:scale-95',
+            'flex h-[38px] w-[122px] items-center justify-center gap-2 rounded-[12px] border-2 font-serif text-[14px] font-bold transition active:scale-95',
             view.canEnd
               ? 'border-[#D8F0C8] bg-gradient-to-b from-[#7DBB6B] to-[#3F7A34] text-white shadow-[0_6px_14px_-6px_rgba(0,0,0,0.7)]'
               : 'cursor-not-allowed border-[#2A180B] bg-black/25 text-[#FBEFD5]/40',
@@ -517,6 +671,8 @@ export function DiceController({ state, view, onRoll, onEnd }: { state: IsleStat
           <Hourglass size={16} /> End turn
         </button>
       </div>
+      </div>
+      {onTrade && onBank ? <TradeButtons view={view} onTrade={onTrade} onBank={onBank} /> : null}
     </div>
   );
 }

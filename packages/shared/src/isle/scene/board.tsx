@@ -11,7 +11,7 @@
  * into a move with pickMark (isle/pick.ts).
  */
 import { useFrame, useLoader, useThree } from '@react-three/fiber';
-import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Component, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import * as THREE from 'three';
 import type { Quality } from '../../house/scene/materials';
 import { mulberry32 } from '../../rng';
@@ -22,6 +22,8 @@ import { textGeometry } from './glyphs';
 import {
   boatGeometry,
   bushGeometry,
+  coastRockGeometry,
+  contactShadowGeometry,
   cityGeometry,
   clayGeometry,
   COLORS,
@@ -49,7 +51,7 @@ import {
 
 const SKY = '#A9D8E8';
 /** The camera's tilt above the table: the usual three-quarter view, up to straight down from above. */
-const PITCH_LOW = (56 * Math.PI) / 180;
+const PITCH_LOW = (54 * Math.PI) / 180;
 const PITCH_TOP = (89.5 * Math.PI) / 180;
 const pitchAt = (tilt: number) => PITCH_LOW + (PITCH_TOP - PITCH_LOW) * tilt;
 
@@ -117,10 +119,28 @@ export function lastRoll(s: IsleState): { key: number; d: [number, number] } | n
   return null;
 }
 
-export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled, hexArt, showDice = true, hover = null, inset }: IsleBoardProps) {
+/**
+ * The board. Memoised: the screen around it re-renders often (a hover, a
+ * note, a panel), and none of that should touch the scene unless its own
+ * props change.
+ */
+export const IsleBoard = memo(function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled, hexArt, showDice = true, hover = null, inset }: IsleBoardProps) {
   const glow = useRef<{ total: number; at: number } | null>(null);
   const clock = useThree((t) => t.clock);
+  const gl = useThree((t) => t.gl);
+  // Shadows are drawn again only when something that casts one moves (see shadowsMoved), not every frame.
+  useLayoutEffect(() => {
+    gl.shadowMap.autoUpdate = false;
+    gl.shadowMap.needsUpdate = true;
+    return () => {
+      gl.shadowMap.autoUpdate = true;
+    };
+  }, [gl]);
+  useEffect(() => {
+    gl.shadowMap.needsUpdate = true;
+  }, [gl, state]);
   const shore = useMemo(() => coastline(), []);
+  const outline = useMemo(() => islandOutline(shore, state.board), [shore, state.board]);
   return (
     <>
       <color attach="background" args={[SKY]} />
@@ -143,10 +163,15 @@ export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled,
           onRolled?.(total);
         }}
       />
-      <CameraRig onReady={onReady} beside={showDice} inset={inset} />
+      <CameraRig onReady={onReady} beside={showDice} inset={inset} outline={outline} />
     </>
   );
-}
+});
+
+/** Something that casts a shadow moved this frame: draw the shadows again. */
+const shadowsMoved = (gl: THREE.WebGLRenderer) => {
+  gl.shadowMap.needsUpdate = true;
+};
 
 // ---- The coast -----------------------------------------------------------------
 
@@ -206,8 +231,8 @@ function beachGeometry(shore: number[]) {
     const r1 = shore[(j + 1) % SHORE_N]!;
     const p0 = [Math.cos(a0) * r0, y, Math.sin(a0) * r0];
     const p1 = [Math.cos(a1) * r1, y, Math.sin(a1) * r1];
-    const q0 = [Math.cos(a0) * (r0 + 0.22), -0.06, Math.sin(a0) * (r0 + 0.22)];
-    const q1 = [Math.cos(a1) * (r1 + 0.22), -0.06, Math.sin(a1) * (r1 + 0.22)];
+    const q0 = [Math.cos(a0) * (r0 + 0.3), -0.2, Math.sin(a0) * (r0 + 0.3)];
+    const q1 = [Math.cos(a1) * (r1 + 0.3), -0.2, Math.sin(a1) * (r1 + 0.3)];
     top.push(0, y, 0, ...p1, ...p0);
     skirt.push(...p0, ...p1, ...q1, ...p0, ...q1, ...q0);
   }
@@ -255,53 +280,133 @@ function Lights({ quality }: { quality: Quality }) {
 }
 
 const SEA_VERTEX = /* glsl */ `
-  varying vec3 vWorld;
+  varying vec2 vXZ;
   void main() {
     vec4 w = modelMatrix * vec4(position, 1.0);
-    vWorld = w.xyz;
+    vXZ = w.xz;
     gl_Position = projectionMatrix * viewMatrix * w;
   }
 `;
 
+/**
+ * The sea, drawn per pixel. Its moving texture is gradient (simplex) noise,
+ * which has no grid to show: products of sines along x and z, used before,
+ * lay a lattice of square cells over the water. Every fine detail fades out
+ * where it gets smaller than about a pixel (fwidth), so far water and the
+ * screen's edges never alias into blocks; and the colour is dithered so the
+ * soft gradients don't step into bands on an 8-bit screen.
+ *
+ * No number the GPU sees grows with time. Phone GPUs work out sin() of a
+ * large argument coarsely, so a wave written as sin(x * k + time * w) breaks
+ * into stepped blocks once time has run a few minutes (worse further from
+ * the middle, where x is large): that was the phone's square, flickering
+ * sea. Every phase is wrapped to one turn on the CPU (uPhase) and every
+ * drift of the noise kept within a small range (uDrift) before it's sent.
+ */
 const SEA_FRAGMENT = /* glsl */ `
-  uniform float uTime;
+  // Wrapped wave phases (radians, 0..2π): rolling waves, the foam's lap, its breath, the outer foam line.
+  uniform vec4 uPhase;
+  // How far each layer of noise has drifted, kept small: patches, two ripple layers, light on the sand.
+  uniform vec4 uDriftA;
+  uniform vec4 uDriftB;
   uniform vec3 uDeep;
   uniform vec3 uShallow;
   uniform vec3 uFoam;
   uniform vec3 uSky;
   uniform float uShore[${SHORE_N}];
-  varying vec3 vWorld;
+  varying vec2 vXZ;
+
+  // 2D simplex noise (Ashima Arts / Stefan Gustavson, MIT), -1..1.
+  vec3 permute(vec3 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
+  float snoise(vec2 v) {
+    const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+    vec2 i = floor(v + dot(v, C.yy));
+    vec2 x0 = v - i + dot(i, C.xx);
+    vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+    vec4 x12 = x0.xyxy + C.xxzz;
+    x12.xy -= i1;
+    i = mod(i, 289.0);
+    vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+    vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+    m = m * m;
+    m = m * m;
+    vec3 x = 2.0 * fract(p * C.www) - 1.0;
+    vec3 h = abs(x) - 0.5;
+    vec3 ox = floor(x + 0.5);
+    vec3 a0 = x - ox;
+    m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+    vec3 g;
+    g.x = a0.x * x0.x + h.x * x0.y;
+    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+    return 130.0 * dot(m, g);
+  }
+
+  /** How much of a pattern at this scale survives: 1 while it's several pixels across, fading to 0 by one pixel. */
+  float keep(float scale) {
+    float px = fwidth(vXZ.x * scale) + fwidth(vXZ.y * scale);
+    return 1.0 - smoothstep(0.35, 0.9, px);
+  }
+
   void main() {
-    float r = length(vWorld.xz);
-    float a = atan(vWorld.z, vWorld.x);
+    vec2 p = vXZ;
+    float r = length(p);
+    float a = atan(p.y, p.x);
     // The shoreline here, from the island's outline.
     float f = fract(a / 6.2831853 + 1.0) * ${SHORE_N}.0;
     int i = int(floor(f));
     int j = i + 1 >= ${SHORE_N} ? 0 : i + 1;
     float off = r - mix(uShore[i], uShore[j], fract(f));
-    // Turquoise over the sand near the beach, deepening further out, with slow patches of colour.
-    float patchy = sin(vWorld.x * 0.55 + uTime * 0.05) * sin(vWorld.z * 0.47 - uTime * 0.04);
-    vec3 c = mix(uShallow, uDeep, smoothstep(0.1, 3.2 + patchy * 0.6, off));
-    c = mix(c, uDeep * 0.82, smoothstep(5.0, 12.0, off) * 0.6);
-    // Ripples catching the light.
-    float w = sin(vWorld.x * 3.1 + uTime * 1.3) * sin(vWorld.z * 2.6 - uTime * 1.05)
-            + 0.5 * sin((vWorld.x + vWorld.z) * 5.3 - uTime * 1.9);
-    float fade = 1.0 - smoothstep(4.0, 14.0, off);
-    c += w * 0.03 * fade;
-    // Waves rolling in towards the beach, fading as they come.
-    float roll = sin(off * 9.0 + uTime * 1.6 + sin(a * 5.0) * 0.6);
-    c = mix(c, uFoam, smoothstep(0.86, 1.0, roll) * (1.0 - smoothstep(0.3, 1.6, off)) * 0.35);
+
+    // Turquoise over the sand near the beach, deepening further out, in slow drifting patches.
+    float patchy = snoise(p * 0.13 + uDriftA.xy);
+    vec3 c = mix(uShallow, uDeep, smoothstep(0.1, 3.3 + patchy * 0.8, off));
+    c = mix(c, uDeep * 0.8, smoothstep(5.0, 13.0, off) * (0.55 + 0.15 * patchy));
+
+    // Ripples catching the light: two layers of noise drifting different ways, the finer one fading with distance.
+    float near = 1.0 - smoothstep(5.0, 16.0, off);
+    float ripple = snoise(p * 0.85 + uDriftA.zw) * 0.6
+                 + snoise(p * 2.2 + uDriftB.xy) * 0.4 * keep(2.2);
+    c += ripple * 0.035 * near * keep(0.85);
+
+    // Light dancing on the sand under the shallows: the bright ridges where noise crosses zero.
+    float n = snoise(p * 2.6 + uDriftB.zw) + 0.5 * snoise(p * 4.1 - uDriftB.wz * 0.8);
+    float caustic = pow(1.0 - min(1.0, abs(n)), 7.0) * keep(4.1);
+    c += caustic * 0.09 * (1.0 - smoothstep(0.2, 1.9, off));
+
+    // Waves rolling in towards the beach, fading as they come (smoothed below a pixel too). Only near the
+    // beach, so the sine's argument stays small.
+    float nearBeach = 1.0 - smoothstep(0.3, 1.6, off);
+    float rollK = 1.0 - smoothstep(0.3, 0.9, fwidth(off * 9.0));
+    float roll = sin(clamp(off, -1.0, 2.0) * 9.0 + uPhase.x + snoise(vec2(a * 2.0, uDriftA.x)) * 0.8);
+    c = mix(c, uFoam, smoothstep(0.86, 1.0, roll) * nearBeach * 0.35 * rollK);
+
     // Foam where the water meets the sand, breathing in and out.
-    float lap = 0.05 * sin(a * 9.0 + uTime * 0.7) + 0.04 * sin(uTime * 0.9);
-    float band = 1.0 - smoothstep(0.0, 0.12 + 0.04 * sin(uTime * 1.6 + a * 5.0), abs(off - 0.12 - lap));
-    float edge = 1.0 - smoothstep(0.0, 0.045, abs(off - 0.34 - lap - 0.05 * sin(uTime * 1.2 + a * 7.0)));
+    float lap = 0.05 * sin(a * 9.0 + uPhase.y) + 0.04 * sin(uPhase.z);
+    float band = 1.0 - smoothstep(0.0, 0.12 + 0.04 * sin(uPhase.x + a * 5.0), abs(off - 0.12 - lap));
+    float edge = 1.0 - smoothstep(0.0, 0.045 + fwidth(off), abs(off - 0.34 - lap - 0.05 * sin(uPhase.w + a * 7.0)));
     c = mix(c, uFoam, clamp(band * 0.85 + edge * 0.4, 0.0, 1.0));
+
+    // Into the haze on the horizon.
     c = mix(c, uSky, smoothstep(16.0, 36.0, r));
     gl_FragColor = vec4(c, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
+    // Dither: a fraction of a colour step of noise, so smooth gradients don't band. Interleaved gradient
+    // noise, which needs no sin() of a large number (the usual sin-hash breaks into blocks on phones).
+    float d = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    gl_FragColor.rgb += (d - 0.5) / 255.0;
   }
 `;
+
+const TURN = Math.PI * 2;
+/** A wave's phase at a time, wrapped to one turn. */
+const phase = (t: number, speed: number) => (t * speed) % TURN;
+/**
+ * How far a layer of noise has drifted, wrapped into a small range. The
+ * slowest layers wrap after hours; the fastest after about half an hour,
+ * when its ripples shift once, too small and quick to notice.
+ */
+const drift = (t: number, speed: number) => (t * speed) % 289;
 
 function Sea({ shore }: { shore: number[] }) {
   const mat = useMemo(
@@ -310,7 +415,9 @@ function Sea({ shore }: { shore: number[] }) {
         vertexShader: SEA_VERTEX,
         fragmentShader: SEA_FRAGMENT,
         uniforms: {
-          uTime: { value: 0 },
+          uPhase: { value: new THREE.Vector4() },
+          uDriftA: { value: new THREE.Vector4() },
+          uDriftB: { value: new THREE.Vector4() },
           uDeep: { value: new THREE.Color(COLORS.sea) },
           uShallow: { value: new THREE.Color(COLORS.shallow) },
           uFoam: { value: new THREE.Color(COLORS.foam) },
@@ -322,7 +429,11 @@ function Sea({ shore }: { shore: number[] }) {
   );
   useEffect(() => () => mat.dispose(), [mat]);
   useFrame(({ clock }) => {
-    mat.uniforms.uTime!.value = clock.elapsedTime;
+    const t = clock.elapsedTime;
+    const u = mat.uniforms;
+    (u.uPhase!.value as THREE.Vector4).set(phase(t, 1.6), phase(t, 0.7), phase(t, 0.9), phase(t, 1.2));
+    (u.uDriftA!.value as THREE.Vector4).set(drift(t, 0.011), drift(t, -0.008), drift(t, 0.06), drift(t, 0.035));
+    (u.uDriftB!.value as THREE.Vector4).set(drift(t, -0.09), drift(t, 0.07), drift(t, 0.13), drift(t, -0.1));
   });
   return (
     <mesh material={mat} rotation-x={-Math.PI / 2} position-y={0.02}>
@@ -431,19 +542,21 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
       const e = TOPOLOGY.edges[port.edge]!;
       return Math.atan2(e.y, e.x);
     });
-    const rock = rockGeometry();
+    const rock = coastRockGeometry();
     geos.push(rock);
     const at: THREE.Matrix4[] = [];
-    for (let k = 0; k < 26; k++) {
+    for (let k = 0; k < 46; k++) {
       const a = random() * Math.PI * 2;
-      const r = shoreAt(shore, a) - 0.02 + random() * 0.18;
-      const sc = 0.8 + random() * 1.1;
-      const n = 1 + Math.floor(random() * 3);
-      if (harbours.some((h) => Math.abs(Math.atan2(Math.sin(a - h), Math.cos(a - h))) < 0.22)) continue;
+      // Most on the water's edge; a few out at sea, standing alone.
+      const far = k >= 38;
+      const r = shoreAt(shore, a) + (far ? 0.7 + random() * 1.1 : 0.02 + random() * 0.2);
+      const sc = far ? 1.3 + random() * 1.1 : 0.6 + random() * 0.9;
+      const n = far ? 1 + Math.floor(random() * 2) : 2 + Math.floor(random() * 3);
+      if (harbours.some((h) => Math.abs(Math.atan2(Math.sin(a - h), Math.cos(a - h))) < (far ? 0.4 : 0.24))) continue;
       for (let j = 0; j < n; j++) {
-        const aj = a + (random() - 0.5) * 0.06;
-        const rj = r + (random() - 0.5) * 0.16;
-        const sz = sc * (0.5 + random() * 0.6);
+        const aj = a + (random() - 0.5) * 0.07;
+        const rj = r + (random() - 0.5) * 0.18;
+        const sz = sc * (0.45 + random() * 0.6);
         at.push(
           new THREE.Matrix4().compose(
             new THREE.Vector3(Math.cos(aj) * rj, 0.02, Math.sin(aj) * rj),
@@ -456,6 +569,7 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
     const rocks = new THREE.InstancedMesh(rock, mat, at.length);
     at.forEach((m, i) => rocks.setMatrixAt(i, m));
     rocks.receiveShadow = true;
+    rocks.castShadow = true;
     objects.push(rocks);
   }
 
@@ -565,7 +679,7 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
       g = tokenGeometry(n);
       tokenGeo.set(n, g);
     }
-    still.push(placed(g, h.x, TILE_TOP + 0.002, h.y));
+    still.push(placed(g, h.x, TILE_TOP + 0.008, h.y));
   });
   for (const port of board.ports) {
     const e = TOPOLOGY.edges[port.edge]!;
@@ -640,7 +754,13 @@ export const hexArtAt = (base: string): HexArt =>
 const PICTURE_ZOOM = 0.97;
 /** The tile's flat top (the bevelled top's upper face). */
 const TOP_R = TILE_FACE;
-const TOP_Y = TILE_TOP + 0.002;
+/**
+ * A little above the tile's top, and drawn pulled towards the camera
+ * (polygon offset): phones often have a coarse (16-bit) depth buffer, where a
+ * picture lying almost on its tile flickers through it in blocks.
+ */
+const TOP_Y = TILE_TOP + 0.006;
+const LIFTED = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 } as const;
 
 /** A flat hex lying face up with UVs that put a hex picture on it, north at the top. */
 function pictureHexGeometry(y = TOP_Y) {
@@ -690,7 +810,18 @@ function HexPictures({
 }) {
   const lands = (Object.keys(art) as Terrain[]).filter((t) => art[t] != null && board.terrain.includes(t));
   const glowMat = useMemo(
-    () => new THREE.MeshBasicMaterial({ color: '#FFF1B8', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: '#FFF1B8',
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+        polygonOffsetUnits: -8,
+      }),
     [],
   );
   useEffect(() => () => glowMat.dispose(), [glowMat]);
@@ -731,7 +862,7 @@ function LandPictures({ source, hexes }: { source: string | number; hexes: numbe
   const tex = useLoader(THREE.TextureLoader, source as unknown as string);
   const mat = useMemo(() => {
     tex.colorSpace = THREE.SRGBColorSpace;
-    return new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
+    return new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, ...LIFTED });
   }, [tex]);
   useEffect(() => () => mat.dispose(), [mat]);
   const geo = useMemo(() => pictureHexGeometry(), []);
@@ -777,16 +908,15 @@ function Boats({ board, quality }: { board: Board; quality: Quality }) {
   useEffect(() => () => geo.dispose(), [geo]);
   const spots = useMemo(
     () =>
-      board.ports
-        .filter((_, i) => i % 3 === 1)
-        .map((port, i) => {
+      board.ports.map((port, i) => {
           const e = TOPOLOGY.edges[port.edge]!;
           const h = TOPOLOGY.hexes[e.hexes[0]!]!;
           const len = Math.hypot(e.x - h.x, e.y - h.y);
           const ux = (e.x - h.x) / len;
           const uz = (e.y - h.y) / len;
-          // Off to one side of the landing stage, lying along the coast.
-          return { x: e.x + ux * 1.05 - uz * 0.45, z: e.y + uz * 1.05 + ux * 0.45, turn: -Math.atan2(uz, ux) + Math.PI / 2, phase: i * 1.7 };
+          // Moored beside the landing stage, alternating sides, lying along the coast.
+          const side = i % 2 ? 1 : -1;
+          return { x: e.x + ux * 0.75 - uz * 0.5 * side, z: e.y + uz * 0.75 + ux * 0.5 * side, turn: -Math.atan2(uz, ux) + Math.PI / 2, phase: i * 1.7 };
         }),
     [board],
   );
@@ -805,7 +935,7 @@ function Boats({ board, quality }: { board: Board; quality: Quality }) {
     <group>
       {spots.map((b, i) => (
         <group key={i} position={[b.x, 0, b.z]} rotation-y={b.turn}>
-          <mesh ref={(m) => void (refs.current[i] = m)} geometry={geo} material={mat} scale={1.5} castShadow />
+          <mesh ref={(m) => void (refs.current[i] = m)} geometry={geo} material={mat} scale={1.25} />
         </group>
       ))}
     </group>
@@ -814,13 +944,14 @@ function Boats({ board, quality }: { board: Board; quality: Quality }) {
 
 // ---- Pieces --------------------------------------------------------------------
 
+/** Painted wood in each seat's colour: a satin finish, a touch of its own colour in the shade so dark sides stay coloured. */
 function usePlayerMaterials(quality: Quality) {
   const mats = useMemo(
     () =>
       PLAYER_COLORS.map((c) =>
         quality === 'low'
           ? new THREE.MeshLambertMaterial({ vertexColors: true, color: c })
-          : new THREE.MeshStandardMaterial({ vertexColors: true, color: c, roughness: 0.55 }),
+          : new THREE.MeshStandardMaterial({ vertexColors: true, color: c, roughness: 0.48, metalness: 0, emissive: new THREE.Color(c).multiplyScalar(0.12) }),
       ),
     [quality],
   );
@@ -828,10 +959,53 @@ function usePlayerMaterials(quality: Quality) {
   return mats;
 }
 
-const shapes = { town: townGeometry(), city: cityGeometry(), road: roadGeometry() };
+const shapes = {
+  town: townGeometry(),
+  city: cityGeometry(),
+  road: roadGeometry(),
+  townShadow: contactShadowGeometry(0.24, 0.22),
+  cityShadow: contactShadowGeometry(0.4, 0.3),
+  roadShadow: contactShadowGeometry(0.4, 0.13),
+};
+
+/**
+ * A dark edge round each piece (its own shape drawn again, a little larger,
+ * from the inside), so it stands out on any picture; and the soft shadow
+ * patch it sits on.
+ */
+function usePieceTrim() {
+  const trim = useMemo(() => ({
+    edge: new THREE.MeshBasicMaterial({ color: '#1A120A', side: THREE.BackSide }),
+    shadow: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, toneMapped: false, ...LIFTED }),
+  }), []);
+  useEffect(() => () => {
+    trim.edge.dispose();
+    trim.shadow.dispose();
+  }, [trim]);
+  return trim;
+}
+
+function PieceMesh({ geometry, material, shadow, trim, outline, edgeScale }: {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  shadow: THREE.BufferGeometry;
+  trim: ReturnType<typeof usePieceTrim>;
+  outline: boolean;
+  edgeScale: [number, number, number];
+}) {
+  return (
+    <>
+      <mesh geometry={shadow} material={trim.shadow} position-y={0.012} renderOrder={1} />
+      <mesh geometry={geometry} material={material} castShadow receiveShadow />
+      {outline ? <mesh geometry={geometry} material={trim.edge} scale={edgeScale} /> : null}
+    </>
+  );
+}
 
 function Pieces({ state, quality }: { state: IsleState; quality: Quality }) {
   const mats = usePlayerMaterials(quality);
+  const trim = usePieceTrim();
+  const outline = quality !== 'low';
   // Pieces already on the board when it first shows don't drop in.
   const first = useRef(true);
   useEffect(() => {
@@ -844,7 +1018,9 @@ function Pieces({ state, quality }: { state: IsleState; quality: Quality }) {
         const edge = TOPOLOGY.edges[e]!;
         return (
           <Drop key={`r${e}`} x={edge.x} z={edge.y} still={first.current}>
-            <mesh geometry={shapes.road} material={mats[p]} rotation-y={-edge.angle} scale={[1, 1.15, 1.25]} castShadow receiveShadow />
+            <group rotation-y={-edge.angle}>
+              <PieceMesh geometry={shapes.road} material={mats[p]!} shadow={shapes.roadShadow} trim={trim} outline={outline} edgeScale={[1.035, 1.2, 1.18]} />
+            </group>
           </Drop>
         );
       })}
@@ -853,14 +1029,17 @@ function Pieces({ state, quality }: { state: IsleState; quality: Quality }) {
         const vert = TOPOLOGY.verts[v]!;
         return (
           <Drop key={`t${v}${t.city ? 'c' : ''}`} x={vert.x} z={vert.y} still={first.current} grow={t.city}>
-            <mesh
-              geometry={t.city ? shapes.city : shapes.town}
-              material={mats[t.p]}
-              rotation-y={((v * 47) % 6) * (Math.PI / 3)}
-              scale={t.city ? 1.6 : 1.7}
-              castShadow
-              receiveShadow
-            />
+            {/* Front to the viewer, each turned a touch so a row of them doesn't look stamped. */}
+            <group rotation-y={(((v * 37) % 7) - 3) * 0.06}>
+              <PieceMesh
+                geometry={t.city ? shapes.city : shapes.town}
+                material={mats[t.p]!}
+                shadow={t.city ? shapes.cityShadow : shapes.townShadow}
+                trim={trim}
+                outline={outline}
+                edgeScale={[1.07, 1.045, 1.08]}
+              />
+            </group>
           </Drop>
         );
       })}
@@ -884,11 +1063,12 @@ function Drop({ x, z, still, grow, children }: { x: number; z: number; still: bo
     [still],
   );
   useEffect(() => () => ringMat?.dispose(), [ringMat]);
-  useFrame(({ clock }) => {
+  useFrame(({ clock, gl }) => {
     const g = ref.current;
     if (!g) return;
     if (born.current == null) born.current = clock.elapsedTime;
     const t = clock.elapsedTime - born.current;
+    if (t <= 0.75) shadowsMoved(gl);
     const r = ring.current;
     if (r && ringMat) {
       const k = Math.min(1, Math.max(0, (t - (grow ? 0.15 : 0.28)) / 0.6));
@@ -947,10 +1127,11 @@ function Robber({ hex, quality, moving }: { hex: number; quality: Quality; movin
     from.current = { x: m?.position.x ?? target.x, z: m?.position.z ?? target.z, at: clock.elapsedTime };
     last.current = hex;
   }
-  useFrame(({ clock: c }) => {
+  useFrame(({ clock: c, gl }) => {
     const m = ref.current;
     if (!m) return;
     const f = from.current;
+    if (f || moving) shadowsMoved(gl);
     if (!f) {
       m.position.set(target.x, TILE_TOP, target.z);
       return;
@@ -1103,8 +1284,9 @@ function Dice({ state, quality, visible, onLanded }: { state: IsleState; quality
   const up = useMemo(() => new THREE.Vector3(0, 1, 0), []);
   const axis = useMemo(() => [new THREE.Vector3(1, 0.3, 0.6).normalize(), new THREE.Vector3(-0.7, 0.2, 1).normalize()], []);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock, gl }) => {
     const a = anim.current;
+    if (a && visible) shadowsMoved(gl);
     dice.forEach((ref, i) => {
       const m = ref.current;
       if (!m) return;
@@ -1149,20 +1331,64 @@ function Dice({ state, quality, visible, onLanded }: { state: IsleState; quality
 
 // ---- The camera ----------------------------------------------------------------
 
-/** Half the island's width and depth (harbour signs included), for fitting it in view. */
-const ISLAND_HALF_W = 5.5;
-const ISLAND_HALF_D = 5.1;
-
-/** How far back the camera stands so the whole island fills the view (tilted at pitch). */
-function fitDistance(aspect: number, fov: number, pitch: number) {
-  const tanV = Math.tan((fov * Math.PI) / 360);
-  const byWidth = ISLAND_HALF_W / (tanV * aspect);
-  // Tilted, the island's depth shrinks on screen by the sine of the pitch.
-  const byDepth = (ISLAND_HALF_D * Math.sin(pitch) + 0.6 * Math.cos(pitch)) / tanV;
-  return Math.max(byWidth, byDepth) * 0.97;
+/**
+ * The points that must stay in view: the coastline all round (the beach's
+ * foot) and every harbour's sign, as x, y (up), z.
+ */
+function islandOutline(shore: number[], board: Board): THREE.Vector3[] {
+  const pts = shore.map((r, j) => {
+    const a = (j / shore.length) * Math.PI * 2;
+    return new THREE.Vector3(Math.cos(a) * (r + 0.3), 0, Math.sin(a) * (r + 0.3));
+  });
+  for (const port of board.ports) {
+    const e = TOPOLOGY.edges[port.edge]!;
+    const h = TOPOLOGY.hexes[e.hexes[0]!]!;
+    const len = Math.hypot(e.x - h.x, e.y - h.y);
+    const [ux, uz] = [(e.x - h.x) / len, (e.y - h.y) / len];
+    for (const [dx, dz] of [[0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]] as const) {
+      pts.push(new THREE.Vector3(e.x + ux * 0.62 + dx, 0.3, e.y + uz * 0.62 + dz));
+    }
+  }
+  return pts;
 }
 
-function CameraRig({ onReady, beside = true, inset }: { onReady?: (api: IsleBoardApi) => void; beside?: boolean; inset?: Inset }) {
+/**
+ * Where the camera stands so the whole island fills a view (its aspect and
+ * vertical field of view) without being cut: for each spot to look at along
+ * the board's depth, the nearest distance at which every outline point lands
+ * inside the view, by projecting them; the nearest of all wins. The near edge
+ * looms larger than the far one in a tilted view, so the best spot to look
+ * at isn't quite the middle.
+ */
+function fitView(points: THREE.Vector3[], aspect: number, fov: number, pitch: number, margin = 0.97) {
+  const cam = new THREE.PerspectiveCamera(fov, aspect, 0.1, 200);
+  const v = new THREE.Vector3();
+  const fits = (z: number, d: number) => {
+    cam.position.set(0, d * Math.sin(pitch), z + d * Math.cos(pitch));
+    cam.lookAt(0, 0, z);
+    cam.updateMatrixWorld();
+    for (const p of points) {
+      v.copy(p).project(cam);
+      if (Math.abs(v.x) > margin || Math.abs(v.y) > margin) return false;
+    }
+    return true;
+  };
+  let best = { z: 0, d: 40 };
+  for (let z = -1.2; z <= 1.21; z += 0.1) {
+    let lo = 3;
+    let hi = 60;
+    if (!fits(z, hi)) continue;
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(z, mid)) hi = mid;
+      else lo = mid;
+    }
+    if (hi < best.d) best = { z, d: hi };
+  }
+  return best;
+}
+
+function CameraRig({ onReady, beside = true, inset, outline }: { onReady?: (api: IsleBoardApi) => void; beside?: boolean; inset?: Inset; outline: THREE.Vector3[] }) {
   const camera = useThree((t) => t.camera) as THREE.PerspectiveCamera;
   const size = useThree((t) => t.size);
   const { left = 0, right = 0, top = 0, bottom = 0 } = inset ?? {};
@@ -1172,10 +1398,16 @@ function CameraRig({ onReady, beside = true, inset }: { onReady?: (api: IsleBoar
   const aspect = freeW / freeH;
   const freeFov = (2 * Math.atan(Math.tan(((camera.fov ?? 45) * Math.PI) / 360) * (freeH / Math.max(1, size.height))) * 180) / Math.PI;
   // With the dice tray beside it the island sits a little left; alone, in the middle and filling the view.
-  const home = (tilt = 0) =>
-    beside
-      ? { x: 0.9, z: 0.4, d: aspect < 1.2 ? 15 : 10, tilt }
-      : { x: 0, z: 0.25, d: fitDistance(aspect, freeFov, pitchAt(tilt)), tilt };
+  // Fitted once per size, for the usual view and the top view; tilts between are blended.
+  const fits = useMemo(
+    () => (beside ? null : [fitView(outline, aspect, freeFov, pitchAt(0)), fitView(outline, aspect, freeFov, pitchAt(1))] as const),
+    [beside, outline, aspect, freeFov],
+  );
+  const home = (tilt = 0) => {
+    if (!fits) return { x: 0.9, z: 0.4, d: aspect < 1.2 ? 15 : 10, tilt };
+    const [a, b] = fits;
+    return { x: 0, z: a.z + (b.z - a.z) * tilt, d: a.d + (b.d - a.d) * tilt, tilt };
+  };
   const want = useRef(home());
   const now = useRef({ ...want.current });
   // A new size (the window, or the panels around the board): frame the island again.
@@ -1253,7 +1485,7 @@ function CameraRig({ onReady, beside = true, inset }: { onReady?: (api: IsleBoar
         want.current.tilt = top ? 1 : 0;
         // From above, the board is taller than it is from the side: step back so all of it shows.
         if (top) want.current.d = Math.max(want.current.d, beside ? 12.5 : home(1).d);
-        else if (!beside) want.current.d = home(0).d;
+        else if (!beside) want.current = home(0);
         clampView();
         return top ? 'top' : 'tilted';
       },
@@ -1270,5 +1502,91 @@ function CameraRig({ onReady, beside = true, inset }: { onReady?: (api: IsleBoar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, onReady]);
 
+  return null;
+}
+
+// ---- Performance ------------------------------------------------------------------
+
+export interface IsleStats {
+  fps: number;
+  /** Average and slowest frame time over the last second, in ms (the slowest shows stutter). */
+  avgMs: number;
+  worstMs: number;
+  /** Per frame, shadow pass included. */
+  calls: number;
+  triangles: number;
+  geometries: number;
+  textures: number;
+  /** Rough GPU memory held by textures (mip levels included), in MB. */
+  textureMB: number;
+  /** The drawing buffer and the pixel ratio it's drawn at. */
+  width: number;
+  height: number;
+  dpr: number;
+  renderer: string;
+}
+
+/**
+ * Measures the board once a second for a debug panel: frame rate and pacing,
+ * draw calls and triangles each frame, what's held on the GPU, and the
+ * renderer. Counting is done by hand across a whole frame so the shadow pass
+ * shows too.
+ */
+export function IslePerf({ onStats }: { onStats: (s: IsleStats) => void }) {
+  const gl = useThree((t) => t.gl);
+  const scene = useThree((t) => t.scene);
+  const last = useRef({ at: performance.now(), frames: 0, worst: 0, prev: performance.now(), calls: 0, tris: 0 });
+  const renderer = useMemo(() => {
+    const c = gl.getContext();
+    const ext = c.getExtension('WEBGL_debug_renderer_info');
+    return String(ext ? c.getParameter(ext.UNMASKED_RENDERER_WEBGL) : c.getParameter(c.RENDERER));
+  }, [gl]);
+  useEffect(() => {
+    gl.info.autoReset = false;
+    return () => {
+      gl.info.autoReset = true;
+    };
+  }, [gl]);
+  useFrame(() => {
+    const now = performance.now();
+    const l = last.current;
+    l.worst = Math.max(l.worst, now - l.prev);
+    l.prev = now;
+    l.frames++;
+    l.calls = gl.info.render.calls;
+    l.tris = gl.info.render.triangles;
+    gl.info.reset();
+    if (now - l.at < 1000) return;
+    let bytes = 0;
+    const seen = new Set<THREE.Texture>();
+    scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
+        const tex = (mat as THREE.MeshBasicMaterial).map;
+        const img = tex?.image as { width?: number; height?: number } | undefined;
+        if (!tex || seen.has(tex) || !img?.width || !img.height) continue;
+        seen.add(tex);
+        bytes += img.width * img.height * 4 * (tex.generateMipmaps ? 1.33 : 1);
+      }
+    });
+    const size = gl.getDrawingBufferSize(new THREE.Vector2());
+    onStats({
+      fps: Math.round((l.frames * 1000) / (now - l.at)),
+      avgMs: (now - l.at) / l.frames,
+      worstMs: l.worst,
+      calls: l.calls,
+      triangles: l.tris,
+      geometries: gl.info.memory.geometries,
+      textures: gl.info.memory.textures,
+      textureMB: bytes / 1048576,
+      width: size.x,
+      height: size.y,
+      dpr: gl.getPixelRatio(),
+      renderer,
+    });
+    l.at = now;
+    l.frames = 0;
+    l.worst = 0;
+  });
   return null;
 }

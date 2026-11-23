@@ -28,6 +28,7 @@ import {
   hexArtAt,
   IDLE,
   IsleBoard,
+  IslePerf,
   pickMark,
   settleMode,
   tableView,
@@ -39,6 +40,7 @@ import {
   type IsleBoardApi,
   type IsleSound,
   type IsleState,
+  type IsleStats,
   type Mode,
   type Picked,
   type Res,
@@ -48,7 +50,7 @@ import { DevCardDialog, ResourceChooser } from './dev-cards';
 import { FlyCards, Notifications } from './effects';
 import { IsleKeyframes } from './kit';
 import { DiscardPanel, Log, Results, StealPanel } from './panels';
-import { BuildPanel, DevelopmentCardHand, DiceController, PlayerPanel, ResourceHand, TopBar } from './table-parts';
+import { BuildPanel, CornerButtons, DevelopmentCardHand, DiceController, PlayerPanel, ResourceHand, TopBar, TurnCard } from './table-parts';
 import { AnsweredOffer, IncomingOffer, TradePanel, type TradeTab } from './trade';
 
 export interface IsleTableProps {
@@ -109,6 +111,11 @@ export function IsleTable({
   const [picked, setPicked] = useState<Partial<Record<Res, boolean>>>({});
   const api = useRef<IsleBoardApi | null>(null);
   const colors = useMemo(() => view.seats.map((s) => s.color), [view.seats]);
+  // ?perf=1: a small panel with the frame rate, draw calls and what's on the GPU.
+  const [perf] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('perf'));
+  const [stats, setStats] = useState<IsleStats | null>(null);
+  const stealH = live.k === 'steal' ? live.h : null;
+  const boardHover = useMemo<Picked | null>(() => (stealH != null ? { kind: 'hex', i: stealH } : hover), [stealH, hover]);
 
   useEffect(() => {
     if (live !== mode) setMode(live);
@@ -208,80 +215,133 @@ export function IsleTable({
   // Smaller screens: the panels shrink together; narrow ones fold the side columns away behind two buttons.
   const screen = useScreen();
   const compact = screen.w < 900;
-  const ui = compact ? Math.max(0.6, Math.min(0.85, screen.w / 560)) : Math.max(0.6, Math.min(1, screen.w / 1500, screen.h / 860));
+  const ui = compact ? Math.max(0.6, Math.min(0.85, screen.w / 560)) : Math.max(0.62, Math.min(1, screen.w / 1500, screen.h / 800));
   const [drawer, setDrawer] = useState<'players' | 'build' | null>(null);
-  const topH = (compact ? TOP_COMPACT : TOP) * ui;
+  // Wide: nothing along the top (the corner buttons sit in the columns), so the board has the full height above the dock.
+  const topH = compact ? TOP_COMPACT * ui : 0;
   const sideL = compact ? 0 : SIDE_L * ui + GAP;
   const sideR = compact ? 0 : SIDE_R * ui + GAP;
-  // The island's ends are narrow, so it can reach a little under the dock and the top bar, which only cover the middle.
-  const inset = useMemo<Inset>(() => ({ left: sideL + GAP, right: sideR + GAP, top: compact ? topH : topH * 0.6, bottom: dockH * 0.55 }), [dockH, sideL, sideR, topH, compact]);
+  // The board is framed strictly inside what the panels leave free: nothing covers it.
+  const inset = useMemo<Inset>(() => ({ left: sideL + GAP, right: sideR + GAP, top: topH + GAP, bottom: dockH + GAP / 2 }), [dockH, sideL, sideR, topH]);
 
   const openTrade = (tab: TradeTab) => setTrading({ tab });
+  const corner = {
+    top,
+    muted,
+    music,
+    showLog,
+    onExit,
+    onLog: () => setShowLog((v) => !v),
+    onTop: () => setTop(api.current?.toggleTop() === 'top'),
+    onToggleSound,
+    onToggleMusic,
+  };
+  // Someone's offer waiting on me, or my answer to it: in the left column, under whose turn it is.
+  const asked =
+    view.incoming && !trading?.counter ? (
+      <IncomingOffer state={state} view={view} onAnswer={(yes) => move({ t: 'reply', yes })} onCounter={() => setTrading({ tab: 'players', counter: true })} />
+    ) : view.answered ? (
+      <AnsweredOffer view={view} />
+    ) : null;
   const start: Partial<Hand> = Object.fromEntries(Object.entries(picked).flatMap(([r, on]) => (on ? [[r, 1]] : [])));
 
   return (
     <div className="fixed inset-0 z-50 select-none overflow-hidden bg-[#2E8FAE] font-sans">
       <IsleKeyframes />
       <BoardSurface api={api} onTap={tap} onPoint={point} hovering={!!hover}>
-        <Canvas shadows={quality !== 'low'} dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 120 }} resize={{ debounce: 0 }} style={{ pointerEvents: 'none' }}>
-          <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} hexArt={HEX_ART} showDice={false} hover={hover} inset={inset} />
+        {/*
+          Drawn at the screen's own pixel density (capped at 2), antialiased; the camera's near and far planes sit
+          just around the board's range (it's never nearer than 5 or further than ~60), which keeps depth precise
+          enough that nothing flickers against what it rests on.
+        */}
+        <Canvas
+          shadows={quality !== 'low'}
+          dpr={[1, 2]}
+          gl={{ antialias: true, powerPreference: 'high-performance' }}
+          camera={{ fov: 40, near: 1, far: 90 }}
+          resize={{ debounce: 0 }}
+          style={{ pointerEvents: 'none' }}
+        >
+          <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} hexArt={HEX_ART} showDice={false} hover={boardHover} inset={inset} />
+          {perf ? <IslePerf onStats={setStats} /> : null}
         </Canvas>
       </BoardSurface>
 
-      <TopBar
-        ui={ui}
-        compact={compact}
-        drawer={drawer}
-        onDrawer={(d) => setDrawer((x) => (x === d ? null : d))}
-        view={view}
-        state={state}
-        thinking={botThinking}
-        top={top}
-        muted={muted}
-        music={music}
-        showLog={showLog}
-        onExit={onExit}
-        onLog={() => setShowLog((v) => !v)}
-        onTop={() => setTop(api.current?.toggleTop() === 'top')}
-        onToggleSound={onToggleSound}
-        onToggleMusic={onToggleMusic}
-      />
+      {compact ? (
+        <TopBar
+          ui={ui}
+          compact
+          drawer={drawer}
+          onDrawer={(d) => setDrawer((x) => (x === d ? null : d))}
+          view={view}
+          state={state}
+          thinking={botThinking}
+          top={top}
+          muted={muted}
+          music={music}
+          showLog={showLog}
+          onExit={onExit}
+          onLog={() => setShowLog((v) => !v)}
+          onTop={() => setTop(api.current?.toggleTop() === 'top')}
+          onToggleSound={onToggleSound}
+          onToggleMusic={onToggleMusic}
+        />
+      ) : null}
 
-      {/* Left: the players. */}
+      {/* Left: whose turn and what's happening, anything asked of me, then the players. */}
       {!compact || drawer === 'players' ? (
-        <Column side="left" width={SIDE_L} ui={ui} top={topH} bottom={dockH + GAP}>
-          <PlayerPanel seats={view.seats} thinking={botThinking} goal={GOAL} />
+        <Column side="left" width={SIDE_L} ui={ui} top={topH} bottom={GAP}>
+          <div className="flex flex-col gap-2">
+            {compact ? null : <CornerButtons side="left" {...corner} />}
+            {compact ? null : <TurnCard view={view} state={state} thinking={botThinking} />}
+            {asked}
+            <PlayerPanel seats={view.seats} thinking={botThinking} goal={GOAL} />
+          </div>
         </Column>
       ) : null}
 
-      {/* Right: build and trade. */}
+      {/* Right: the turn's actions (dice, roll, end turn, trade), then building and the bank. */}
       {!compact || drawer === 'build' ? (
-        <Column side="right" width={SIDE_R} ui={ui} top={topH} bottom={dockH + GAP}>
-          <BuildPanel
-            view={view}
-            state={state}
-            mode={live}
-            onPick={(what) => {
-              if (what === 'dev') move({ t: 'buy' });
-              else setMode(live.k === 'build' && live.what === what ? IDLE : { k: 'build', what });
-              if (compact && what !== 'dev') setDrawer(null);
-            }}
-            onTrade={() => {
-              openTrade('players');
-              setDrawer(null);
-            }}
-            onBank={() => {
-              openTrade('bank');
-              setDrawer(null);
-            }}
-          />
+        <Column side="right" width={SIDE_R} ui={ui} top={topH} bottom={GAP}>
+          <div className="flex flex-col gap-2">
+            {compact ? null : <CornerButtons side="right" {...corner} />}
+            {compact ? null : (
+              <DiceController state={state} view={view} onRoll={() => move({ t: 'roll' })} onEnd={() => move({ t: 'end' })} onTrade={() => openTrade('players')} onBank={() => openTrade('bank')} />
+            )}
+            <BuildPanel
+              view={view}
+              state={state}
+              mode={live}
+              onPick={(what) => {
+                if (what === 'dev') move({ t: 'buy' });
+                else setMode(live.k === 'build' && live.what === what ? IDLE : { k: 'build', what });
+                if (compact && what !== 'dev') setDrawer(null);
+              }}
+              onTrade={
+                compact
+                  ? () => {
+                      openTrade('players');
+                      setDrawer(null);
+                    }
+                  : undefined
+              }
+              onBank={
+                compact
+                  ? () => {
+                      openTrade('bank');
+                      setDrawer(null);
+                    }
+                  : undefined
+              }
+            />
+          </div>
         </Column>
       ) : null}
 
-      {/* Bottom: dice, resource cards, development cards. */}
-      <div ref={dock} className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center px-3 pb-3">
-        <div className="flex flex-wrap items-end justify-center gap-3" style={{ zoom: compact ? Math.max(0.55, screen.w / 1250) : ui }}>
-          <DiceController state={state} view={view} onRoll={() => move({ t: 'roll' })} onEnd={() => move({ t: 'end' })} />
+      {/* Bottom, between the columns: my resource cards and, apart, my development cards (the dice too on a narrow screen). */}
+      <div ref={dock} className="pointer-events-none absolute bottom-0 z-10 flex justify-center pb-2" style={{ left: sideL + GAP, right: sideR + GAP }}>
+        <div className="flex flex-wrap items-end justify-center gap-2.5" style={{ zoom: compact ? Math.max(0.55, screen.w / 1250) : ui }}>
+          {compact ? <DiceController state={state} view={view} onRoll={() => move({ t: 'roll' })} onEnd={() => move({ t: 'end' })} /> : null}
           <ResourceHand view={view} picked={picked} onPick={(r) => setPicked((p) => ({ ...p, [r]: !p[r] }))} />
           <DevelopmentCardHand view={view} onOpen={setDevOpen} />
         </div>
@@ -290,13 +350,13 @@ export function IsleTable({
       {showLog ? <Log state={state} me={me} colors={colors} onClose={() => setShowLog(false)} /> : null}
 
       {/* What's being asked of me, and the panels over the board. */}
-      {view.incoming && !trading?.counter ? (
-        <IncomingOffer state={state} view={view} onAnswer={(yes) => move({ t: 'reply', yes })} onCounter={() => setTrading({ tab: 'players', counter: true })} />
-      ) : null}
-      {view.answered && !view.incoming ? <AnsweredOffer view={view} /> : null}
       {view.discard > 0 ? <DiscardPanel hand={view.hand} owed={view.discard} onDone={(cards) => move({ t: 'discard', cards })} /> : null}
       {live.k === 'steal' ? (
-        <StealPanel view={view} from={live.from} onPick={(from) => move({ t: 'robber', h: live.h, from }) && setMode(IDLE)} onCancel={() => setMode(IDLE)} />
+        <div className="pointer-events-none absolute inset-x-0 z-20 flex justify-center" style={{ bottom: dockH + GAP }}>
+          <div className="w-[300px]">
+            <StealPanel view={view} from={live.from} onPick={(from) => move({ t: 'robber', h: live.h, from }) && setMode(IDLE)} onCancel={() => setMode(IDLE)} />
+          </div>
+        </div>
       ) : null}
       {live.k === 'plenty' || live.k === 'monopoly' ? (
         <ResourceChooser
@@ -340,7 +400,8 @@ export function IsleTable({
       {view.over ? <Results state={state} view={view} onNewGame={onNewGame} onExit={onExit} /> : null}
 
       <FlyCards state={state} me={me} toScreen={toScreen} />
-      <Notifications state={state} me={me} colors={colors} right={sideR + GAP} />
+      {perf && stats ? <PerfPanel s={stats} /> : null}
+      <Notifications state={state} me={me} colors={colors} right={sideR + GAP} top={topH + GAP} />
 
       {problem ? (
         <div
@@ -359,7 +420,7 @@ export function IsleTable({
 function Column({ side, width, ui, top, bottom, children }: { side: 'left' | 'right'; width: number; ui: number; top: number; bottom: number; children: ReactNode }) {
   return (
     <div className="pointer-events-none absolute z-10 overflow-y-auto [scrollbar-width:none]" style={{ [side]: GAP, top: top + 4, bottom, width: width * ui }}>
-      <div className="flex flex-col" style={{ zoom: ui, width }}>
+      <div style={{ zoom: ui, width }}>
         {children}
       </div>
     </div>
@@ -442,6 +503,25 @@ function BoardSurface({
       onPointerCancel={(e) => pointers.current.delete(e.pointerId)}
     >
       {children}
+    </div>
+  );
+}
+
+/** The ?perf=1 panel. */
+function PerfPanel({ s }: { s: IsleStats }) {
+  const tone = s.fps >= 58 ? 'text-[#9BE38A]' : s.fps >= 40 ? 'text-[#F6CF62]' : 'text-[#FF8A70]';
+  return (
+    <div className="pointer-events-none absolute bottom-2 left-2 z-50 rounded-[8px] bg-black/75 px-2.5 py-1.5 font-mono text-[11px] leading-[1.45] text-white">
+      <div className={tone}>
+        {s.fps} fps · {s.avgMs.toFixed(1)} ms avg · {s.worstMs.toFixed(1)} ms worst
+      </div>
+      <div>
+        {s.calls} draws · {(s.triangles / 1000).toFixed(0)}k tris · {s.geometries} geo · {s.textures} tex ({s.textureMB.toFixed(1)} MB)
+      </div>
+      <div>
+        {s.width}×{s.height} @ {s.dpr.toFixed(2)}x
+      </div>
+      <div className="max-w-[340px] truncate opacity-70">{s.renderer}</div>
     </div>
   );
 }

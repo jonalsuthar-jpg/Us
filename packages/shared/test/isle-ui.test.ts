@@ -103,4 +103,20 @@ describe('isle screen', () => {
     expect(notesFor(t, n, me).map((x) => x.text)).toContain(`Trade done with ${s.players[b]!.name}`);
     expect(notesFor(t, n, b).map((x) => x.text)).toContain(`Trade done with ${s.players[me]!.name}`);
   });
+
+  it('moves the robber only once the land is confirmed, after a 7', () => {
+    const s = structuredClone(played(9, (t) => t.phase === 'main'));
+    const me = s.turn;
+    s.phase = 'robber';
+    s.dice = [3, 4];
+    s.afterRobber = 'main';
+    expect(tableView(s, me).prompt).toBe('You rolled 7! Move the robber to another land');
+    expect(tableView(s, me).robber).toMatchObject({ cause: 'seven', step: 'move', mine: true });
+    const h = TOPOLOGY.hexes.findIndex((_, i) => i !== s.robber);
+    const r = tapBoard(s, me, IDLE, { kind: 'hex', i: h });
+    expect(r.action).toBeUndefined();
+    expect(r.mode).toMatchObject({ k: 'steal', h });
+    const moved = apply(s, me, { t: 'robber', h, from: (r.mode as { from: number[] }).from[0] ?? null }) as IsleState;
+    expect(tableView(moved, me).prompt).toBe('Robber moved: build, trade, or end your turn');
+  });
 });

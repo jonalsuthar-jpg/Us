@@ -146,6 +146,11 @@ export interface TableView {
   rates: Hand;
   /** I owe this many cards on a 7. */
   discard: number;
+  /**
+   * The robber's sequence while it's under way: after a 7 (everyone over 7
+   * cards gives back half, then the robber moves and steals) or a knight.
+   */
+  robber: { cause: 'seven' | 'knight'; step: 'discard' | 'move'; owing: { p: number; n: number }[]; mine: boolean } | null;
   /** An offer someone else made, waiting on my answer. */
   incoming: { from: number; give: Partial<Hand>; want: Partial<Hand>; canAccept: boolean } | null;
   /** My own offer on the table, the answers so far and any counter-offers. */
@@ -172,8 +177,9 @@ function promptFor(s: IsleState, me: number, mode: Mode): string {
     return `${seatName(s, me, p)} is placing a ${town ? 'town' : 'road'}`;
   }
   if (s.phase === 'discard') {
-    if (s.owed[me]) return `A 7! Give back ${s.owed[me]} cards`;
-    return 'Waiting for cards to be given back';
+    if (s.owed[me]) return `A 7! Give back ${s.owed[me]} of your cards`;
+    const who = s.owed.flatMap((n, p) => (n ? [seatName(s, me, p)] : []));
+    return `A 7! Waiting for ${who.join(' and ')} to give back cards`;
   }
   if (s.offer && s.offer.from !== me) {
     if (s.offer.replies[me] === null) return `${seatName(s, me, s.offer.from)} wants to trade`;
@@ -181,16 +187,17 @@ function promptFor(s: IsleState, me: number, mode: Mode): string {
   }
   const rolled = s.dice ? s.dice[0] + s.dice[1] : null;
   if (s.turn !== me) {
-    if (s.phase === 'robber') return `${who} is moving the robber`;
-    if (rolled && s.phase === 'main') return `${who} rolled ${rolled}`;
+    if (s.phase === 'robber') return `${who} ${rolled === 7 && s.afterRobber === 'main' ? 'rolled 7 and is' : 'is'} moving the robber`;
+    if (rolled && s.phase === 'main') return rolled === 7 ? `${who} rolled 7 and moved the robber` : `${who} rolled ${rolled}`;
     return turn.bot ? `${who} is playing` : `${who}’s turn`;
   }
-  if (mode.k === 'steal') return 'Who do you take a card from?';
-  if (s.phase === 'robber') return 'Move the robber to a land';
+  if (mode.k === 'steal') return mode.from.length ? 'Choose who to take a card from' : 'Nobody to rob there: confirm the move';
+  if (s.phase === 'robber') return s.afterRobber === 'roll' ? 'Knight: move the robber to another land' : 'You rolled 7! Move the robber to another land';
   if (s.phase === 'roads') return `Place a free road (${s.freeRoads} left)`;
   if (s.phase === 'roll') return 'Your turn: roll the dice';
   if (s.offer) return 'Waiting for answers to your offer';
   if (mode.k === 'build') return mode.what === 'road' ? 'Tap where the road goes' : mode.what === 'settle' ? 'Tap where the town goes' : 'Tap a town to make it a city';
+  if (rolled === 7) return 'Robber moved: build, trade, or end your turn';
   return rolled ? `You rolled ${rolled}: build, trade, or end your turn` : 'Build, trade, or end your turn';
 }
 
@@ -295,7 +302,7 @@ export function tableView(s: IsleState, me: number, mode: Mode = IDLE): TableVie
     hand: pl ? { ...pl.hand } : { wood: 0, brick: 0, wool: 0, grain: 0, ore: 0 },
     dev,
     prompt: promptFor(s, me, mode),
-    marks: mode.k === 'steal' ? { hexes: [mode.h] } : marksFor(s, me, mode),
+    marks: marksFor(s, me, mode),
     canRoll: myTurn && s.phase === 'roll',
     canEnd: main,
     canTrade: main && !!pl && handSize(pl.hand) > 0,
@@ -305,6 +312,15 @@ export function tableView(s: IsleState, me: number, mode: Mode = IDLE): TableVie
     harbours: harboursOf(s, me),
     turnNo: s.turnNo,
     discard: s.phase === 'discard' ? s.owed[me] ?? 0 : 0,
+    robber:
+      s.phase === 'discard' || s.phase === 'robber'
+        ? {
+            cause: s.phase === 'robber' && s.afterRobber === 'roll' ? 'knight' : 'seven',
+            step: s.phase === 'discard' ? 'discard' : 'move',
+            owing: s.owed.flatMap((n, p) => (n ? [{ p, n }] : [])),
+            mine: s.turn === me,
+          }
+        : null,
     incoming:
       o && o.from !== me && o.replies[me] === null && pl
         ? { from: o.from, give: o.give, want: o.want, canAccept: canPay(pl.hand, o.want) }
@@ -327,11 +343,8 @@ export function tapBoard(s: IsleState, me: number, mode: Mode, picked: Picked | 
     if (picked.kind === 'edge') return { action: { t: 'road', e: picked.i } };
     return {};
   }
-  if (s.phase === 'robber' && picked.kind === 'hex') {
-    const from = victims(s, me, picked.i);
-    if (from.length > 1) return { mode: { k: 'steal', h: picked.i, from } };
-    return { action: { t: 'robber', h: picked.i, from: from[0] ?? null }, mode: IDLE };
-  }
+  // The robber's land is chosen first, then confirmed with who to rob (if anyone), so a stray tap can't move it.
+  if (s.phase === 'robber' && picked.kind === 'hex') return { mode: { k: 'steal', h: picked.i, from: victims(s, me, picked.i) } };
   if (s.phase === 'roads' && picked.kind === 'edge') return { action: { t: 'road', e: picked.i } };
   if (mode.k === 'build') {
     if (mode.what === 'road' && picked.kind === 'edge') return { action: { t: 'road', e: picked.i }, mode: IDLE };

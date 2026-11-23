@@ -173,7 +173,7 @@ function FlyingCard({ f, onDone }: { f: Flight; onDone: (id: string) => void }) 
 
 // ---- Notes and the turn banner ---------------------------------------------------------
 
-export function Notifications({ state, me, colors, right }: { state: IsleState; me: number; colors: string[]; right: number }) {
+export function Notifications({ state, me, colors, right, top }: { state: IsleState; me: number; colors: string[]; right: number; top: number }) {
   const prev = useRef<IsleState>(state);
   const [notes, setNotes] = useState<IsleNote[]>([]);
   const [banner, setBanner] = useState<{ id: number; text: string; color: string; mine: boolean } | null>(null);
@@ -204,14 +204,14 @@ export function Notifications({ state, me, colors, right }: { state: IsleState; 
   return (
     <>
       {banner ? (
-        <div key={banner.id} className="pointer-events-none absolute left-1/2 top-[84px] z-[22] animate-[isle-banner_1.9s_ease-out_forwards]">
+        <div key={banner.id} className="pointer-events-none absolute left-1/2 z-[22] animate-[isle-banner_1.9s_ease-out_forwards]" style={{ top: top + 8 }}>
           <div className={cn('flex items-center gap-3 rounded-[14px] px-7 py-3 font-serif text-[26px] font-bold tracking-wide', banner.mine ? 'border-2 border-[#FFF3CF] bg-gradient-to-b from-[#FCE6A2] to-[#E3B24A] text-[#3B2A1E] shadow-[0_14px_30px_-8px_rgba(232,184,74,0.9)]' : cn(WOOD, 'text-[#FBEFD5]'))}>
             <span className="h-4 w-4 rounded-full border-2 border-white/80" style={{ background: banner.color }} />
             {banner.text}
           </div>
         </div>
       ) : null}
-      <div className="pointer-events-none absolute top-[76px] z-[22] flex w-[300px] flex-col items-end gap-2" style={{ right }}>
+      <div className="pointer-events-none absolute z-[22] flex w-[300px] flex-col items-end gap-2" style={{ right, top }}>
         {notes.map((n) => (
           <div
             key={n.id}

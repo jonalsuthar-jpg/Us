@@ -50,25 +50,36 @@ export function DiscardPanel({ hand, owed, onDone }: { hand: Hand; owed: number;
   );
 }
 
-export function StealPanel({ view, from, onPick, onCancel }: { view: TableView; from: number[]; onPick: (p: number) => void; onCancel: () => void }) {
+/** The robber's new land is picked: confirm it, choosing who to take a card from when there's anyone. */
+export function StealPanel({ view, from, onPick, onCancel }: { view: TableView; from: number[]; onPick: (p: number | null) => void; onCancel: () => void }) {
   return (
-    <Panel title="Take a card from…" onClose={onCancel} width={420}>
-      <p className="mb-3 text-[13px] text-black/60">One card at random from their hand.</p>
-      <div className="flex flex-col gap-2">
-        {from.map((p) => {
-          const s = view.seats[p]!;
-          return (
-            <button key={p} type="button" onClick={() => onPick(p)} className="flex items-center gap-3 rounded-[12px] bg-white/60 p-2.5 text-left transition hover:bg-white hover:shadow">
-              <Avatar s={s} size={32} />
-              <span className="flex-1 font-serif text-[16px] font-bold">{s.name}</span>
-              <span className="flex items-center gap-1 text-[13px]">
-                <Layers size={14} /> {s.cards} cards
-              </span>
-            </button>
-          );
-        })}
+    <div className={cn('pointer-events-auto rounded-[14px] p-3 text-[#3B2A1E] animate-[isle-rise-in_0.2s_ease-out]', 'bg-[radial-gradient(ellipse_at_center,#FFF7E2_0%,#F6E6C0_70%,#E6CE98_100%)] border-[3px] border-[#8A6420] shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]')}>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="font-serif text-[16px] font-bold">{from.length ? 'Take a card from…' : 'Move the robber here?'}</span>
+        <button type="button" onClick={onCancel} aria-label="Pick another land" className="rounded-full p-1 hover:bg-black/5">
+          <X size={16} />
+        </button>
       </div>
-    </Panel>
+      <p className="mb-2 text-[12px] text-black/60">{from.length ? 'One card at random from their hand. Or tap another glowing land.' : 'Nobody with cards stands by this land. Or tap another glowing land.'}</p>
+      <div className="flex flex-col gap-1.5">
+        {from.length ? (
+          from.map((p) => {
+            const s = view.seats[p]!;
+            return (
+              <button key={p} type="button" onClick={() => onPick(p)} className="flex items-center gap-2.5 rounded-[10px] bg-white/60 p-2 text-left transition hover:bg-white hover:shadow">
+                <Avatar s={s} size={26} />
+                <span className="flex-1 font-serif text-[14px] font-bold">{s.name}</span>
+                <span className="flex items-center gap-1 text-[12px]">
+                  <Layers size={13} /> {s.cards}
+                </span>
+              </button>
+            );
+          })
+        ) : (
+          <GoldButton onClick={() => onPick(null)}>Move the robber</GoldButton>
+        )}
+      </div>
+    </div>
   );
 }
 

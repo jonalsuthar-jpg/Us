@@ -6,6 +6,7 @@ import {
   cuesFor,
   notesFor,
   IsleBoard,
+  IslePerf,
   logLines,
   pickMark,
   RES_INFO,
@@ -20,6 +21,7 @@ import {
   type IsleNote,
   type IsleSound,
   type IsleState,
+  type IsleStats,
   type Mode,
   type PortKind,
   type Res,
@@ -130,6 +132,9 @@ export function IsleTable({
   const [broken, setBroken] = useState<Error | null>(null);
   const [trading, setTrading] = useState<{ tab: 'players' | 'bank'; counter?: boolean } | null>(null);
   const [devOpen, setDevOpen] = useState<Dev | null>(null);
+  // A long press on the log button: the frame rate, draw calls and what's on the GPU, for chasing slowness on a phone.
+  const [perf, setPerf] = useState(false);
+  const [stats, setStats] = useState<IsleStats | null>(null);
   const api = useRef<IsleBoardApi | null>(null);
   const art = useIsleArt();
   // Panels that no longer fit the game close: a counter to an offer that's gone, a trade once the turn moves on.
@@ -255,8 +260,14 @@ export function IsleTable({
                 }}
               >
                 <Catch onError={setBroken}>
-                  <Canvas shadows={quality !== 'low'} camera={{ fov: 45, near: 0.1, far: 120 }} events={noEvents}>
+                  {/*
+                    The near plane well out from the camera (it never comes closer than 5): phones often have a
+                    16-bit depth buffer, and a near plane of 0.1 left it too coarse to tell a tile's picture from
+                    the tile, which flickered through in blocks.
+                  */}
+                  <Canvas shadows={quality !== 'low'} camera={{ fov: 45, near: 1, far: 90 }} events={noEvents}>
                     <IsleBoard state={state} marks={view.marks} quality={quality} onReady={onReady} hexArt={HEX_ART} />
+                    {perf ? <IslePerf onStats={setStats} /> : null}
                   </Canvas>
                 </Catch>
               </View>
@@ -273,7 +284,7 @@ export function IsleTable({
                 <ChevronLeft size={20} color={CREAM} />
               </RoundButton>
             ) : null}
-            <RoundButton label="Game log" onPress={() => setShowLog((v) => !v)} active={showLog}>
+            <RoundButton label="Game log" onPress={() => setShowLog((v) => !v)} onLongPress={() => (tick(), setPerf((v) => !v), setStats(null))} active={showLog}>
               <ScrollText size={18} color={CREAM} />
             </RoundButton>
             <RoundButton label={top ? 'Tilted view' : 'Top view'} onPress={() => setTop(api.current?.toggleTop() === 'top')} active={top}>
@@ -387,6 +398,22 @@ export function IsleTable({
         {view.over ? <Results state={state} view={view} onNewGame={onNewGame} onExit={onExit} /> : null}
 
         <GainChips state={state} me={me} bottom={pad.b + 120} />
+        {perf && stats ? (
+          <View pointerEvents="none" style={{ position: 'absolute', top: pad.t + 48, left: pad.l, backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 }}>
+            <Text className="font-mono text-[10px]" style={{ color: stats.fps >= 55 ? '#9BE38A' : stats.fps >= 35 ? '#F6CF62' : '#FF8A70' }}>
+              {stats.fps} fps · {stats.avgMs.toFixed(1)} ms avg · {stats.worstMs.toFixed(1)} ms worst
+            </Text>
+            <Text className="font-mono text-[10px] text-white">
+              {stats.calls} draws · {(stats.triangles / 1000).toFixed(0)}k tris · {stats.textures} tex ({stats.textureMB.toFixed(1)} MB)
+            </Text>
+            <Text className="font-mono text-[10px] text-white">
+              {stats.width}×{stats.height} @ {stats.dpr.toFixed(2)}x (screen {PixelRatio.get()}x) · {quality}
+            </Text>
+            <Text className="font-mono text-[10px] text-white/70" numberOfLines={1}>
+              {stats.renderer}
+            </Text>
+          </View>
+        ) : null}
         <Notes state={state} me={me} top={pad.t + 48} right={pad.r + 180} colors={view.seats.map((x) => x.color)} />
 
         {problem ? (
@@ -427,9 +454,9 @@ export function ResIcon({ r, size = 20, color = '#fff' }: { r: Res; size?: numbe
   );
 }
 
-function RoundButton({ label, onPress, children, active }: { label: string; onPress: () => void; children: ReactNode; active?: boolean }) {
+function RoundButton({ label, onPress, onLongPress, children, active }: { label: string; onPress: () => void; onLongPress?: () => void; children: ReactNode; active?: boolean }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [pressed && { transform: [{ scale: 0.94 }] }]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} onLongPress={onLongPress} style={({ pressed }) => [pressed && { transform: [{ scale: 0.94 }] }]}>
       <Wood radius={20} className="h-10 w-10 items-center justify-center" style={active ? { borderColor: GOLD, borderWidth: 2 } : undefined}>
         {children}
       </Wood>
@@ -912,24 +939,34 @@ function DiscardPanel({ hand, owed, onDone }: { hand: Hand; owed: number; onDone
   );
 }
 
-function StealPanel({ view, from, onPick, onCancel }: { view: TableView; from: number[]; onPick: (p: number) => void; onCancel: () => void }) {
+/** The robber's new land is picked: confirm it, choosing who to take a card from when there's anyone. */
+function StealPanel({ view, from, onPick, onCancel }: { view: TableView; from: number[]; onPick: (p: number | null) => void; onCancel: () => void }) {
   return (
-    <Panel title="Take a card from…" onClose={onCancel}>
+    <Panel title={from.length ? 'Take a card from…' : 'Move the robber here?'} onClose={onCancel}>
+      <Text className="mb-2 text-[12px] text-black/60">{from.length ? 'One card at random from their hand.' : 'Nobody with cards stands by this land.'}</Text>
       <View className="gap-2">
-        {from.map((p) => {
-          const s = view.seats[p]!;
-          return (
-            <Pressable key={p} accessibilityRole="button" onPress={() => onPick(p)} className="flex-row items-center gap-3 rounded-[12px] bg-white/60 p-2">
-              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: s.color, borderWidth: 2, borderColor: '#fff' }} />
-              <Text className="flex-1 font-sans-bold text-[14px]" style={{ color: INK }}>
-                {s.name}
-              </Text>
-              <Text className="text-[12px]" style={{ color: INK }}>
-                {s.cards} cards
-              </Text>
-            </Pressable>
-          );
-        })}
+        {from.length ? (
+          from.map((p) => {
+            const s = view.seats[p]!;
+            return (
+              <Pressable key={p} accessibilityRole="button" onPress={() => onPick(p)} className="flex-row items-center gap-3 rounded-[12px] bg-white/60 p-2">
+                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: s.color, borderWidth: 2, borderColor: '#fff' }} />
+                <Text className="flex-1 font-sans-bold text-[14px]" style={{ color: INK }}>
+                  {s.name}
+                </Text>
+                <Text className="text-[12px]" style={{ color: INK }}>
+                  {s.cards} cards
+                </Text>
+              </Pressable>
+            );
+          })
+        ) : (
+          <GoldButton label="Move the robber" onPress={() => onPick(null)}>
+            <Text className="font-sans-bold text-[14px]" style={{ color: INK }}>
+              Move the robber
+            </Text>
+          </GoldButton>
+        )}
       </View>
     </Panel>
   );
