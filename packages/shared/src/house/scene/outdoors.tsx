@@ -9,7 +9,7 @@ import type { FunHost, FunPanel } from './fun';
 
 /**
  * The lake and the hill: the rowing boat (get in, row out round the lake and
- * back, the same ride on both phones), fishing off the jetty, shells on the
+ * back, the same ride on both phones), feeding the fish off the jetty, shells on the
  * beach that fill a jar at home, sandcastles, lanterns on the water at night,
  * waves on the shore, and love locks on the railing up on the hill.
  */
@@ -57,7 +57,9 @@ const SHELLS_KEY = 'shells';
 const CASTLE_KEY = 'sandcastle';
 const LOCKS_KEY = 'locks';
 const LOCK_COLOURS = ['#E84A6F', '#FFC93C', '#4AA8E8', '#9B5DE5', '#3CCB7F', '#FF8A3D'];
-const FISH = ['a perch', 'a little carp', 'a silver trout', 'a sunfish', 'a lucky goldfish'];
+/** Crumbs tossed off the jetty (when, by whom): the fish come up for them, on both phones. */
+const FEED_KEY = 'fish_feed';
+const FEED_S = 7;
 
 interface Ctx {
   h: FunHost;
@@ -69,10 +71,51 @@ interface Ctx {
 
 type Focus = { label: string; run: () => void };
 
+/** Off the end of the jetty: rings spreading where the crumbs landed, and a few small fish nosing up. */
+function FishFeed({ at }: { at: number }) {
+  const g = useRef<THREE.Group>(null);
+  const x = LAKE.jettyEnd.x;
+  const z = LAKE.jettyEnd.z + 1.8;
+  useFrame(() => {
+    const grp = g.current;
+    if (!grp) return;
+    const t = (Date.now() - at) / 1000 - 1;
+    grp.visible = t > 0 && t < FEED_S;
+    if (!grp.visible) return;
+    grp.children.forEach((c, i) => {
+      if (i < 3) {
+        // Rings, one after another.
+        const k = ((t + i * 0.7) % 2.1) / 2.1;
+        c.scale.setScalar(0.2 + k * 1.4);
+        ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - k);
+      } else {
+        // Fish circling in, their backs just breaking the surface now and then.
+        const j = i - 3;
+        const a = t * (0.9 + j * 0.25) + j * 2.1;
+        const rad = 0.35 + 0.25 * Math.sin(t * 0.7 + j);
+        c.position.set(Math.cos(a) * rad, -0.05 + Math.max(0, Math.sin(t * 3 + j * 1.7)) * 0.06, Math.sin(a) * rad);
+        c.rotation.y = -a;
+      }
+    });
+  });
+  return (
+    <group ref={g} position={[x, LAKE.surface + 0.01, z]} visible={false}>
+      {[0, 1, 2].map((i) => (
+        <mesh key={i} geometry={ringGeo} material={ringMats[i]} rotation={[-Math.PI / 2, 0, 0]} />
+      ))}
+      {['#E8862A', '#F2A33A', '#D9D2C0', '#E8862A'].map((c, i) => (
+        <mesh key={`f${i}`} geometry={fishGeo} material={colour(c)} scale={[0.05, 0.035, 0.13]} />
+      ))}
+    </group>
+  );
+}
+const ringGeo = new THREE.RingGeometry(0.42, 0.5, 24);
+const ringMats = [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: 0.4, depthWrite: false }));
+const fishGeo = new THREE.SphereGeometry(1, 8, 6);
+
 export function useOutdoors({ h, raw, set, partnerHere, openPanel }: Ctx) {
   const { meId } = h;
-  const st = useRef({ fishUntil: 0, biteAt: 0, biteEnd: 0, fishing: false, sunsetDay: -1 }).current;
-  const swing = useRef(0);
+  const st = useRef({ sunsetDay: -1, fedAt: 0 }).current;
 
   const ride = () => {
     const v = raw(BOAT_KEY);
@@ -129,23 +172,6 @@ export function useOutdoors({ h, raw, set, partnerHere, openPanel }: Ctx) {
       };
     }
     if (me.seat) return null;
-    // Fishing off the end of the jetty.
-    if (st.fishing) {
-      const now = h.now();
-      if (now >= st.biteAt && now < st.biteEnd)
-        return {
-          label: 'Reel it in!',
-          run: () => {
-            st.fishing = false;
-            me.doing = null;
-            const fish = FISH[Math.floor(Math.random() * FISH.length)]!;
-            h.sound?.play('splash', 0.4);
-            h.moment(`fish:${Date.now()}`, `You caught ${fish}! 🎣`, false);
-            h.wallet?.earn('fish', walletRef('fish', meId, Date.now()));
-          },
-        };
-      return { label: 'Waiting for a bite…', run: () => {} };
-    }
     if (me.at === 'jetty' && near(LAKE.boatDock.x, LAKE.boatDock.z, 2.6) && ride() === null) {
       const taken = h.them.pose?.a === 'sit:boat:0';
       return {
@@ -156,17 +182,20 @@ export function useOutdoors({ h, raw, set, partnerHere, openPanel }: Ctx) {
         },
       };
     }
-    if (me.at === 'jetty' && near(LAKE.jettyEnd.x, LAKE.jettyEnd.z, 1.4))
+    if (me.at === 'jetty' && near(LAKE.jettyEnd.x, LAKE.jettyEnd.z, 1.4) && h.now() - st.fedAt > FEED_S)
       return {
-        label: 'Cast a line',
+        label: 'Feed the fish',
         run: () => {
-          const now = h.now();
-          st.fishing = true;
-          st.biteAt = now + 4 + Math.random() * 8;
-          st.biteEnd = st.biteAt + 2.2;
+          st.fedAt = h.now();
           me.heading = Math.PI * 0.95;
-          me.doing = { act: 'water', until: st.biteEnd + 0.2 };
-          h.sound?.play('splash', 0.25);
+          h.emote('feed');
+          h.sound?.play('splash', 0.2);
+          set(FEED_KEY, { at: new Date().toISOString(), by: meId });
+          setTimeout(() => {
+            h.sound?.play('splash', 0.35);
+            h.say('The fish come up for the crumbs 🐟');
+            h.wallet?.earn('fish', walletRef('fish', meId, Date.now()));
+          }, 1400);
         },
       };
     // Shells on the beach.
@@ -190,18 +219,6 @@ export function useOutdoors({ h, raw, set, partnerHere, openPanel }: Ctx) {
   }
 
   function frame(): { banner?: string } {
-    const now = h.now();
-    // Fishing: a bite comes, and if it isn't reeled in quickly, it's gone.
-    if (st.fishing) {
-      if (now >= st.biteEnd) {
-        st.fishing = false;
-        h.say('It got away…');
-      } else if (now >= st.biteAt && Math.floor(now * 4) % 4 === 0 && swing.current < 0.5) {
-        swing.current = 1;
-        h.sound?.play('splash', 0.2);
-      }
-    }
-    swing.current = Math.max(0, swing.current - 0.02);
     // The sunset from the hill bench, together.
     const hr = worldHours(Date.now(), h.coupleId);
     const p = h.them.pose;
@@ -212,7 +229,6 @@ export function useOutdoors({ h, raw, set, partnerHere, openPanel }: Ctx) {
         h.moment(`sunset:${day}`, 'Watching the sunset from the hill 🌅');
       }
     }
-    if (st.fishing) return { banner: now >= st.biteAt ? 'A bite! Reel it in! 🎣' : 'Waiting for a bite… 🎣' };
     if (locked()) return { banner: 'Rowing round the lake 🚣' };
     return {};
   }
@@ -263,6 +279,7 @@ export function useOutdoors({ h, raw, set, partnerHere, openPanel }: Ctx) {
         {shellsOn(day).map(([x, z], i) => (taken.includes(i) ? null : <Shell key={i} x={x} z={z} i={i} />))}
         {c ? <Sandcastle x={c.x} z={c.z} /> : null}
         <Waves />
+        <FishFeed at={((v) => (v && typeof v.at === 'string' ? Date.parse(v.at) : 0))(raw(FEED_KEY))} />
         {h.night ? <Lanterns /> : null}
       </Near>
       {total > 0 ? <ShellJar n={total} /> : null}

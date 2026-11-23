@@ -215,3 +215,15 @@ describe('the village: go to…', () => {
     }
   });
 });
+
+describe('the village: what people say', () => {
+  it('mentions things to do, by the time of day', async () => {
+    const { VILLAGERS, villagerHello } = await import('../src/house/villagers');
+    const baker = VILLAGERS.find((v) => v.id === 'baker')!;
+    const lines = Array.from({ length: 12 }, (_, i) => villagerHello(baker, i * 600_000, 8));
+    expect(lines.some((l) => l.includes('Good morning! ') && l.includes('loaf'))).toBe(true);
+    expect(lines.every((l) => l.startsWith('Asha: '))).toBe(true);
+    // Without the time, just hello.
+    expect(villagerHello(baker, 0)).not.toContain('Good');
+  });
+});

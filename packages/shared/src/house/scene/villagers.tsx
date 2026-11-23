@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber';
 import { Suspense, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { worldHours } from '../sky';
 import { POND } from '../village';
 import { duckAt, VILLAGERS, villagerAt, villagerHello, type Villager } from '../villagers';
 import { newMotion, WAVE_S, type AvatarRig } from './avatar';
@@ -47,7 +48,7 @@ function OneVillager({ v, base, near, coupleId, say, show }: { v: Villager; base
     if (close && !st.close && now - st.greeted > 60_000) {
       st.greeted = now;
       motion.wave = WAVE_S;
-      if (!p.moving) say(villagerHello(v, now));
+      if (!p.moving) say(villagerHello(v, now, worldHours(now, coupleId)));
     }
     st.close = close;
     st.acc += dt;

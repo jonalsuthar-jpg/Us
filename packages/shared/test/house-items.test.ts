@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionFor, addedKey, avatarKey, cleanLook, cleanState, doorFor, HAIRS, ITEMS, PANTS, placeItems, restingY, seatPose, SHIRTS, SKINS, toLocal, toWorld, water } from '../src/house/items';
+import { actionFor, addedKey, BOUQUET, BREAD_BAG, avatarKey, cleanLook, cleanState, doorFor, HAIRS, ITEMS, PANTS, placeItems, restingY, seatPose, SHIRTS, SKINS, toLocal, toWorld, water } from '../src/house/items';
 import { FLOOR_H, walkStep, type RegionId } from '../src/house/layout';
 import { holdLoses, KEY, readItemOp, readPose } from '../src/house/presence';
 import { HouseStore, StaleHouseError, type HouseApi } from '../src/house/store';
@@ -50,7 +50,7 @@ describe('house: things in it', () => {
     expect(placed.find((i) => i.key === 'add:plantpot:abcd1234')).toMatchObject({ model: 'plantPot', x: 3, z: 1, movable: true });
     expect(placed.some((i) => i.key.startsWith('add:nonsense'))).toBe(false);
     // Things that come with our days together (or a date) wait until they're unlocked.
-    expect(placed.length).toBe(ITEMS.filter((i) => !i.unlock).length + 1);
+    expect(placed.length).toBe(ITEMS.filter((i) => !i.unlock && !i.bought).length + 1);
     expect(placed.some((i) => i.key === 'hot_tub')).toBe(false);
     expect(placeItems(new Map(), new Set(['hot_tub'])).some((i) => i.key === 'hot_tub')).toBe(true);
   });
@@ -224,5 +224,17 @@ describe('house: the store', () => {
     a.receive({ op: 'item', k: 'sofa', s: { x: 5 }, v: 3 });
     a.receive({ op: 'item', k: 'sofa', s: { x: 1 }, v: 2 });
     expect(a.items().get('sofa')).toEqual({ x: 5 });
+  });
+});
+
+describe('things bought in the village', () => {
+  it('are only there once bought, then where they were left', () => {
+    const none = placeItems(new Map());
+    expect(none.find((i) => i.key === BREAD_BAG)).toBeUndefined();
+    expect(none.find((i) => i.key === BOUQUET)).toBeUndefined();
+    const bought = placeItems(new Map([[BREAD_BAG, { at: '2026-11-23T10:00:00.000Z', x: 4.7, y: 0.9, z: 1.4 }]]));
+    const bag = bought.find((i) => i.key === BREAD_BAG);
+    expect(bag?.kind).toBe('carry');
+    expect([bag?.x, bag?.z]).toEqual([4.7, 1.4]);
   });
 });

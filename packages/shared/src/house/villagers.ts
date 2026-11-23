@@ -116,9 +116,23 @@ export function villagerAt(v: Villager, nowMs: number, coupleId = ''): VillagerP
 }
 
 /** What a villager says when you come up to them: one of theirs, the same for a while. */
-export function villagerHello(v: Villager, nowMs: number): string {
-  return `${v.name}: ${v.hello[Math.floor(nowMs / 600_000) % v.hello.length]}`;
+export function villagerHello(v: Villager, nowMs: number, hour?: number): string {
+  const part = hour === undefined ? null : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+  const tips = part ? (TIPS[v.id]?.[part] ?? []) : [];
+  const lines = [...v.hello, ...tips];
+  const line = lines[Math.floor(nowMs / 600_000) % lines.length]!;
+  return `${v.name}: ${part && tips.includes(line) ? `Good ${part}! ` : ''}${line}`;
 }
+
+/** What each of them might mention, by the world's time of day: hints at things to do. */
+const TIPS: Record<string, Partial<Record<'morning' | 'afternoon' | 'evening', string[]>>> = {
+  baker: { morning: ['The bread’s still warm: take a loaf home for breakfast.'], afternoon: ['Cardamom buns are fresh from the oven.'], evening: ['Last loaves of the day!'] },
+  barista: { morning: ['First coffee of the day? The window table’s free.'], afternoon: ['Two coffees and a quiet table?'], evening: ['Masala chai tonight, if you like.'] },
+  florist: { morning: ['Jasmine came in this morning.'], afternoon: ['Flowers to give? Hand them over yourself.'], evening: ['Take the last roses home for the vase.'] },
+  walker: { morning: ['The ducks are up early today.'], evening: ['Watch the sunset from the hill bench.'] },
+  jogger: { morning: ['The hill path is a good climb.'] },
+  stroller: { afternoon: ['Try feeding the fish off the jetty.'], evening: ['The lanterns on the lake are lovely tonight.'] },
+};
 
 /** The ducks on the pond: where each is now, paddling slow circles. */
 export function duckAt(i: number, nowMs: number, pond: { x0: number; x1: number; z0: number; z1: number }): { x: number; z: number; h: number } {

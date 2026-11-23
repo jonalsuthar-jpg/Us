@@ -127,15 +127,20 @@ export interface AvatarMotion {
   wave: number;
   heart: number;
   dance: number;
+  /** Seconds left of a sip (hand to mouth) or a bite held out to my partner. */
+  sip: number;
+  feed: number;
   /** Seconds into whatever I'm doing (cooking, watering, a hug). */
   busy: number;
 }
 
-export const newMotion = (): AvatarMotion => ({ walk: 0, stride: 0, wave: 0, heart: 0, dance: 0, busy: 0 });
+export const newMotion = (): AvatarMotion => ({ walk: 0, stride: 0, wave: 0, heart: 0, dance: 0, sip: 0, feed: 0, busy: 0 });
 
 export const WAVE_S = 2.2;
 export const HEART_S = 2.4;
 export const DANCE_S = 4;
+export const SIP_S = 1.8;
+export const FEED_S = 2;
 
 export interface Doing {
   moving: boolean;
@@ -225,6 +230,14 @@ export function animateAvatar(p: AvatarParts, m: AvatarMotion, dt: number, d: Do
     p.body.position.y += Math.abs(Math.sin(t)) * 0.08;
     p.armL.rotation.set(Math.PI - 0.3, 0, 0.4 + Math.sin(t) * 0.3);
     p.armR.rotation.set(Math.PI - 0.3, 0, -0.4 - Math.sin(t) * 0.3);
+  }
+  if (m.sip > 0) {
+    m.sip = Math.max(0, m.sip - dt);
+    p.armR.rotation.set(-2.2, 0, 0.5);
+  }
+  if (m.feed > 0) {
+    m.feed = Math.max(0, m.feed - dt);
+    p.armR.rotation.set(-1.5, 0, 0.15);
   }
   if (m.wave > 0) {
     m.wave = Math.max(0, m.wave - dt);

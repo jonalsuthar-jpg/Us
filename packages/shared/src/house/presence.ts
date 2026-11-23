@@ -17,13 +17,14 @@
  * up first keeps it (earlier hs, then the lower id), and the other lets go.
  */
 
-export type Emote = 'wave' | 'heart' | 'dance';
+/** A wave, a heart, a dance; a sip (of a coffee or chai); feeding my partner a bite. */
+export type Emote = 'wave' | 'heart' | 'dance' | 'sip' | 'feed';
 
 /** Things two of us do together, after one asks and the other says yes. */
 export type Together = 'kiss' | 'hands' | 'slow';
 export const TOGETHER: Together[] = ['kiss', 'hands', 'slow'];
 export const TOGETHER_LABEL: Record<Together, string> = { kiss: 'Kiss', hands: 'Hold hands', slow: 'Slow dance' };
-export const EMOTES: Emote[] = ['wave', 'heart', 'dance'];
+export const EMOTES: Emote[] = ['wave', 'heart', 'dance', 'sip', 'feed'];
 
 export interface Pose {
   x: number;

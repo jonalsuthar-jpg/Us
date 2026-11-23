@@ -367,6 +367,24 @@ function Model({ look }: { look: Look }): ReactNode {
           <B a={[-0.06, 0.2, -0.06]} b={[0.06, 0.24, 0.06]} m="leaves" />
         </>
       );
+    case 'breadBag':
+      // A paper bag, a loaf peeking out.
+      return (
+        <>
+          <B a={[-0.1, 0, -0.07]} b={[0.1, 0.22, 0.07]} m="cushion" />
+          <B a={[-0.06, 0.2, -0.04]} b={[0.07, 0.3, 0.04]} m="fabricWarm" />
+        </>
+      );
+    case 'bouquet':
+      // Flowers wrapped in paper, held by the stems.
+      return (
+        <group position={[0, -0.05, 0]}>
+          <B a={[-0.04, 0, -0.04]} b={[0.04, 0.2, 0.04]} m="bedding" />
+          <group position={[0, -0.05, 0]}>
+            <Bouquet />
+          </group>
+        </group>
+      );
     case 'wateringCan':
       return (
         <>

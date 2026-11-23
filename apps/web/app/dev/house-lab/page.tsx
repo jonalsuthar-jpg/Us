@@ -27,6 +27,7 @@ import {
   type HouseEvent,
   type HudState,
   type Quality,
+  worldHours,
 } from '@us/shared/house';
 import { notFound } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -121,6 +122,8 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
           onFps={(f, calls) => setFps(`${Math.round(f)} fps · ${calls} calls`)}
           houseUrl={houseUrl}
           pairedAt={PAIRED}
+          wallet={LAB_WALLET}
+          coupleId={LAB_COUPLE}
         />
       </Canvas>
       <div data-hud={who} className="pointer-events-none absolute left-3 top-3 rounded bg-black/50 px-2 py-1 font-mono text-[12px] text-white">
@@ -140,6 +143,19 @@ const PAIRED = new Date(Date.now() - 400 * 86_400_000).toISOString();
 
 // ?phone=1: the house behaves as on a phone (no shadows, nearer drawing), to measure it.
 if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('phone')) (window as unknown as { __US_PHONE__?: boolean }).__US_PHONE__ = true;
+
+/** A pretend couple whose world clock says late morning right now (shops open, daylight); ?night=1 for evening. */
+const LAB_COUPLE = (() => {
+  const want = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('night') ? [20, 21.5] : [10, 13];
+  for (let i = 0; i < 500; i++) {
+    const h = worldHours(Date.now(), `lab-${i}`);
+    if (h > want[0]! && h < want[1]!) return `lab-${i}`;
+  }
+  return '';
+})();
+
+/** Plenty of pretend money, so the shops work in the lab. */
+const LAB_WALLET = { balance: 5000, recent: [], earn: () => {}, spend: () => Promise.resolve(true) };
 
 export default function HouseLab() {
   if (process.env.NODE_ENV === 'production') notFound();
@@ -346,6 +362,42 @@ export default function HouseLab() {
         [800, () => ca.cmds.push({ t: 'walkTo', x: -52.5, y: 0, z: 55.5 })],
         [900, () => cb.cmds.push({ t: 'walkTo', x: -55, y: 0, z: 49 })],
         [62000, () => ((ca.yaw = Math.PI - 0.5), (ca.pitch = 0.2), (cb.yaw = Math.PI + 0.15), (cb.pitch = 0.2))],
+      ]);
+    if (scene === 'coffee')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 20.4, y: 0, z: 44 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 19.8, y: 0, z: 47.2, use: 'cafe_chair_2_b' })],
+        [40000, () => ca.cmds.push({ t: 'use' })],
+        [42000, () => ca.cmds.push({ t: 'walkTo', x: 18.2, y: 0, z: 47.2, use: 'cafe_chair_2_a' })],
+        [52000, () => ca.cmds.push({ t: 'use' })],
+        [53000, () => ((ca.yaw = 1.2), (ca.pitch = 1.05), (cb.yaw = -1.6), (cb.pitch = 0.4))],
+        [55500, () => cb.cmds.push({ t: "use" })],
+      ]);
+    if (scene === 'bread')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: -10.2, y: 0, z: 43 })],
+        [850, () => sa.set('basket', { n: 4 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 4.6, y: 0, z: 2.4 })],
+        [40000, () => ca.cmds.push({ t: 'use' })],
+        [42000, () => ca.cmds.push({ t: 'walkTo', x: 4.7, y: 0, z: 1.4 })],
+        [85000, () => ca.cmds.push({ t: 'use' })],
+        [86000, () => ((ca.yaw = -1.5), (ca.pitch = 1.1), (cb.yaw = -2.2), (cb.pitch = 1.0))],
+      ]);
+    if (scene === 'flowers')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: -7.8, y: 0, z: 53 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: -7.8, y: 0, z: 50.6 })],
+        [40000, () => ca.cmds.push({ t: 'use' })],
+        [42000, () => ca.cmds.push({ t: 'walkTo', x: -7.8, y: 0, z: 51.5 })],
+        [46000, () => ca.cmds.push({ t: 'use' })],
+        [49000, () => ((ca.yaw = 2.6), (ca.pitch = 0.3), (cb.yaw = -0.4), (cb.pitch = 0.3))],
+      ]);
+    if (scene === 'feed')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 19.25, y: 0.3, z: 110.9 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 18.7, y: 0.3, z: 109 })],
+        [62000, () => ca.cmds.push({ t: 'use' })],
+        [62500, () => ((ca.yaw = Math.PI + 0.3), (ca.pitch = 0.5), (cb.yaw = Math.PI - 0.2), (cb.pitch = 0.45))],
       ]);
     if (scene === 'beach')
       run([

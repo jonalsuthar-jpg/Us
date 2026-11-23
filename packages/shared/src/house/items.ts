@@ -27,6 +27,10 @@ const villageY = (x: number, z: number) => {
   return Math.max(groundY(x, z), r ? floorY(r.id, x) : 0);
 };
 
+/** The bag of bread and the bouquet, while one of us has them (bought, not yet put away). */
+export const BREAD_BAG = 'bread_bag';
+export const BOUQUET = 'bouquet_carried';
+
 export type ItemKind = 'light' | 'door' | 'tv' | 'frame' | 'carry' | 'furniture' | 'stove' | 'plant' | 'fun';
 
 /** Which shape draws it (scene/items.tsx). */
@@ -36,7 +40,7 @@ export type ItemModel =
   | 'balconyTable' | 'lounger' | 'umbrella' | 'frontDoor' | 'balconyDoor' | 'mug' | 'book' | 'pillow' | 'ball' | 'teddy'
   | 'vase' | 'wateringCan' | 'frame' | 'gardenPlant' | 'beanbag' | 'dish'
   | 'firePit' | 'logBench' | 'hotTub' | 'telescope' | 'gardenBed' | 'swing' | 'mailbox' | 'fairyLights' | 'picnic' | 'popcorn'
-  | 'blanket' | 'candles' | 'balloons' | 'cake' | 'ceilingLight' | 'gardenLamp'
+  | 'blanket' | 'candles' | 'balloons' | 'cake' | 'ceilingLight' | 'gardenLamp' | 'breadBag' | 'bouquet'
   /** A seat in the village whose look is in the village art (a bench, a café chair): nothing more to draw. */
   | 'villageSeat';
 
@@ -76,6 +80,8 @@ export interface ItemDef {
   unlock?: string;
   /** A light that hangs away from its switch: where the light is, from the item (a ceiling light switched by the door). */
   light?: [number, number, number];
+  /** Only there once bought (its state has `at`): bread from the bakery, flowers from the stall. */
+  bought?: boolean;
 }
 
 const F = FLOOR_H;
@@ -137,6 +143,9 @@ export const ITEMS: ItemDef[] = [
   { key: 'teddy', kind: 'carry', model: 'teddy', label: 'Teddy', x: -4.0, y: F + 0.6, z: 0.6, ry: T / 2, hw: 0.12, hd: 0.12 },
   { key: 'vase', kind: 'carry', model: 'vase', label: 'Flowers', x: 3.1, y: 0.78, z: 1.6, ry: 0, hw: 0.1, hd: 0.1 },
   { key: 'watering_can', kind: 'carry', model: 'wateringCan', label: 'Watering can', x: -8.6, y: 0, z: 7.4, ry: 0.5, hw: 0.15, hd: 0.1 },
+  // Bought in the village and carried home (scene/fun.tsx SHOPS).
+  { key: BREAD_BAG, kind: 'carry', model: 'breadBag', label: 'Bread', x: 0, y: 0, z: 0, ry: 0, hw: 0.12, hd: 0.08, bought: true },
+  { key: BOUQUET, kind: 'carry', model: 'bouquet', label: 'Flowers', x: 0, y: 0, z: 0, ry: 0, hw: 0.1, hd: 0.1, bought: true },
 
   // Ceiling lights, switched by each room's door; on until we switch them off. And lamps along the garden paths.
   { key: 'ceiling_living', kind: 'light', model: 'ceilingLight', label: 'Ceiling light', x: -2.7, y: 0, z: 3.72, ry: 0, hw: 0.12, hd: 0.05, light: [0.2, 2.85, -3.72] },
@@ -254,7 +263,11 @@ export const addedKey = (model: ItemModel, id: string) => `add:${model.toLowerCa
  */
 export function placeItems(saved: ReadonlyMap<string, ItemState>, unlocked?: ReadonlySet<string>): PlacedItem[] {
   const out: PlacedItem[] = [];
-  for (const d of ITEMS) if (!d.unlock || unlocked?.has(d.unlock)) out.push(place(d, saved.get(d.key) ?? {}));
+  for (const d of ITEMS) {
+    if (d.unlock && !unlocked?.has(d.unlock)) continue;
+    if (d.bought && !saved.get(d.key)?.at) continue;
+    out.push(place(d, saved.get(d.key) ?? {}));
+  }
   for (const [key, state] of saved) {
     if (byKey.has(key) || !key.startsWith('add:')) continue;
     const model = addedModel(key);
@@ -384,7 +397,7 @@ export function actionFor(item: PlacedItem, holding: string | null, watered: boo
     case 'carry':
       return holding ? null : `Pick up ${item.label.toLowerCase()}`;
     case 'stove':
-      return 'Cook';
+      return 'Cook something';
     case 'plant':
       if (holding !== 'watering_can') return null;
       return watered ? null : 'Water the plant';

@@ -101,7 +101,7 @@ export function walletLineText(l: Pick<WalletLine, 'reason' | 'delta'>): string 
     harvest: 'From the garden',
     catch: 'A catch streak',
     treasure: 'Finding the treasure',
-    fish: 'A fish from the lake',
+    fish: 'Feeding the fish',
     shells: 'Shells from the beach',
     'spend:gift': 'A gift',
     'spend:bread': 'Bread',

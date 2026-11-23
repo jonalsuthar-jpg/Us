@@ -50,10 +50,10 @@ import {
   type Throw,
   type TicTacToe,
 } from '../fun';
-import { DISH_KEY, isOn, MUSIC_KEY, placeItems, restingY, today, type PlacedItem } from '../items';
+import { BOUQUET, BREAD_BAG, DISH_KEY, isOn, MUSIC_KEY, placeItems, restingY, today, type PlacedItem } from '../items';
 import { FLOOR_H, POOL, regionAt, type RegionId } from '../layout';
 import { WORLD_DAY_MS, worldHours } from '../sky';
-import { GO_TO, TEMPLE } from '../village';
+import { CAFE_TABLES, GO_TO, TEMPLE } from '../village';
 import type { Emote, Pose } from '../presence';
 import type { HouseSound } from '../sound';
 import type { HouseStore } from '../store';
@@ -144,7 +144,8 @@ export interface FunHost {
   unlocked: ReadonlySet<string>;
   now: () => number;
   say: (text: string) => void;
-  moment: (id: string, text: string, hearts?: boolean) => void;
+  /** A line, a chime, hearts over us both; `pays` (default: when there are hearts) adds the together reward. */
+  moment: (id: string, text: string, hearts?: boolean, pays?: boolean) => void;
   notify?: (event: 'gift' | 'turn' | 'in' | 'letter') => void;
   emote: (e: Emote) => void;
   walkTo: (x: number, y: number, z: number, use?: string) => void;
@@ -161,6 +162,14 @@ const THROW_KEY = 'throw';
 const DINNER_KEY = 'dinner';
 const DATE_KEY = 'date';
 const BASKET_KEY = 'basket';
+/** Two coffees on a café table: which table, when they were served. */
+const COFFEE_KEY = 'coffee';
+const COFFEE_MIN = 15;
+/** Bread put away at home (when): a loaf on the counter for two days. */
+const BREAD_KEY = 'bread';
+const BREAD_DAYS = 2;
+/** The café tables' tops (the Poly Haven table scaled to 0.9 m across in build_village.py). */
+const CAFE_TOP = 0.845;
 const moodKey = (id: string) => `mood:${id.toLowerCase()}`;
 const NEAR = 1.3;
 const DATE_H = 3;
@@ -196,6 +205,51 @@ const SHOPS: { keeper: string; x: number; z: number; item: Priced; label: string
   { keeper: 'barista', x: 20.6, z: 44, item: 'coffee', label: 'Order two coffees', done: 'Two coffees, just how you like them ☕' },
   { keeper: 'florist', x: -7.0, z: 53, item: 'bouquet', label: 'Buy flowers', done: 'Fresh flowers for the vase at home 💐' },
 ];
+
+/** Two coffees on a café table, one each side, emptying as they're drunk. */
+function CoffeeCups({ x, z, left }: { x: number; z: number; left: number }) {
+  return (
+    <>
+      {[-1, 1].map((s) => (
+        <group key={s} position={[x + s * 0.24, CAFE_TOP, z + s * 0.05]}>
+          <mesh geometry={cupGeo} material={cupMat} position={[0, 0.045, 0]} />
+          <mesh geometry={saucerGeo} material={colour('#F4F1EA')} position={[0, 0.004, 0]} />
+          <mesh geometry={coffeeGeo} material={colour('#5A3A22')} position={[0, 0.012 + 0.07 * Math.max(0.05, left), 0]} />
+        </group>
+      ))}
+    </>
+  );
+}
+const cupGeo = new THREE.CylinderGeometry(0.045, 0.038, 0.09, 12, 1, true);
+// Open at the top: the inside shows too.
+const cupMat = new THREE.MeshLambertMaterial({ color: '#F4F1EA', side: THREE.DoubleSide });
+const saucerGeo = new THREE.CylinderGeometry(0.075, 0.07, 0.008, 14);
+const coffeeGeo = new THREE.CircleGeometry(0.042, 12).rotateX(-Math.PI / 2);
+
+/** At home: the loaf from the bakery at the clear end of the counter (past the hob), and the basket of what we picked in the garden on the dining table. */
+function CounterThings({ counter, table, bread, veg }: { counter: PlacedItem | undefined; table: PlacedItem | undefined; bread: boolean; veg: number }) {
+  return (
+    <>
+      {bread && counter ? (
+        <group position={[counter.x, counter.y + 0.92, counter.z + 1.95]}>
+          <mesh geometry={loafGeo} material={colour('#C9885E')} position={[0, 0.05, 0]} scale={[1, 0.7, 1.6]} />
+          <mesh geometry={boardGeo} material={colour('#9A6A44')} position={[0, 0.008, 0]} />
+        </group>
+      ) : null}
+      {veg && table ? (
+        <group position={[table.x + 0.2, table.y + 0.78, table.z - 0.45]}>
+          <mesh geometry={basketGeo} material={colour('#B08850')} position={[0, 0.05, 0]} />
+          {Array.from({ length: Math.min(6, veg) }, (_, k) => (
+            <mesh key={k} geometry={funSphere} material={colour(['#D94F3D', '#E8862A', '#7CB342'][k % 3]!)} position={[((k % 3) - 1) * 0.07, 0.11 + Math.floor(k / 3) * 0.04, (Math.floor(k / 3) - 0.5) * 0.06]} scale={0.04} />
+          ))}
+        </group>
+      ) : null}
+    </>
+  );
+}
+const loafGeo = new THREE.SphereGeometry(0.08, 10, 8);
+const boardGeo = new THREE.BoxGeometry(0.22, 0.016, 0.34);
+const basketGeo = new THREE.CylinderGeometry(0.14, 0.11, 0.1, 12, 1, true);
 
 /** The two players of a game, first one first. */
 function playersOf(g: Game): [string, string] {
@@ -302,6 +356,17 @@ export function useFun(h: FunHost) {
     return v as unknown as Dinner & { at: string };
   };
   const dinner = readDinner();
+  const readCoffee = (): { table: number; at: string; left: number } | null => {
+    const v = raw(COFFEE_KEY);
+    if (!v || !num(v.table) || !isStr(v.at) || !CAFE_TABLES[v.table]) return null;
+    const left = 1 - (Date.now() - Date.parse(v.at)) / (COFFEE_MIN * 60_000);
+    return left > 0 ? { table: v.table, at: v.at, left } : null;
+  };
+  const coffee = readCoffee();
+  const breadHome = ((): boolean => {
+    const v = raw(BREAD_KEY);
+    return !!v && isStr(v.at) && Date.now() - Date.parse(v.at) < BREAD_DAYS * 86_400_000;
+  })();
   const dateOn = ((): DateOn | null => {
     const v = raw(DATE_KEY);
     if (!v || (v.kind !== 'movie' && v.kind !== 'picnic') || !isStr(v.at)) return null;
@@ -875,6 +940,56 @@ export function useFun(h: FunHost) {
       const d = Math.hypot(p.x - me.pos.x, p.z - me.pos.z);
       if (d > 1.5 && d < 14 && Math.abs(p.y - me.pos.y) < 1) return { label: `Throw to ${partnerName}`, run: () => throwBall(p) };
     }
+    // Bread: put away in the kitchen.
+    if (me.hold?.key === BREAD_BAG) {
+      const counter = item('counter');
+      if (counter && dist2(counter.x, counter.z) < 2 && Math.abs(counter.y - me.pos.y) < 1)
+        return {
+          label: 'Put the bread away',
+          run: () => {
+            me.hold = null;
+            set(BREAD_BAG, null);
+            set(BREAD_KEY, { at: new Date().toISOString() });
+            h.say('Fresh bread for breakfast 🍞');
+          },
+        };
+      return null;
+    }
+    // Flowers: give them, or into the vase at home.
+    if (me.hold?.key === BOUQUET) {
+      if (p && h.them.shown && Math.hypot(p.x - me.pos.x, p.z - me.pos.z) < 1.6 && Math.abs(p.y - me.pos.y) < 1 && !p.hk)
+        return {
+          label: `Give the flowers to ${partnerName}`,
+          run: () => {
+            me.hold = null;
+            set(BOUQUET, { ...(raw(BOUQUET) ?? {}), giveTo: partnerId });
+            h.emote('feed');
+            h.moment(`flowers:${raw(BOUQUET)?.at ?? now}`, `Flowers for ${partnerName} 💐`);
+          },
+        };
+      const vase = item('vase');
+      if (vase && dist2(vase.x, vase.z) < 1.8 && Math.abs(vase.y - me.pos.y) < 1.5)
+        return {
+          label: 'Put them in the vase',
+          run: () => {
+            me.hold = null;
+            set(BOUQUET, null);
+            set('vase', { ...(raw('vase') ?? {}), at: new Date().toISOString() });
+            h.say('Fresh flowers in the vase 💐');
+          },
+        };
+      return null;
+    }
+    // Coffee at the café: a sip, sitting at our table.
+    const coffee = readCoffee();
+    if (coffee && me.seat?.key.startsWith(`cafe_chair_${coffee.table}_`))
+      return {
+        label: 'Take a sip ☕',
+        run: () => {
+          h.emote('sip');
+          h.sound?.play('pop', 0.2);
+        },
+      };
     if (me.hold && me.hold.key !== 'watering_can') return null;
 
     // Playing at the table.
@@ -954,9 +1069,25 @@ export function useFun(h: FunHost) {
           void h.wallet.spend(shop.item, walletRef(shop.item, meId, Date.now())).then((ok) => {
             if (!ok) return h.say(`Not enough money (${formatRupees(PRICES[shop.item])})`);
             h.sound?.play('chime', 0.4);
-            h.moment(`buy:${shop.item}:${Date.now()}`, shop.done, partnerHere());
-            // Flowers from the stall go in the vase at home.
-            if (shop.item === 'bouquet') set('vase', { ...(raw('vase') ?? {}), at: new Date().toISOString() });
+            h.moment(`buy:${shop.item}:${Date.now()}`, shop.done, partnerHere(), false);
+            const at = new Date().toISOString();
+            if (shop.item === 'bread' || shop.item === 'bouquet') {
+              // Into my hand, to carry home (or to give).
+              const key = shop.item === 'bread' ? BREAD_BAG : BOUQUET;
+              if (h.me.hold) h.say('Your hands are full: it’s waiting on the counter');
+              set(key, { at, x: shop.x + 0.6, y: 0.9, z: shop.z });
+              if (!h.me.hold) h.me.hold = { key, since: Date.now() };
+            }
+            if (shop.item === 'coffee') {
+              // On the table nearest me; Leo brings them over.
+              let table = 0;
+              CAFE_TABLES.forEach(([x, z], i) => {
+                const [bx, bz] = CAFE_TABLES[table]!;
+                if (Math.hypot(x - h.me.pos.x, z - h.me.pos.z) < Math.hypot(bx - h.me.pos.x, bz - h.me.pos.z)) table = i;
+              });
+              set(COFFEE_KEY, { table, at, by: meId });
+              setTimeout(() => h.say('Leo: Your coffees are on the table ☕ Take a seat'), 1800);
+            }
           });
         },
       };
@@ -1233,6 +1364,21 @@ export function useFun(h: FunHost) {
     if (aarti && !hud.banner) hud.banner = 'Evening aarti 🪔';
     h.sound?.loop('aarti', aarti ? 0.45 : 0);
 
+    // Flowers handed to me: into my hand (once they've let go of them).
+    const given = raw(BOUQUET);
+    if (given && given.giveTo === meId && !h.me.hold && h.them.pose?.hk !== BOUQUET && !ui.told.has(`given:${String(given.at)}`)) {
+      ui.told.add(`given:${String(given.at)}`);
+      h.me.hold = { key: BOUQUET, since: Date.now() };
+      set(BOUQUET, { ...given, giveTo: null });
+      h.moment(`flowers-got:${String(given.at)}`, `Flowers from ${partnerName} 💐`, true, false);
+    }
+
+    // A coffee date: both of us sitting at the table our coffees are on.
+    const cup = readCoffee();
+    const theirSeat = h.them.pose?.a;
+    if (cup && h.me.seat?.key.startsWith(`cafe_chair_${cup.table}_`) && theirSeat?.startsWith(`sit:cafe_chair_${cup.table}_`))
+      h.moment(`coffee:${cup.at}`, 'A coffee date ☕');
+
     const outside = outdoors.frame();
     if (!hud.banner && outside.banner) hud.banner = outside.banner;
 
@@ -1357,6 +1503,12 @@ export function useFun(h: FunHost) {
       <MoodOrb who={h.them.pos} colourOf={theirMood?.ring} hidden={!h.them.shown} />
       {h.night ? <NightSky /> : null}
       {outdoors.scene}
+      {coffee ? (
+        <Near near={h.me.pos} x={CAFE_TABLES[coffee.table]![0]} z={CAFE_TABLES[coffee.table]![1]} r={30}>
+          <CoffeeCups x={CAFE_TABLES[coffee.table]![0]} z={CAFE_TABLES[coffee.table]![1]} left={coffee.left} />
+        </Near>
+      ) : null}
+      <CounterThings counter={item('counter')} table={item('dining_table')} bread={breadHome} veg={basket()} />
       <Near near={h.me.pos} x={TEMPLE.lingam.x} z={TEMPLE.lingam.z} r={40}>
         <TempleThings lit={diyas().by.length} swing={bellSwing} aarti={aartiNow} barefoot={[h.me.at === 'templeHall', h.them.pose?.b === 1]} />
       </Near>

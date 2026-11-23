@@ -186,6 +186,17 @@ export function RealAvatar({ base, look, rigRef, ringColor, ring = true }: { bas
           aim(B.upperarm_l, V(0.3, 0.05, 1), rq);
           aim(B.lowerarm_l, V(-0.9, 0.05, 0.4), rq);
         }
+        // A sip: the hand comes up to the mouth. Feeding: a bite held out in front, at their mouth's height.
+        if (m.sip > 0) {
+          aim(B.upperarm_r, V(-0.25, -0.35, 0.55), rq);
+          aim(B.lowerarm_r, V(0.55, 0.8, 0.25), rq);
+          m.sip = Math.max(0, m.sip - dt);
+        }
+        if (m.feed > 0) {
+          aim(B.upperarm_r, V(-0.1, 0.05, 1), rq);
+          aim(B.lowerarm_r, V(0.15, 0.3, 1), rq);
+          m.feed = Math.max(0, m.feed - dt);
+        }
         if (m.wave > 0) {
           waveT += dt;
           aim(B.upperarm_r, V(-0.55, 0.85, 0.15), rq);

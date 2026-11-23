@@ -29,7 +29,7 @@ import { holdLoses, type Emote, type HousePresence, type Pose, type Together } f
 import { isNight, skyAt, weatherFor, worldHours, type Weather } from '../sky';
 import { LOOPS, MUSIC_S, nearness, stepSound, type HouseSound } from '../sound';
 import type { HouseStore } from '../store';
-import { Avatar, bodyAct, DANCE_S, HEART_S, newMotion, WAVE_S, type AvatarRig } from './avatar';
+import { Avatar, bodyAct, DANCE_S, FEED_S, HEART_S, newMotion, SIP_S, WAVE_S, type AvatarRig } from './avatar';
 import { useFun, useUnlocked, withMailbox, type FunCmd, type FunHud, type HouseLetters, type HouseWallet } from './fun';
 import { formatRupees, PRICES, walletRef } from '../../api/wallet';
 import { RealAvatar } from './avatar-real';
@@ -218,7 +218,6 @@ const SUNSET_LIGHT = new THREE.Color('#FFB070');
 const FLIES: [number, number][] = Array.from({ length: 28 }, (_, i) => [-12 + ((i * 37) % 24), 5 + ((i * 53) % 9)]);
 const SKY_NIGHT = new THREE.Color('#0D1630');
 const REACH = 1.05;
-const COOK_S = 6;
 const WATER_S = 2.5;
 const HUG_S = 3;
 /** Things in the house and the village beyond this (in x + z) aren't drawn. */
@@ -429,6 +428,8 @@ export function HouseWorld(props: WorldProps) {
     return presence.onEmote((e) => {
       if (e === 'wave') them.motion.wave = WAVE_S;
       else if (e === 'dance') them.motion.dance = DANCE_S;
+      else if (e === 'sip') them.motion.sip = SIP_S;
+      else if (e === 'feed') them.motion.feed = FEED_S;
       else them.motion.heart = HEART_S;
     });
   }, [presence, them]);
@@ -500,7 +501,8 @@ export function HouseWorld(props: WorldProps) {
   }, []);
   useEffect(() => () => starGeo.dispose(), [starGeo]);
 
-  const moment = (id: string, text: string, hearts = true) => {
+  // Hearts over us both; something we did together also pays (not something we bought).
+  const moment = (id: string, text: string, hearts = true, pays = hearts) => {
     if (moments.current.has(id)) return;
     moments.current.add(id);
     onMoment?.(text);
@@ -508,7 +510,9 @@ export function HouseWorld(props: WorldProps) {
     if (hearts) {
       me.motion.heart = HEART_S;
       them.motion.heart = HEART_S;
-      if (them.shown) wallet?.earn('together', walletRef('together', id));
+    }
+    if (pays && them.shown) {
+      wallet?.earn('together', walletRef('together', id));
     }
   };
 
@@ -669,9 +673,9 @@ export function HouseWorld(props: WorldProps) {
         me.hold = { key: item.key, since: Date.now() };
         return;
       case 'stove':
+        // One way to cook: the recipes (a dinner under way has its own step at the stove, in fun.tsx).
         me.heading = item.ry + Math.PI;
-        me.doing = { act: 'cook', until: clock.elapsedTime + COOK_S };
-        return;
+        return fun.cmd({ t: 'pick', id: 'dinner' });
       case 'plant':
         return;
       case 'fun':
@@ -757,6 +761,8 @@ export function HouseWorld(props: WorldProps) {
 
     for (const e of controls.emotes.splice(0)) {
       if (e === 'wave') me.motion.wave = WAVE_S;
+      else if (e === 'sip') me.motion.sip = SIP_S;
+      else if (e === 'feed') me.motion.feed = FEED_S;
       else if (e === 'dance') {
         me.motion.dance = DANCE_S;
         if (p && them.motion.dance > 0 && Math.hypot(p.x - me.pos.x, p.z - me.pos.z) < 3) moment(`dance:${Math.floor(now / 20)}`, 'Dancing together');
