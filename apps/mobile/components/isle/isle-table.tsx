@@ -4,6 +4,7 @@ import {
   DEV_INFO,
   IDLE,
   cuesFor,
+  notesFor,
   IsleBoard,
   logLines,
   pickMark,
@@ -16,9 +17,11 @@ import {
   type Hand,
   type IsleAction,
   type IsleBoardApi,
+  type IsleNote,
   type IsleSound,
   type IsleState,
   type Mode,
+  type PortKind,
   type Res,
   type SeatView,
   type TableView,
@@ -34,6 +37,7 @@ import {
   Dice5,
   Hourglass,
   House,
+  Landmark,
   Layers,
   Map as MapIcon,
   Rotate3d,
@@ -45,6 +49,7 @@ import {
   Shield,
   Sparkles,
   Trophy,
+  Users,
   Volume2,
   VolumeX,
   X,
@@ -61,10 +66,13 @@ import { Text } from '../ui/text';
 
 /**
  * Isle's table on a phone, sideways: the board, the four seats down the
- * right, the build bar on the left, my cards along the bottom with the
- * trade, dice and end-turn buttons, and panels over the board for trading,
- * a 7, robbing, playing a card and the end of the game. Drag to look around,
- * pinch to zoom, tap a glowing spot to build there.
+ * right, the build bar on the left, my five kinds of card along the bottom
+ * with my development cards apart from them and the trade, dice and end-turn
+ * buttons, and panels over the board for trading (with the players, with
+ * counter-offers, or the bank), a development card up close, a 7, robbing
+ * and the end of the game. Short notes say what just happened, and a banner
+ * whose turn it is. Drag to look around, pinch to zoom, tap a glowing spot
+ * to build there.
  *
  * It only draws a game state and hands moves to onMove (see isle-view.tsx).
  */
@@ -120,8 +128,15 @@ export function IsleTable({
   const [top, setTop] = useState(false);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [broken, setBroken] = useState<Error | null>(null);
+  const [trading, setTrading] = useState<{ tab: 'players' | 'bank'; counter?: boolean } | null>(null);
+  const [devOpen, setDevOpen] = useState<Dev | null>(null);
   const api = useRef<IsleBoardApi | null>(null);
   const art = useIsleArt();
+  // Panels that no longer fit the game close: a counter to an offer that's gone, a trade once the turn moves on.
+  useEffect(() => {
+    if (trading?.counter && !view.incoming) setTrading(null);
+    else if (trading && !trading.counter && !view.canTrade && !view.outgoing) setTrading(null);
+  }, [trading, view.incoming, view.canTrade, view.outgoing]);
 
   useEffect(() => {
     if (live !== mode) setMode(live);
@@ -293,6 +308,8 @@ export function IsleTable({
             view={view}
             mode={live}
             onPick={(what) => {
+              const b = view.build.find((x) => x.what === what)!;
+              if (!b.ok) return setProblem(b.why ?? 'Not now');
               if (what === 'dev') move({ t: 'buy' });
               else {
                 tick();
@@ -300,23 +317,15 @@ export function IsleTable({
               }
             }}
           />
-          <HandRow
-            view={view}
-            onPlay={(card) => {
-              if (card === 'knight') move({ t: 'knight' });
-              else if (card === 'roads') move({ t: 'roads' });
-              else if (card === 'plenty') setMode({ k: 'plenty' });
-              else if (card === 'monopoly') setMode({ k: 'monopoly' });
-            }}
-          />
+          <HandRow view={view} onOpen={(card) => (tick(), setDevOpen(card))} />
           <Actions
             view={view}
-            trading={live.k === 'trade'}
+            trading={!!trading}
             onRoll={() => move({ t: 'roll' })}
             onEnd={() => move({ t: 'end' })}
             onTrade={() => {
               tick();
-              setMode(live.k === 'trade' ? IDLE : { k: 'trade' });
+              setTrading((t) => (t ? null : { tab: 'players' }));
             }}
           />
         </View>
@@ -328,7 +337,7 @@ export function IsleTable({
         {live.k === 'plenty' ? (
           <PickPanel
             title={DEV_INFO.plenty.label}
-            text="Choose two cards from the bank."
+            text="Choose two cards from the bank: the same kind twice, or two kinds."
             count={2}
             onCancel={() => setMode(IDLE)}
             onDone={([a, b]) => move({ t: 'plenty', a: a!, b: b! }) && setMode(IDLE)}
@@ -343,13 +352,42 @@ export function IsleTable({
             onDone={([r]) => move({ t: 'monopoly', r: r! }) && setMode(IDLE)}
           />
         ) : null}
-        {live.k === 'trade' || view.outgoing ? (
-          <TradePanel state={state} view={view} onMove={move} onClose={() => (view.outgoing ? move({ t: 'cancel' }) : setMode(IDLE))} />
+        {trading || view.outgoing ? (
+          <TradePanel
+            key={trading?.counter ? 'counter' : (trading?.tab ?? 'out')}
+            state={state}
+            view={view}
+            tab={trading?.tab ?? 'players'}
+            counterTo={trading?.counter && view.incoming ? view.incoming : undefined}
+            onMove={(a) => {
+              const ok = move(a);
+              if (ok && a.t === 'counter') setTrading(null);
+              return ok;
+            }}
+            onClose={() => setTrading(null)}
+          />
         ) : null}
-        {view.incoming ? <Incoming state={state} view={view} top={pad.t + 44} onAnswer={(yes) => move({ t: 'reply', yes })} /> : null}
+        {view.incoming && !trading?.counter ? (
+          <Incoming state={state} view={view} top={pad.t + 44} onAnswer={(yes) => move({ t: 'reply', yes })} onCounter={() => (tick(), setTrading({ tab: 'players', counter: true }))} />
+        ) : null}
+        {devOpen ? (
+          <DevSheet
+            card={devOpen}
+            view={view}
+            onClose={() => setDevOpen(null)}
+            onPlay={() => {
+              setDevOpen(null);
+              if (devOpen === 'knight') move({ t: 'knight' });
+              else if (devOpen === 'roads') move({ t: 'roads' });
+              else if (devOpen === 'plenty') setMode({ k: 'plenty' });
+              else if (devOpen === 'monopoly') setMode({ k: 'monopoly' });
+            }}
+          />
+        ) : null}
         {view.over ? <Results state={state} view={view} onNewGame={onNewGame} onExit={onExit} /> : null}
 
-        <GainChips state={state} me={me} bottom={pad.b + 110} />
+        <GainChips state={state} me={me} bottom={pad.b + 120} />
+        <Notes state={state} me={me} top={pad.t + 48} right={pad.r + 180} colors={view.seats.map((x) => x.color)} />
 
         {problem ? (
           <Animated.View entering={FadeIn} exiting={FadeOut} pointerEvents="none" style={{ position: 'absolute', top: pad.t + 50, alignSelf: 'center' }} className="rounded-full bg-[#2A1A10]/90 px-4 py-2">
@@ -413,15 +451,22 @@ function Coin({ n, small }: { n: number; small?: boolean }) {
   );
 }
 
-/** A card: its picture in a cream-and-gold frame, its name on a band of its colour. */
+/** Card sizes, 2:3 as painted. */
+const CARD_SIZE = { small: [40, 60], md: [50, 75], lg: [180, 270] } as const;
+
+/**
+ * A card: the whole painted card (frame and banner are part of the
+ * picture), never stretched or cropped, with its count on a gold coin.
+ * Until the picture is on the phone it shows its colour with its name.
+ */
 function ArtCard({
   art,
   fallback,
   label,
-  band,
   n,
   dim,
   small,
+  size,
   onPress,
   picked,
   glow,
@@ -431,10 +476,11 @@ function ArtCard({
   art: string;
   fallback: string;
   label: string;
-  band: string;
+  band?: string;
   n?: number;
   dim?: boolean;
   small?: boolean;
+  size?: keyof typeof CARD_SIZE;
   onPress?: () => void;
   picked?: boolean;
   glow?: boolean;
@@ -443,20 +489,34 @@ function ArtCard({
 }) {
   const pictures = useContext(CardArt);
   const uri = pictures[art];
-  const w = small ? 42 : 52;
-  const h = small ? 58 : 72;
+  const [w, h] = CARD_SIZE[size ?? (small ? 'small' : 'md')];
+  const r = Math.max(5, w * 0.1);
   const card = (
-    <View style={{ width: w, height: h, opacity: dim ? 0.4 : 1, transform: [{ translateY: picked ? -6 : 0 }] }}>
-      <GradientView from="#FFF6DD" to="#D9B979" radius={8} className="flex-1 p-[2px]" style={glow || picked ? { borderWidth: 1.5, borderColor: GOLD } : undefined}>
-        <View style={{ flex: 1, borderRadius: 6, overflow: 'hidden', backgroundColor: fallback, borderWidth: 0.5, borderColor: 'rgba(169,129,66,0.8)' }}>
-          {uri ? <Image source={{ uri }} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} resizeMode="cover" /> : null}
-          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: band, paddingTop: 1, paddingBottom: 2 }} className="items-center">
-            <Text className="font-display-italic text-white" style={{ fontSize: small ? 8 : 9.5 }} numberOfLines={1}>
-              {label}
-            </Text>
-          </View>
+    <View
+      style={{
+        width: w,
+        height: h,
+        opacity: dim ? 0.4 : 1,
+        transform: [{ translateY: picked ? -6 : 0 }],
+        borderRadius: r,
+        borderWidth: glow || picked ? 2 : 0,
+        borderColor: GOLD,
+        shadowColor: '#000',
+        shadowOpacity: 0.45,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 4,
+      }}
+    >
+      {uri ? (
+        <Image source={{ uri }} style={{ width: '100%', height: '100%', borderRadius: r }} resizeMode="contain" />
+      ) : (
+        <View style={{ flex: 1, borderRadius: r, backgroundColor: fallback }} className="items-center justify-end pb-1">
+          <Text className="font-display-italic text-white" style={{ fontSize: 9 }} numberOfLines={1}>
+            {label}
+          </Text>
         </View>
-      </GradientView>
+      )}
       {n != null && n > 0 ? <Coin n={n} small={small} /> : null}
     </View>
   );
@@ -470,24 +530,42 @@ function ArtCard({
 
 function ResCard({ r, n, dim, small, onPress, picked }: { r: Res; n?: number; dim?: boolean; small?: boolean; onPress?: () => void; picked?: boolean }) {
   const info = RES_INFO[r];
-  return <ArtCard art={`card_${r}`} fallback={info.color} label={info.label} band={info.dark} n={n} dim={dim} small={small} onPress={onPress} picked={picked} />;
+  return <ArtCard art={`card_${r}`} fallback={info.color} label={info.label} n={n} dim={dim} small={small} onPress={onPress} picked={picked} a11y={info.label} />;
 }
 
-/** What something costs: a little picture of each card it takes. */
-function Cost({ cost, size = 11 }: { cost: Partial<Hand>; size?: number }) {
+/** The dock shows the cards in this order. */
+const HAND_ORDER: Res[] = ['brick', 'wood', 'wool', 'grain', 'ore'];
+
+/** What something costs: a little picture of each card it takes; the ones I'm short of faded with a red edge. */
+function Cost({ cost, missing, size = 11 }: { cost: Partial<Hand>; missing?: Partial<Hand>; size?: number }) {
   const pictures = useContext(CardArt);
   return (
     <View className="flex-row gap-[2px]">
-      {RESOURCES.flatMap((r) =>
-        Array.from({ length: cost[r] ?? 0 }, (_, i) => {
+      {RESOURCES.flatMap((r) => {
+        const need = cost[r] ?? 0;
+        const short = missing?.[r] ?? 0;
+        return Array.from({ length: need }, (_, i) => {
           const uri = pictures[`card_${r}`];
+          const lacking = i >= need - short;
           return (
-            <View key={`${r}${i}`} style={{ width: size + 2, height: size + 8, borderRadius: 2, overflow: 'hidden', backgroundColor: RES_INFO[r].color, borderWidth: 0.5, borderColor: '#F1DDAE' }}>
+            <View
+              key={`${r}${i}`}
+              style={{
+                width: size + 2,
+                height: (size + 2) * 1.5,
+                borderRadius: 2,
+                overflow: 'hidden',
+                backgroundColor: RES_INFO[r].color,
+                borderWidth: lacking ? 1.5 : 0.5,
+                borderColor: lacking ? '#E2553B' : '#F1DDAE',
+                opacity: lacking ? 0.5 : 1,
+              }}
+            >
               {uri ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : null}
             </View>
           );
-        }),
-      )}
+        });
+      })}
     </View>
   );
 }
@@ -589,14 +667,14 @@ function BuildBar({ view, mode, onPick }: { view: TableView; mode: Mode; onPick:
           <Pressable
             key={b.what}
             accessibilityRole="button"
-            accessibilityLabel={`Build a ${b.label.toLowerCase()}`}
-            disabled={!b.ok}
+            accessibilityLabel={b.what === 'dev' ? 'Buy a development card' : `Build a ${b.label.toLowerCase()}`}
+            accessibilityHint={b.why ?? undefined}
             onPress={() => onPick(b.what)}
             className="flex-row items-center gap-1.5 rounded-[10px] px-1.5 py-1"
-            style={{ backgroundColor: on ? GOLD : b.ok ? 'rgba(255,255,255,0.1)' : 'transparent', opacity: b.ok ? 1 : 0.45 }}
+            style={{ backgroundColor: on ? GOLD : b.ok ? 'rgba(255,255,255,0.1)' : 'transparent', opacity: b.ok ? 1 : 0.55 }}
           >
             <Icon size={15} color={on ? INK : CREAM} />
-            <Cost cost={b.cost} size={10} />
+            <Cost cost={b.cost} missing={b.missing} size={10} />
           </Pressable>
         );
       })}
@@ -604,31 +682,22 @@ function BuildBar({ view, mode, onPick }: { view: TableView; mode: Mode; onPick:
   );
 }
 
-function HandRow({ view, onPlay }: { view: TableView; onPlay: (card: Dev) => void }) {
-  const held = RESOURCES.filter((r) => view.hand[r] > 0);
+function HandRow({ view, onOpen }: { view: TableView; onOpen: (card: Dev) => void }) {
   return (
     <View className="flex-row items-end gap-2">
-      <Wood radius={16} className="min-h-[92px] flex-row items-end gap-2 px-2.5 pb-2 pt-3">
-        {held.length ? (
-          held.map((r) => (
-            <View key={r}>
-              {/* The stack behind: deeper the more of them there are. */}
-              {Array.from({ length: Math.min(3, view.hand[r] - 1) }, (_, i) => (
-                <View
-                  key={i}
-                  style={{ position: 'absolute', width: 52, height: 72, borderRadius: 8, backgroundColor: '#E2C78E', borderWidth: 0.5, borderColor: '#A98142', left: (i + 1) * 3, top: -(i + 1) * 2.5, transform: [{ rotate: `${(i + 1) * 2.5}deg` }] }}
-                />
-              ))}
-              <ResCard r={r} n={view.hand[r]} />
-            </View>
-          ))
-        ) : (
-          <View style={{ width: 150, height: 72, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(241,221,174,0.3)' }} className="items-center justify-center">
-            <Text className="font-display-italic text-[12px]" style={{ color: 'rgba(251,239,213,0.55)' }}>
-              No cards yet
-            </Text>
+      <Wood radius={16} className="flex-row items-end gap-2 px-2.5 pb-2 pt-3">
+        {HAND_ORDER.map((r) => (
+          <View key={r}>
+            {/* The stack behind: deeper the more of them there are. */}
+            {Array.from({ length: Math.min(3, Math.max(0, view.hand[r] - 1)) }, (_, i) => (
+              <View
+                key={i}
+                style={{ position: 'absolute', width: 50, height: 75, borderRadius: 6, backgroundColor: '#E2C78E', borderWidth: 0.5, borderColor: '#A98142', left: (i + 1) * 3, top: -(i + 1) * 2.5, transform: [{ rotate: `${(i + 1) * 2.5}deg` }] }}
+              />
+            ))}
+            <ResCard r={r} n={view.hand[r]} dim={!view.hand[r]} />
           </View>
-        )}
+        ))}
       </Wood>
       {view.dev.length ? (
         <Wood radius={16} className="flex-row items-end gap-2 px-2.5 pb-2 pt-3">
@@ -638,18 +707,61 @@ function HandRow({ view, onPlay }: { view: TableView; onPlay: (card: Dev) => voi
               art={`dev_${d.card}`}
               fallback="#6C4BA8"
               label={DEV_INFO[d.card].label}
-              band="#4B2E78"
               n={d.ready + d.fresh}
-              onPress={() => onPlay(d.card)}
-              disabled={!d.playable}
-              dim={!d.playable && d.card !== 'vp'}
+              onPress={() => onOpen(d.card)}
               glow={d.playable}
-              a11y={`${DEV_INFO[d.card].label}: ${DEV_INFO[d.card].text}`}
+              a11y={`${DEV_INFO[d.card].label}: ${d.why ?? 'ready to play'}`}
             />
           ))}
         </Wood>
       ) : null}
     </View>
+  );
+}
+
+/** A development card from my hand, large: what it does, whether it can be played now (and why not), and Play. */
+function DevSheet({ card, view, onPlay, onClose }: { card: Dev; view: TableView; onPlay: () => void; onClose: () => void }) {
+  const d = view.dev.find((x) => x.card === card);
+  const n = d ? d.ready + d.fresh : 0;
+  return (
+    <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(20,12,5,0.72)' }} className="flex-row items-center justify-center gap-5 p-4">
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      <Animated.View entering={ZoomIn.springify()}>
+        <ArtCard art={`dev_${card}`} fallback="#6C4BA8" label={DEV_INFO[card].label} size="lg" glow={d?.playable} />
+      </Animated.View>
+      <Wood radius={16} className="p-4" style={{ width: 280 }}>
+        <Text className="font-sans-bold text-[22px]" style={{ color: CREAM }}>
+          {DEV_INFO[card].label}
+        </Text>
+        <Text className="text-[12px]" style={{ color: 'rgba(251,239,213,0.6)' }}>
+          You hold {n}
+          {d?.fresh ? ` (${d.fresh} new this turn)` : ''}
+        </Text>
+        <Text className="mt-2 text-[13px] leading-5" style={{ color: CREAM }}>
+          {DEV_INFO[card].text}
+        </Text>
+        <View className="mt-3 rounded-[10px] px-2.5 py-1.5" style={{ backgroundColor: d?.playable ? 'rgba(63,122,52,0.45)' : 'rgba(0,0,0,0.35)' }}>
+          <Text className="font-sans-bold text-[12px]" style={{ color: d?.playable ? '#D8F0C8' : '#FFB59E' }}>
+            {d?.playable ? 'Ready to play' : (d?.why ?? 'Not in your hand')}
+          </Text>
+        </View>
+        <View className="mt-3 flex-row gap-2">
+          <Pressable accessibilityRole="button" onPress={onClose} className="rounded-full border-2 px-4 py-2" style={{ borderColor: 'rgba(241,221,174,0.5)' }}>
+            <Text className="font-sans-bold text-[13px]" style={{ color: CREAM }}>
+              Close
+            </Text>
+          </Pressable>
+          {card !== 'vp' ? (
+            <GoldButton label="Play card" onPress={onPlay} disabled={!d?.playable}>
+              <Sparkles size={14} color={INK} />
+              <Text className="font-sans-bold text-[14px]" style={{ color: INK }}>
+                Play card
+              </Text>
+            </GoldButton>
+          ) : null}
+        </View>
+      </Wood>
+    </Animated.View>
   );
 }
 
@@ -856,13 +968,41 @@ function Cards({ h }: { h: Partial<Hand> }) {
   );
 }
 
-function TradePanel({ state, view, onMove, onClose }: { state: IsleState; view: TableView; onMove: (a: IsleAction) => boolean; onClose: () => void }) {
-  const [give, setGive] = useState<Partial<Hand>>({});
-  const [want, setWant] = useState<Partial<Hand>>({});
+const handText = (h: Partial<Hand>) =>
+  HAND_ORDER.filter((r) => h[r])
+    .map((r) => `${h[r]} ${RES_INFO[r].label.toLowerCase()}`)
+    .join(', ');
+
+/** As much of a wanted set as a hand holds. */
+const fit = (want: Partial<Hand>, hand: Hand): Partial<Hand> => Object.fromEntries(HAND_ORDER.flatMap((r) => (want[r] ? [[r, Math.min(want[r]!, hand[r])]] : [])));
+
+/**
+ * Trading: with the players (what I give, what I want, offered round the
+ * table; or my counter to someone's offer), or with the bank at my best rate
+ * for each kind. My offer out shows each answer, counters included.
+ */
+function TradePanel({
+  state,
+  view,
+  tab: firstTab,
+  counterTo,
+  onMove,
+  onClose,
+}: {
+  state: IsleState;
+  view: TableView;
+  tab: 'players' | 'bank';
+  counterTo?: { from: number; give: Partial<Hand>; want: Partial<Hand> };
+  onMove: (a: IsleAction) => boolean;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState(counterTo ? 'players' : firstTab);
+  const [give, setGive] = useState<Partial<Hand>>(() => (counterTo ? fit(counterTo.want, view.hand) : {}));
+  const [want, setWant] = useState<Partial<Hand>>(() => (counterTo ? { ...counterTo.give } : {}));
   const out = view.outgoing;
   if (out) {
     return (
-      <Panel title="Your offer" onClose={onClose}>
+      <Panel title="Your offer">
         <View className="flex-row items-center justify-center gap-3">
           <Cards h={out.give} />
           <ArrowLeftRight size={18} color="#8A5E36" />
@@ -873,76 +1013,159 @@ function TradePanel({ state, view, onMove, onClose }: { state: IsleState; view: 
             .filter((s) => !s.you)
             .map((s) => {
               const r = out.replies[s.seat];
+              const c = out.counters[s.seat] ?? null;
+              const canTake = c ? HAND_ORDER.every((k) => view.hand[k] >= (c.want[k] ?? 0)) : true;
               return (
-                <View key={s.seat} className="flex-row items-center gap-2 rounded-[12px] bg-white/60 p-2">
+                <View key={s.seat} className="flex-row items-center gap-2 rounded-[12px] p-2" style={{ backgroundColor: r === true ? 'rgba(223,240,200,0.85)' : c ? '#FCEFC6' : 'rgba(255,255,255,0.6)' }}>
                   <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: s.color, borderWidth: 2, borderColor: '#fff' }} />
-                  <Text className="flex-1 font-sans-bold text-[13px]" style={{ color: INK }}>
+                  <Text className="font-sans-bold text-[13px]" style={{ color: INK, width: 70 }} numberOfLines={1}>
                     {s.name}
                   </Text>
-                  {r === null ? (
-                    <Text className="text-[12px] text-black/50">thinking…</Text>
-                  ) : r ? (
-                    <GoldButton label={`Trade with ${s.name}`} onPress={() => onMove({ t: 'accept', with: s.seat })}>
-                      <Check size={14} color={INK} />
-                      <Text className="font-sans-bold text-[13px]" style={{ color: INK }}>
-                        Trade
+                  <View className="flex-1 flex-row items-center justify-end gap-2">
+                    {r === null ? (
+                      <Text className="text-[12px] text-black/50">thinking…</Text>
+                    ) : r ? (
+                      <GoldButton label={`Trade with ${s.name}`} onPress={() => onMove({ t: 'accept', with: s.seat })}>
+                        <Check size={14} color={INK} />
+                        <Text className="font-sans-bold text-[13px]" style={{ color: INK }}>
+                          Trade
+                        </Text>
+                      </GoldButton>
+                    ) : c ? (
+                      <>
+                        <Text className="text-[10px] text-black/55">give</Text>
+                        <Cards h={c.want} />
+                        <ArrowLeftRight size={12} color="#8A5E36" />
+                        <Text className="text-[10px] text-black/55">get</Text>
+                        <Cards h={c.give} />
+                        <GoldButton label={`Accept ${s.name}'s counter-offer`} disabled={!canTake} onPress={() => onMove({ t: 'accept', with: s.seat })}>
+                          <Check size={14} color={INK} />
+                        </GoldButton>
+                      </>
+                    ) : (
+                      <Text className="font-sans-bold text-[12px]" style={{ color: '#A8432D' }}>
+                        Rejected
                       </Text>
-                    </GoldButton>
-                  ) : (
-                    <Text className="text-[12px] text-black/50">No thanks</Text>
-                  )}
+                    )}
+                  </View>
                 </View>
               );
             })}
         </View>
         <View className="mt-3 flex-row justify-end">
-          <PlainButton text="Take the offer back" onPress={onClose} />
+          <PlainButton text="Withdraw offer" onPress={() => onMove({ t: 'cancel' })} />
         </View>
       </Panel>
     );
   }
-  const bankGive = RESOURCES.find((r) => (give[r] ?? 0) > 0 && count(give) === view.rates[r] && give[r] === view.rates[r]);
-  const bankWant = count(want) === 1 ? RESOURCES.find((r) => want[r]) : undefined;
-  const bankOk = !!bankGive && !!bankWant && bankGive !== bankWant && state.bank[bankWant] > 0;
+  const same = HAND_ORDER.find((r) => give[r] && want[r]);
+  const why = !count(give) ? 'Pick what you give' : !count(want) ? 'Pick what you want' : same ? `Can’t give and ask for ${RES_INFO[same].label.toLowerCase()}` : null;
   return (
-    <Panel title="Trade" onClose={onClose} wide>
+    <Panel title={counterTo ? `Counter ${state.players[counterTo.from]!.name}’s offer` : 'Trade'} onClose={onClose} wide>
+      {counterTo ? null : (
+        <View className="mb-2 flex-row gap-1 rounded-[12px] p-1" style={{ backgroundColor: 'rgba(138,94,54,0.12)' }}>
+          {(['players', 'bank'] as const).map((t) => (
+            <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tab === t }} onPress={() => (tick(), setTab(t))} className="flex-1 flex-row items-center justify-center gap-1.5 rounded-[9px] py-1.5" style={{ backgroundColor: tab === t ? GOLD : 'transparent' }}>
+              {t === 'players' ? <Users size={14} color={INK} /> : <Landmark size={14} color={INK} />}
+              <Text className="font-sans-bold text-[13px]" style={{ color: INK }}>
+                {t === 'players' ? 'With players' : 'With the bank'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      {tab === 'bank' ? (
+        <BankTrade state={state} view={view} onMove={onMove} />
+      ) : (
+        <>
+          <Text className="mb-1 font-sans-bold text-[11px] uppercase text-black/50">You give</Text>
+          <Counter value={give} onChange={setGive} max={view.hand} />
+          <View className="my-1 items-center">
+            <ArrowLeftRight size={16} color="#8A5E36" />
+          </View>
+          <Text className="mb-1 font-sans-bold text-[11px] uppercase text-black/50">You receive</Text>
+          <Counter value={want} onChange={setWant} />
+          <Text className="mt-2 text-center text-[12px]" style={{ color: INK }}>
+            {why ?? `You give ${handText(give)} → you receive ${handText(want)}`}
+          </Text>
+          <View className="mt-2 flex-row items-center justify-between gap-2">
+            <PlainButton
+              text="Clear"
+              onPress={() => {
+                setGive({});
+                setWant({});
+              }}
+            />
+            <GoldButton label={counterTo ? 'Send counter-offer' : 'Propose trade'} disabled={!!why} onPress={() => !why && onMove(counterTo ? { t: 'counter', give, want } : { t: 'offer', give, want })}>
+              <ArrowLeftRight size={14} color={INK} />
+              <Text className="font-sans-bold text-[13px]" style={{ color: INK }}>
+                {counterTo ? 'Send counter-offer' : 'Propose trade'}
+              </Text>
+            </GoldButton>
+          </View>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+const harbourText = (k: PortKind) => (k === 'any' ? '3:1 any' : `2:1 ${RES_INFO[k].label.toLowerCase()}`);
+
+/** With the bank: a kind to give at its best rate, a kind to get, the swap shown, then Confirm. */
+function BankTrade({ state, view, onMove }: { state: IsleState; view: TableView; onMove: (a: IsleAction) => boolean }) {
+  const [give, setGive] = useState<Res | null>(() => HAND_ORDER.find((r) => view.hand[r] >= view.rates[r]) ?? null);
+  const [get, setGet] = useState<Res | null>(null);
+  const rate = give ? view.rates[give] : 4;
+  const why = !give
+    ? 'Pick a kind to give'
+    : view.hand[give] < rate
+      ? `Need ${rate - view.hand[give]} more ${RES_INFO[give].label.toLowerCase()}`
+      : !get
+        ? 'Pick a card to receive'
+        : get === give
+          ? 'Pick a different card to receive'
+          : state.bank[get] < 1
+            ? `The bank has no ${RES_INFO[get].label.toLowerCase()} left`
+            : null;
+  const harbours = [...new Set(view.harbours)];
+  return (
+    <View>
+      <Text className="mb-2 text-[11px]" style={{ color: INK }}>
+        Harbours: {harbours.length ? harbours.map(harbourText).join(' · ') : 'none yet, so the bank takes 4 of a kind'}
+      </Text>
       <Text className="mb-1 font-sans-bold text-[11px] uppercase text-black/50">You give</Text>
-      <Counter value={give} onChange={setGive} max={view.hand} />
-      <Text className="mb-1 mt-2 font-sans-bold text-[11px] uppercase text-black/50">You get</Text>
-      <Counter value={want} onChange={setWant} />
-      <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
-        <Text className="text-[11px] text-black/60">Bank:</Text>
-        {RESOURCES.map((r) => (
-          <View key={r} className="flex-row items-center gap-1 rounded-full bg-white/60 px-1.5 py-0.5">
-            <ResIcon r={r} size={11} color={RES_INFO[r].dark} />
-            <Text className="text-[11px]" style={{ color: INK }}>
+      <View className="flex-row gap-2">
+        {HAND_ORDER.map((r) => (
+          <View key={r} className="items-center gap-0.5">
+            <ResCard r={r} small n={view.hand[r]} picked={give === r} dim={view.hand[r] < view.rates[r]} onPress={() => (tick(), setGive(r))} />
+            <Text className="font-sans-bold text-[10px]" style={{ color: view.rates[r] < 4 ? '#1F4E9E' : 'rgba(0,0,0,0.5)' }}>
               {view.rates[r]}:1
             </Text>
           </View>
         ))}
       </View>
-      <View className="mt-3 flex-row items-center justify-end gap-2">
-        <Pressable
-          accessibilityRole="button"
-          disabled={!bankOk}
-          onPress={() => bankGive && bankWant && onMove({ t: 'bank', give: bankGive, get: bankWant }) && (setGive({}), setWant({}))}
-          className="rounded-full border-2 border-[#8A5E36] px-3 py-2"
-          style={{ opacity: bankOk ? 1 : 0.35 }}
-        >
-          <Text className="font-sans-bold text-[13px] text-[#5A3A22]">With the bank</Text>
-        </Pressable>
-        <GoldButton label="Offer to everyone" disabled={!count(give) || !count(want)} onPress={() => onMove({ t: 'offer', give, want })}>
-          <ArrowLeftRight size={14} color={INK} />
+      <Text className="mb-1 mt-2 font-sans-bold text-[11px] uppercase text-black/50">You receive</Text>
+      <View className="flex-row gap-2">
+        {HAND_ORDER.map((r) => (
+          <ResCard key={r} r={r} small picked={get === r} dim={r === give || !state.bank[r]} onPress={() => (tick(), setGet(r))} />
+        ))}
+      </View>
+      <View className="mt-2 flex-row items-center justify-between gap-2">
+        <Text className="flex-1 text-[12px]" style={{ color: INK }}>
+          {why ?? `Give ${rate} ${RES_INFO[give!].label.toLowerCase()} → receive 1 ${RES_INFO[get!].label.toLowerCase()}`}
+        </Text>
+        <GoldButton label="Confirm trade" disabled={!!why} onPress={() => !why && give && get && onMove({ t: 'bank', give, get })}>
+          <Landmark size={14} color={INK} />
           <Text className="font-sans-bold text-[13px]" style={{ color: INK }}>
-            Offer to everyone
+            Confirm
           </Text>
         </GoldButton>
       </View>
-    </Panel>
+    </View>
   );
 }
 
-function Incoming({ state, view, top, onAnswer }: { state: IsleState; view: TableView; top: number; onAnswer: (yes: boolean) => void }) {
+function Incoming({ state, view, top, onAnswer, onCounter }: { state: IsleState; view: TableView; top: number; onAnswer: (yes: boolean) => void; onCounter: () => void }) {
   const o = view.incoming!;
   return (
     <Animated.View entering={FadeInDown} style={{ position: 'absolute', top, alignSelf: 'center', width: 360, borderRadius: 18, borderWidth: 1, borderColor: '#C9A66B', overflow: 'hidden' }}>
@@ -962,7 +1185,8 @@ function Incoming({ state, view, top, onAnswer }: { state: IsleState; view: Tabl
           </View>
         </View>
         <View className="mt-2.5 flex-row justify-center gap-2">
-          <PlainButton text="No thanks" onPress={() => onAnswer(false)} />
+          <PlainButton text="Reject" onPress={() => onAnswer(false)} />
+          <PlainButton text="Counter" onPress={onCounter} />
           <GoldButton label="Accept" disabled={!o.canAccept} onPress={() => onAnswer(true)}>
             <Check size={14} color={INK} />
             <Text className="font-sans-bold text-[13px]" style={{ color: INK }}>
@@ -1067,6 +1291,60 @@ function GainChips({ state, me, bottom }: { state: IsleState; me: number; bottom
         </Animated.View>
       ))}
     </View>
+  );
+}
+
+/** Short notes about what just happened (shared with the web: notesFor), and a banner when a new turn starts. */
+function Notes({ state, me, top, right, colors }: { state: IsleState; me: number; top: number; right: number; colors: string[] }) {
+  const prev = useRef(state);
+  const [notes, setNotes] = useState<IsleNote[]>([]);
+  const [banner, setBanner] = useState<{ id: number; text: string; color: string; mine: boolean } | null>(null);
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = state;
+    if (before === state) return;
+    const fresh = notesFor(before, state, me);
+    if (fresh.length) {
+      setNotes((n) => [...n, ...fresh].slice(-3));
+      setTimeout(() => setNotes((n) => n.filter((x) => !fresh.includes(x))), 3400);
+    }
+    const turned = (before.turn !== state.turn || before.turnNo !== state.turnNo || before.phase === 'setup') && state.phase === 'roll';
+    if (turned) setBanner({ id: state.n, text: state.turn === me ? 'Your turn' : `${state.players[state.turn]!.name}’s turn`, color: colors[state.turn]!, mine: state.turn === me });
+  }, [state, me, colors]);
+  useEffect(() => {
+    if (!banner) return;
+    const t = setTimeout(() => setBanner(null), 1700);
+    return () => clearTimeout(t);
+  }, [banner]);
+  return (
+    <>
+      {banner ? (
+        <Animated.View key={banner.id} entering={ZoomIn.springify()} exiting={FadeOut} pointerEvents="none" style={{ position: 'absolute', top: top + 30, alignSelf: 'center', borderRadius: 14, overflow: 'hidden', borderWidth: 2, borderColor: banner.mine ? '#FFF3CF' : '#2A180B' }}>
+          <GradientView from={banner.mine ? '#FCE6A2' : '#4A2E18'} to={banner.mine ? '#E3B24A' : '#2E1C0E'} radius={12} className="flex-row items-center gap-2 px-6 py-2.5">
+            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: banner.color, borderWidth: 1.5, borderColor: '#fff' }} />
+            <Text className="font-sans-bold text-[20px]" style={{ color: banner.mine ? INK : CREAM }}>
+              {banner.text}
+            </Text>
+          </GradientView>
+        </Animated.View>
+      ) : null}
+      <View pointerEvents="none" style={{ position: 'absolute', top, right, width: 240 }} className="items-end gap-1.5">
+        {notes.map((n) => (
+          <Animated.View
+            key={n.id}
+            entering={FadeInDown}
+            exiting={FadeOut}
+            className="flex-row items-center gap-1.5 rounded-[10px] px-2.5 py-1.5"
+            style={{ backgroundColor: n.tone === 'good' ? '#E9F6DD' : n.tone === 'bad' ? '#FBE6DF' : '#FFF7E2', borderWidth: 1, borderColor: n.tone === 'good' ? '#BFE3A8' : n.tone === 'bad' ? '#F0B8A8' : '#E8D3A6' }}
+          >
+            {n.p != null ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors[n.p] }} /> : null}
+            <Text className="font-sans-bold text-[11px]" style={{ color: n.tone === 'good' ? '#2F5A26' : n.tone === 'bad' ? '#8A2F1C' : INK, flexShrink: 1 }}>
+              {n.text}
+            </Text>
+          </Animated.View>
+        ))}
+      </View>
+    </>
   );
 }
 

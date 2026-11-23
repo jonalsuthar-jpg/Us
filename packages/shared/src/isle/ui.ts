@@ -4,11 +4,12 @@
  * line telling me what's happening, the spots to light up on the board, and
  * the move a tap on one of them makes. The screens only draw this.
  */
-import { RESOURCES, TOPOLOGY, type Res } from './board';
+import { RESOURCES, TOPOLOGY, type PortKind, type Res } from './board';
 import type { Marks, Picked } from './pick';
 import {
   canPay,
   citiesOf,
+  harboursOf,
   citySpots,
   COST,
   handSize,
@@ -24,6 +25,7 @@ import {
   victims,
   waitingOn,
   WIN_POINTS,
+  type Counter,
   type Dev,
   type Hand,
   type IsleAction,
@@ -77,10 +79,10 @@ export const RES_INFO: Record<Res, { label: string; color: string; dark: string;
 };
 
 export const DEV_INFO: Record<Dev, { label: string; text: string }> = {
-  knight: { label: 'Knight', text: 'Move the robber and take a card. Three or more make the largest army.' },
-  vp: { label: 'Hidden point', text: 'Worth a point. Kept face down until the end.' },
-  roads: { label: 'Free roads', text: 'Build two roads for free.' },
-  plenty: { label: 'Harvest', text: 'Take any two cards from the bank.' },
+  knight: { label: 'Knight', text: 'Move the robber and take a card from someone beside it. Can be played before you roll. Three or more make the largest army.' },
+  vp: { label: 'Victory Point', text: 'Worth a point. Kept face down; it counts towards your total and shows when you win.' },
+  roads: { label: 'Road Building', text: 'Build two roads for free.' },
+  plenty: { label: 'Year of Plenty', text: 'Take any two cards from the bank: the same twice, or two different.' },
   monopoly: { label: 'Monopoly', text: 'Name a card: everyone gives you all of theirs.' },
 };
 
@@ -116,6 +118,10 @@ export interface BuildOption {
   /** I can afford it, have the piece and somewhere to put it. */
   ok: boolean;
   left: number;
+  /** The cards I'm short of for it. */
+  missing: Partial<Hand>;
+  /** Why it can't be built now, when it can't. */
+  why: string | null;
 }
 
 export interface TableView {
@@ -124,7 +130,13 @@ export interface TableView {
   myTurn: boolean;
   hand: Hand;
   /** My development cards by kind; fresh ones (bought this turn) can't be played yet. */
-  dev: { card: Dev; ready: number; fresh: number; playable: boolean }[];
+  dev: { card: Dev; ready: number; fresh: number; playable: boolean; why: string | null }[];
+  /** Cards left in the development deck. */
+  deck: number;
+  /** The harbours my towns stand on. */
+  harbours: PortKind[];
+  /** Whose turn, counted from the first after the opening (0 during it). */
+  turnNo: number;
   prompt: string;
   marks: Marks | undefined;
   canRoll: boolean;
@@ -136,8 +148,10 @@ export interface TableView {
   discard: number;
   /** An offer someone else made, waiting on my answer. */
   incoming: { from: number; give: Partial<Hand>; want: Partial<Hand>; canAccept: boolean } | null;
-  /** My own offer on the table and the answers so far. */
-  outgoing: { give: Partial<Hand>; want: Partial<Hand>; replies: (boolean | null)[] } | null;
+  /** My own offer on the table, the answers so far and any counter-offers. */
+  outgoing: { give: Partial<Hand>; want: Partial<Hand>; replies: (boolean | null)[]; counters: (Counter | null)[] } | null;
+  /** Someone else's offer I've answered, while the others still think. */
+  answered: { from: number; give: Partial<Hand>; want: Partial<Hand>; yes: boolean; counter: Counter | null } | null;
   over: boolean;
   winner: number | null;
 }
@@ -194,38 +208,36 @@ export function marksFor(s: IsleState, me: number, mode: Mode): Marks | undefine
   return undefined;
 }
 
+/** The cards a hand is short of for a cost. */
+export function missingFor(hand: Hand, cost: Partial<Hand>): Partial<Hand> {
+  return Object.fromEntries(RESOURCES.flatMap((r) => ((cost[r] ?? 0) > hand[r] ? [[r, (cost[r] ?? 0) - hand[r]]] : [])));
+}
+
+/** Why I can't do anything on my turn right now, or null when I can. */
+function notNow(s: IsleState, me: number): string | null {
+  if (s.phase === 'over') return 'The game is over';
+  if (s.phase === 'setup') return 'The opening: pieces go down free';
+  if (s.turn !== me) return 'Not your turn';
+  if (s.phase === 'roll') return 'Roll the dice first';
+  if (s.offer) return 'Finish the trade first';
+  if (s.phase !== 'main') return 'Not now';
+  return null;
+}
+
 function buildOptions(s: IsleState, me: number): BuildOption[] {
   const hand = s.players[me]!.hand;
-  const main = s.phase === 'main' && s.turn === me && !s.offer;
+  const wait = notNow(s, me);
+  const option = (what: BuildOption['what'], label: string, cost: Partial<Hand>, left: number, spots: number, none: string): BuildOption => {
+    const missing = missingFor(hand, cost);
+    const short = handSize(missing);
+    const why = wait ?? (left <= 0 ? none : short ? `Need ${cardsText(missing)}` : spots ? null : 'Nowhere to build it');
+    return { what, label, cost, left, missing, why, ok: why == null };
+  };
   return [
-    {
-      what: 'road',
-      label: 'Road',
-      cost: COST.road,
-      left: PIECES.road - roadsOf(s, me),
-      ok: main && canPay(hand, COST.road) && roadsOf(s, me) < PIECES.road && roadSpots(s, me).length > 0,
-    },
-    {
-      what: 'settle',
-      label: 'Town',
-      cost: COST.settlement,
-      left: PIECES.settlement - settlementsOf(s, me),
-      ok: main && canPay(hand, COST.settlement) && settlementsOf(s, me) < PIECES.settlement && settleSpots(s, me).length > 0,
-    },
-    {
-      what: 'city',
-      label: 'City',
-      cost: COST.city,
-      left: PIECES.city - citiesOf(s, me),
-      ok: main && canPay(hand, COST.city) && citiesOf(s, me) < PIECES.city && citySpots(s, me).length > 0,
-    },
-    {
-      what: 'dev',
-      label: 'Card',
-      cost: COST.dev,
-      left: s.devDeck.length,
-      ok: main && canPay(hand, COST.dev) && s.devDeck.length > 0,
-    },
+    option('road', 'Road', COST.road, PIECES.road - roadsOf(s, me), roadSpots(s, me).length, 'No roads left'),
+    option('settle', 'Town', COST.settlement, PIECES.settlement - settlementsOf(s, me), settleSpots(s, me).length, 'No towns left'),
+    option('city', 'City', COST.city, PIECES.city - citiesOf(s, me), citySpots(s, me).length, 'No cities left'),
+    option('dev', 'Card', COST.dev, s.devDeck.length, 1, 'The deck is empty'),
   ];
 }
 
@@ -256,7 +268,23 @@ export function tableView(s: IsleState, me: number, mode: Mode = IDLE): TableVie
         const ready = pl.dev.filter((d) => d === card).length;
         const fresh = pl.fresh.filter((d) => d === card).length;
         const when = card === 'knight' ? (s.phase === 'roll' || s.phase === 'main') && !s.offer : main;
-        return { card, ready, fresh, playable: myTurn && card !== 'vp' && ready > 0 && !s.playedDev && when };
+        const playable = myTurn && card !== 'vp' && ready > 0 && !s.playedDev && when;
+        const why = playable
+          ? null
+          : card === 'vp'
+            ? 'Counts towards your points; kept hidden'
+            : !ready
+              ? 'Bought this turn: play it from your next turn'
+              : !myTurn
+                ? 'Not your turn'
+                : s.playedDev
+                  ? 'One card a turn: you’ve played one already'
+                  : card !== 'knight' && s.phase === 'roll'
+                    ? 'Roll the dice first'
+                    : s.offer
+                      ? 'Finish the trade first'
+                      : 'Not now';
+        return { card, ready, fresh, playable, why };
       }).filter((d) => d.ready + d.fresh > 0)
     : [];
   const o = s.offer;
@@ -273,12 +301,19 @@ export function tableView(s: IsleState, me: number, mode: Mode = IDLE): TableVie
     canTrade: main && !!pl && handSize(pl.hand) > 0,
     build: buildOptions(s, me),
     rates: rates(s, me),
+    deck: s.devDeck.length,
+    harbours: harboursOf(s, me),
+    turnNo: s.turnNo,
     discard: s.phase === 'discard' ? s.owed[me] ?? 0 : 0,
     incoming:
       o && o.from !== me && o.replies[me] === null && pl
         ? { from: o.from, give: o.give, want: o.want, canAccept: canPay(pl.hand, o.want) }
         : null,
-    outgoing: o && o.from === me ? { give: o.give, want: o.want, replies: o.replies } : null,
+    outgoing: o && o.from === me ? { give: o.give, want: o.want, replies: o.replies, counters: o.counters ?? o.replies.map(() => null) } : null,
+    answered:
+      o && o.from !== me && o.replies[me] !== null && o.replies[me] !== undefined
+        ? { from: o.from, give: o.give, want: o.want, yes: o.replies[me] === true, counter: o.counters?.[me] ?? null }
+        : null,
     over: s.phase === 'over',
     winner: s.winner,
   };
@@ -356,6 +391,8 @@ export function describe(s: IsleState, me: number, e: IsleEvent): string | null 
       return `${who} traded ${e.n} ${RES_INFO[e.give].label.toLowerCase()} for 1 ${RES_INFO[e.get].label.toLowerCase()}`;
     case 'offer':
       return `${who} offered a trade`;
+    case 'counter':
+      return `${who} made a counter-offer`;
     case 'trade':
       return `${who} traded with ${e.with === me ? 'you' : s.players[e.with]!.name}`;
     case 'longest':

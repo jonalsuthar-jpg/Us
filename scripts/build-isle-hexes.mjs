@@ -47,7 +47,7 @@ function clearBackground(data, width, height) {
   }
 }
 
-const files = readdirSync(src).filter((f) => /\.(png|jpe?g|webp)$/i.test(f) && !/^(tile|card|dev|sea)_/.test(f));
+const files = readdirSync(src).filter((f) => /\.(png|jpe?g|webp)$/i.test(f) && !/^(tile|card|dev|sea)_/.test(f) && !/card|lumber_|knight|road building|plenty|monopoly|victory/i.test(f));
 for (const [land, test] of Object.entries(LANDS)) {
   const file = files.find((f) => test.test(f));
   if (!file) {

@@ -444,6 +444,28 @@ function replyTo(s: IsleState, p: number): boolean {
   return gain > bar || (gain >= 0 && cards > 0 && lead < WIN_POINTS - 3);
 }
 
+/** The counter-offer to my offer worth taking, if any: the one that helps my plan most. */
+function bestCounter(s: IsleState, p: number): number | null {
+  const o = s.offer!;
+  const me = s.players[p]!;
+  const plan = makePlan(s, p);
+  const now = planTurns(s, p, plan, me.hand);
+  let best: number | null = null;
+  let most = 0.08;
+  for (const [q, c] of (o.counters ?? []).entries()) {
+    if (!c || shownPoints(s, q) >= WIN_POINTS - 2) continue;
+    const after = { ...me.hand };
+    for (const r of RESOURCES) after[r] += (c.give[r] ?? 0) - (c.want[r] ?? 0);
+    if (RESOURCES.some((r) => after[r] < 0) || !canPay(s.players[q]!.hand, c.give)) continue;
+    const gain = now - planTurns(s, p, plan, after);
+    if (gain > most) {
+      most = gain;
+      best = q;
+    }
+  }
+  return best;
+}
+
 /** A one-for-one (or two-for-one) offer to the table for a card the plan is short of. */
 function offerFor(s: IsleState, p: number, plan: Plan): IsleAction | null {
   // One offer a turn is plenty.
@@ -630,7 +652,9 @@ export function hardMove(s: IsleState, p: number): IsleAction {
     const yes = s.offer.replies
       .flatMap((r, o) => (r === true ? [o] : []))
       .sort((a, b) => shownPoints(s, a) - shownPoints(s, b));
-    return yes.length ? { t: 'accept', with: yes[0]! } : { t: 'cancel' };
+    if (yes.length) return { t: 'accept', with: yes[0]! };
+    const counter = bestCounter(s, p);
+    return counter != null ? { t: 'accept', with: counter } : { t: 'cancel' };
   }
   if (s.phase === 'robber') return robberMove(s, p);
 

@@ -74,6 +74,16 @@ export interface Offer {
   want: Partial<Hand>;
   /** Each seat's answer: null until they say. */
   replies: (boolean | null)[];
+  /**
+   * Counter-offers, by seat: what that seat would give and want instead. A
+   * counter is an answer (its reply is false); the offerer can still take it.
+   */
+  counters?: (Counter | null)[];
+}
+
+export interface Counter {
+  give: Partial<Hand>;
+  want: Partial<Hand>;
 }
 
 export type IsleEvent =
@@ -90,6 +100,7 @@ export type IsleEvent =
   | { k: 'monopoly'; p: number; r: Res; n: number }
   | { k: 'bank'; p: number; give: Res; n: number; get: Res }
   | { k: 'offer'; p: number }
+  | { k: 'counter'; p: number }
   | { k: 'trade'; p: number; with: number }
   | { k: 'longest' | 'army'; p: number | null }
   | { k: 'end'; p: number }
@@ -153,6 +164,7 @@ export type IsleAction =
   | { t: 'bank'; give: Res; get: Res }
   | { t: 'offer'; give: Partial<Hand>; want: Partial<Hand> }
   | { t: 'reply'; yes: boolean }
+  | { t: 'counter'; give: Partial<Hand>; want: Partial<Hand> }
   | { t: 'accept'; with: number }
   | { t: 'cancel' }
   | { t: 'end' };
@@ -476,6 +488,19 @@ function step(s: IsleState, p: number, a: IsleAction): string | null {
     return null;
   }
 
+  if (a.t === 'counter') {
+    const o = s.offer;
+    if (!o || o.from === p || o.replies[p] !== null) return 'no offer to answer';
+    if (!goodHand(a.give) || !goodHand(a.want) || !handSize(a.give) || !handSize(a.want)) return 'pick cards';
+    if (RESOURCES.some((r) => a.give[r] && a.want[r])) return 'can’t swap a card for itself';
+    if (!canPay(me.hand, a.give)) return 'you don’t have those cards';
+    o.replies[p] = false;
+    o.counters = o.counters ?? s.players.map(() => null);
+    o.counters[p] = { give: trim(a.give), want: trim(a.want) };
+    note(s, { k: 'counter', p });
+    return null;
+  }
+
   if (p !== s.turn) return 'not your turn';
   if (s.phase === 'discard') return 'waiting for cards to be given back';
 
@@ -654,11 +679,16 @@ function step(s: IsleState, p: number, a: IsleAction): string | null {
     case 'accept': {
       const o = s.offer;
       if (!o) return 'no offer out';
-      if (o.replies[a.with] !== true) return 'they haven’t said yes';
+      if (!Number.isInteger(a.with) || a.with === p || !s.players[a.with]) return 'they haven’t said yes';
+      // Their yes to my offer, or their counter: what I give and get either way.
+      const c = o.replies[a.with] === true ? null : o.counters?.[a.with];
+      if (o.replies[a.with] !== true && !c) return 'they haven’t said yes';
+      const give = c ? c.want : o.give;
+      const get = c ? c.give : o.want;
       const them = s.players[a.with]!;
-      if (!canPay(me.hand, o.give) || !canPay(them.hand, o.want)) return 'the cards have changed';
-      pay(me.hand, o.give, them.hand);
-      pay(them.hand, o.want, me.hand);
+      if (!canPay(me.hand, give) || !canPay(them.hand, get)) return 'the cards have changed';
+      pay(me.hand, give, them.hand);
+      pay(them.hand, get, me.hand);
       s.offer = null;
       note(s, { k: 'trade', p, with: a.with });
       return null;

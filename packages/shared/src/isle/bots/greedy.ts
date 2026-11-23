@@ -137,7 +137,16 @@ export function greedyMove(s: IsleState, p: number): IsleAction {
   }
   if (s.offer) {
     const yes = s.offer.replies.findIndex((r) => r === true);
-    return yes >= 0 ? { t: 'accept', with: yes } : { t: 'cancel' };
+    if (yes >= 0) return { t: 'accept', with: yes };
+    // A counter that gets me my goal.
+    const g = goal(s, p);
+    const counter = (s.offer.counters ?? []).findIndex((c, q) => {
+      if (!c || !g || !canPay(s.players[q]!.hand, c.give)) return false;
+      const after = { ...me.hand };
+      for (const r of RESOURCES) after[r] += (c.give[r] ?? 0) - (c.want[r] ?? 0);
+      return RESOURCES.every((r) => after[r] >= 0) && canPay(after, g) && !canPay(me.hand, g);
+    });
+    return counter >= 0 ? { t: 'accept', with: counter } : { t: 'cancel' };
   }
 
   if (s.phase === 'robber') return robberFor(s, p);

@@ -66,11 +66,14 @@ export function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 
 // ---- Land ----------------------------------------------------------------
 
+/** The flat top of a tile, centre to corner: the tiles sit nearly edge to edge, a dark seam between them. */
+export const TILE_FACE = 0.955;
+
 /** A hex tile: a bevelled top (white, tinted per tile) on a darker earth side. */
 export function tileGeometry() {
   return {
-    top: new THREE.CylinderGeometry(0.9, 0.955, 0.06, 6).translate(0, TILE_TOP - 0.03, 0),
-    side: new THREE.CylinderGeometry(0.955, 0.985, TILE_TOP - 0.06, 6).translate(0, (TILE_TOP - 0.06) / 2, 0),
+    top: new THREE.CylinderGeometry(TILE_FACE, 0.985, 0.05, 6).translate(0, TILE_TOP - 0.025, 0),
+    side: new THREE.CylinderGeometry(0.985, 0.995, TILE_TOP - 0.05, 6).translate(0, (TILE_TOP - 0.05) / 2, 0),
   };
 }
 
@@ -140,27 +143,69 @@ export function palmGeometry() {
 
 // ---- Pieces ----------------------------------------------------------------
 
-/** A town: walls and a pitched roof (white and grey, tinted with the seat's colour). */
+/*
+ * The pieces are white and greys, tinted with the seat's colour by their
+ * material: white shows the colour itself, the greys its shades. Each stands
+ * on a dark rim a little wider than itself, so it reads against any picture.
+ */
+
+/** A town: a house with a pitched roof and a chimney, on a dark rim. */
 export function townGeometry() {
-  const roof = new THREE.CylinderGeometry(0.105, 0.105, 0.2, 3);
+  const roof = new THREE.CylinderGeometry(0.11, 0.11, 0.21, 3);
   return merge([
-    piece(new THREE.BoxGeometry(0.18, 0.12, 0.17), '#FFFFFF', { at: [0, 0.06, 0] }),
-    piece(roof, '#B8B8B8', { at: [0, 0.165, 0], rot: [0, 0, Math.PI / 2], scale: [0.85, 1, 1] }),
+    piece(new THREE.CylinderGeometry(0.15, 0.16, 0.025, 6), '#3A3A3A', { at: [0, 0.0125, 0] }),
+    piece(new THREE.BoxGeometry(0.19, 0.12, 0.17), '#FFFFFF', { at: [0, 0.085, 0] }),
+    piece(roof, '#9C9C9C', { at: [0, 0.195, 0], rot: [0, 0, Math.PI / 2], scale: [0.85, 1, 1] }),
+    piece(new THREE.BoxGeometry(0.035, 0.07, 0.035), '#7A7A7A', { at: [0.05, 0.25, 0.04] }),
+    piece(new THREE.BoxGeometry(0.04, 0.06, 0.005), '#4A4A4A', { at: [0, 0.055, 0.0855] }),
   ]);
 }
 
-/** A city: a long hall and a tall tower, both roofed. */
+/** A city: a hall, a tall keep with battlements and a pointed roof, on a wider dark rim. */
 export function cityGeometry() {
+  const parts = [
+    piece(new THREE.CylinderGeometry(0.22, 0.235, 0.025, 6), '#3A3A3A', { at: [0, 0.0125, 0] }),
+    piece(new THREE.BoxGeometry(0.3, 0.14, 0.19), '#FFFFFF', { at: [0.05, 0.095, 0] }),
+    piece(new THREE.CylinderGeometry(0.11, 0.11, 0.32, 3), '#9C9C9C', { at: [0.05, 0.21, 0], rot: [0, 0, Math.PI / 2], scale: [0.8, 1, 1] }),
+    piece(new THREE.BoxGeometry(0.14, 0.3, 0.16), '#F2F2F2', { at: [-0.12, 0.175, 0] }),
+    piece(new THREE.ConeGeometry(0.12, 0.15, 4), '#8C8C8C', { at: [-0.12, 0.4, 0], rot: [0, Math.PI / 4, 0] }),
+    piece(new THREE.BoxGeometry(0.045, 0.06, 0.005), '#4A4A4A', { at: [0.05, 0.06, 0.0955] }),
+  ];
+  // Battlements round the keep's top.
+  for (const [x, z] of [[-0.175, -0.065], [-0.175, 0.065], [-0.065, -0.065], [-0.065, 0.065]] as const) {
+    parts.push(piece(new THREE.BoxGeometry(0.035, 0.04, 0.035), '#DADADA', { at: [x, 0.345, z] }));
+  }
+  return merge(parts);
+}
+
+/** A road: a wooden beam with a few plank joins across its top, on a dark rim. */
+export function roadGeometry() {
+  const parts = [
+    piece(new THREE.BoxGeometry(0.64, 0.03, 0.14), '#333333', { at: [0, 0.015, 0] }),
+    piece(new THREE.BoxGeometry(0.6, 0.07, 0.11), '#E6E6E6', { at: [0, 0.06, 0] }),
+  ];
+  for (const x of [-0.15, 0, 0.15]) parts.push(piece(new THREE.BoxGeometry(0.01, 0.003, 0.112), '#C4C4C4', { at: [x, 0.096, 0] }));
+  return merge(parts);
+}
+
+/** A small sailing boat, bow along +x. */
+export function boatGeometry() {
+  const hull = new THREE.CylinderGeometry(0.09, 0.06, 0.34, 8, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(Math.PI / 2);
   return merge([
-    piece(new THREE.BoxGeometry(0.3, 0.13, 0.18), '#FFFFFF', { at: [0.04, 0.065, 0] }),
-    piece(new THREE.CylinderGeometry(0.11, 0.11, 0.32, 3), '#B8B8B8', { at: [0.04, 0.175, 0], rot: [0, 0, Math.PI / 2], scale: [0.8, 1, 1] }),
-    piece(new THREE.BoxGeometry(0.13, 0.27, 0.15), '#F2F2F2', { at: [-0.12, 0.135, 0] }),
-    piece(new THREE.ConeGeometry(0.11, 0.13, 4), '#A8A8A8', { at: [-0.12, 0.335, 0], rot: [0, Math.PI / 4, 0] }),
+    piece(hull, '#7A4E2C', { at: [0, 0.07, 0], scale: [1, 1, 0.9] }),
+    piece(new THREE.BoxGeometry(0.3, 0.01, 0.13), '#A47148', { at: [0, 0.075, 0] }),
+    piece(new THREE.CylinderGeometry(0.008, 0.008, 0.36, 5), '#5B3B24', { at: [0.02, 0.25, 0] }),
+    piece(new THREE.ConeGeometry(0.11, 0.26, 3), '#F6EEDB', { at: [0.0, 0.24, 0], scale: [1, 1, 0.12], rot: [0, 0, 0] }),
   ]);
 }
 
-export function roadGeometry() {
-  return merge([piece(new THREE.BoxGeometry(0.58, 0.075, 0.095), '#FFFFFF', { at: [0, 0.0375, 0] })]);
+/** A little island far out to sea: a hump of green on a sandy foot. */
+export function farIslandGeometry() {
+  return merge([
+    piece(new THREE.CylinderGeometry(1, 1.15, 0.12, 14), '#D9BC7E', { at: [0, 0.06, 0] }),
+    piece(new THREE.SphereGeometry(0.9, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), '#4E8C4A', { at: [0, 0.1, 0], scale: [1, 0.55, 0.85] }),
+    piece(new THREE.ConeGeometry(0.45, 0.7, 7), '#7F8A86', { at: [0.3, 0.45, -0.1] }),
+  ]);
 }
 
 export function robberGeometry() {
@@ -177,7 +222,7 @@ export function robberGeometry() {
     [0.06, 0.5],
     [0, 0.52],
   ].map(([x, y]) => new THREE.Vector2(x!, y!));
-  return merge([piece(new THREE.LatheGeometry(profile, 14), '#3A3A40')]);
+  return merge([piece(new THREE.LatheGeometry(profile, 14), '#3A3A40', { scale: [1.35, 1.35, 1.35] })]);
 }
 
 /** Where the pips sit on each face of a die: +y 1, -y 6, +x 2, -x 5, +z 3, -z 4. */

@@ -232,6 +232,30 @@ describe('isle turns', () => {
     expect(t.offer).toBeNull();
   });
 
+  it('lets a seat counter an offer, and the offerer take the counter', () => {
+    const s = cleanMain(9);
+    s.players[0]!.hand.wood = 2;
+    s.players[0]!.hand.grain = 1;
+    s.players[1]!.hand.ore = 2;
+    s.bank.wood -= 2;
+    s.bank.grain -= 1;
+    s.bank.ore -= 2;
+    let t = ok(s, 0, { t: 'offer', give: { wood: 2 }, want: { ore: 1 } });
+    expect(apply(t, 1, { t: 'counter', give: { ore: 3 }, want: { wood: 1 } })).toBe('you don’t have those cards');
+    expect(apply(t, 1, { t: 'counter', give: { ore: 1 }, want: {} })).toBe('pick cards');
+    t = ok(t, 1, { t: 'counter', give: { ore: 2 }, want: { wood: 1, grain: 1 } });
+    expect(t.offer!.replies[1]).toBe(false);
+    expect(apply(t, 1, { t: 'reply', yes: true })).toBe('no offer to answer');
+    t = ok(t, 2, { t: 'reply', yes: false });
+    t = ok(t, 3, { t: 'reply', yes: false });
+    expect(apply(t, 0, { t: 'accept', with: 2 })).toBe('they haven’t said yes');
+    t = ok(t, 0, { t: 'accept', with: 1 });
+    expect(t.players[0]!.hand).toMatchObject({ wood: 1, grain: 0, ore: 2 });
+    expect(t.players[1]!.hand).toMatchObject({ wood: 1, grain: 1, ore: 0 });
+    expect(t.offer).toBeNull();
+    expect(cardTotals(t)).toEqual(cardTotals(s));
+  });
+
   it('holds new cards back until the next turn', () => {
     const s = cleanMain(10);
     s.players[0]!.hand = { wood: 0, brick: 0, wool: 1, grain: 1, ore: 1 };

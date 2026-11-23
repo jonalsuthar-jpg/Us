@@ -16,10 +16,11 @@ import * as THREE from 'three';
 import type { Quality } from '../../house/scene/materials';
 import { mulberry32 } from '../../rng';
 import { TOPOLOGY, type Board, type Terrain } from '../board';
-import type { Marks } from '../pick';
+import type { Marks, Picked } from '../pick';
 import type { IsleState } from '../rules';
 import { textGeometry } from './glyphs';
 import {
+  boatGeometry,
   bushGeometry,
   cityGeometry,
   clayGeometry,
@@ -27,6 +28,7 @@ import {
   dieFacing,
   dieGeometry,
   duneGeometry,
+  farIslandGeometry,
   harbourGeometry,
   merge,
   palmGeometry,
@@ -38,6 +40,7 @@ import {
   rockGeometry,
   sheepGeometry,
   tileGeometry,
+  TILE_FACE,
   TILE_TOP,
   townGeometry,
   treeGeometry,
@@ -53,6 +56,8 @@ const pitchAt = (tilt: number) => PITCH_LOW + (PITCH_TOP - PITCH_LOW) * tilt;
 export interface IsleBoardApi {
   /** Where on the board (board units: x across, y down the table) a point on screen lands, from -1..1 coordinates. */
   pick(ndcX: number, ndcY: number): { x: number; y: number } | null;
+  /** Where a spot on the board (board units, on the tiles' tops) shows on screen, in -1..1 coordinates. */
+  toScreen(x: number, y: number): { x: number; y: number };
   /** Closer (below 1) or further (above 1). */
   zoomBy(factor: number): void;
   /** Slides the view by a share of the screen's height. */
@@ -75,6 +80,19 @@ export interface IsleBoardProps {
   onRolled?: (total: number) => void;
   /** Pictures for the lands' tiles; a land without one is drawn in 3D. */
   hexArt?: HexArt;
+  /** The dice tray beside the island (off when the screen shows its own dice). */
+  showDice?: boolean;
+  /** The marked spot under the pointer, drawn brighter. */
+  hover?: Picked | null;
+  /** Room taken by the screen's panels round the edges, in pixels: the island is framed in what's left. */
+  inset?: Inset;
+}
+
+export interface Inset {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
 }
 
 function useMaterial(quality: Quality, params: THREE.MeshStandardMaterialParameters = {}) {
@@ -99,31 +117,107 @@ export function lastRoll(s: IsleState): { key: number; d: [number, number] } | n
   return null;
 }
 
-export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled, hexArt }: IsleBoardProps) {
+export function IsleBoard({ state, marks, quality = 'medium', onReady, onRolled, hexArt, showDice = true, hover = null, inset }: IsleBoardProps) {
   const glow = useRef<{ total: number; at: number } | null>(null);
   const clock = useThree((t) => t.clock);
+  const shore = useMemo(() => coastline(), []);
   return (
     <>
       <color attach="background" args={[SKY]} />
-      <fog attach="fog" args={[SKY, 20, 42]} />
+      <fog attach="fog" args={[SKY, 22, 46]} />
       <Lights quality={quality} />
-      <Sea />
-      <Island board={state.board} seed={state.seed} robber={state.robber} quality={quality} glow={glow} pictured={hexArt} />
+      <Sea shore={shore} />
+      <FarIslands />
+      <Island board={state.board} seed={state.seed} robber={state.robber} quality={quality} glow={glow} pictured={hexArt} shore={shore} />
       {hexArt ? <HexPictures board={state.board} art={hexArt} robber={state.robber} glow={glow} /> : null}
+      <Boats board={state.board} quality={quality} />
       <Pieces state={state} quality={quality} />
-      <Robber hex={state.robber} quality={quality} />
-      <MarkSpots marks={marks} />
+      <Robber hex={state.robber} quality={quality} moving={state.phase === 'robber'} />
+      <MarkSpots marks={marks} hover={hover} />
       <Dice
         state={state}
         quality={quality}
+        visible={showDice}
         onLanded={(total) => {
           if (total !== 7) glow.current = { total, at: clock.elapsedTime };
           onRolled?.(total);
         }}
       />
-      <CameraRig onReady={onReady} />
+      <CameraRig onReady={onReady} beside={showDice} inset={inset} />
     </>
   );
+}
+
+// ---- The coast -----------------------------------------------------------------
+
+/** How many points round the coastline (one every 5°). */
+const SHORE_N = 72;
+/** How far the beach reaches past the tiles' edge. */
+const BEACH = 0.3;
+
+const SQRT3_2 = Math.sqrt(3) / 2;
+function onLand(x: number, y: number) {
+  return TOPOLOGY.hexes.some((h) => {
+    const dx = Math.abs(x - h.x);
+    const dy = Math.abs(y - h.y);
+    return dx <= SQRT3_2 && dx * 0.5 + dy * SQRT3_2 <= SQRT3_2;
+  });
+}
+
+/**
+ * The island's shoreline: for each angle round the middle (board x, y; the
+ * scene's x, z), how far out the beach ends. It follows the tiles' outline,
+ * widened by the beach and rounded off so it reads as a coast, not a hexagon.
+ */
+export function coastline(): number[] {
+  const edge = Array.from({ length: SHORE_N * 4 }, (_, i) => {
+    const a = (i / (SHORE_N * 4)) * Math.PI * 2;
+    let r = 7;
+    while (r > 0 && !onLand(Math.cos(a) * r, Math.sin(a) * r)) r -= 0.02;
+    return r;
+  });
+  // Widened: the furthest land within a few degrees, so the beach wraps the corners.
+  const k = edge.length;
+  const wide = edge.map((_, i) => Math.max(...[-4, -3, -2, -1, 0, 1, 2, 3, 4].map((d) => edge[(i + d + k) % k]!)));
+  return Array.from({ length: SHORE_N }, (_, j) => {
+    let sum = 0;
+    for (let d = -3; d <= 3; d++) sum += wide[(j * 4 + d + k) % k]!;
+    return sum / 7 + BEACH + 0.04 * Math.sin(j * 1.7) + 0.03 * Math.sin(j * 0.9 + 1);
+  });
+}
+
+/** The shoreline's radius at an angle (radians, atan2 of the scene's z and x). */
+function shoreAt(shore: number[], a: number) {
+  const f = ((((a / (Math.PI * 2)) % 1) + 1) % 1) * SHORE_N;
+  const i = Math.floor(f);
+  const t = f - i;
+  return shore[i % SHORE_N]! * (1 - t) + shore[(i + 1) % SHORE_N]! * t;
+}
+
+/** The beach: a flat top following the shoreline, sloping down into the water all round. */
+function beachGeometry(shore: number[]) {
+  const top: number[] = [];
+  const skirt: number[] = [];
+  const y = 0.16;
+  for (let j = 0; j < SHORE_N; j++) {
+    const a0 = (j / SHORE_N) * Math.PI * 2;
+    const a1 = ((j + 1) / SHORE_N) * Math.PI * 2;
+    const r0 = shore[j]!;
+    const r1 = shore[(j + 1) % SHORE_N]!;
+    const p0 = [Math.cos(a0) * r0, y, Math.sin(a0) * r0];
+    const p1 = [Math.cos(a1) * r1, y, Math.sin(a1) * r1];
+    const q0 = [Math.cos(a0) * (r0 + 0.22), -0.06, Math.sin(a0) * (r0 + 0.22)];
+    const q1 = [Math.cos(a1) * (r1 + 0.22), -0.06, Math.sin(a1) * (r1 + 0.22)];
+    top.push(0, y, 0, ...p1, ...p0);
+    skirt.push(...p0, ...p1, ...q1, ...p0, ...q1, ...q0);
+  }
+  const make = (v: number[]) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+    g.computeVertexNormals();
+    return g;
+  };
+  return merge([piece(make(top), COLORS.sand), piece(make(skirt), COLORS.sandDark)]);
 }
 
 // ---- Light, sky and sea ------------------------------------------------------
@@ -175,28 +269,41 @@ const SEA_FRAGMENT = /* glsl */ `
   uniform vec3 uShallow;
   uniform vec3 uFoam;
   uniform vec3 uSky;
+  uniform float uShore[${SHORE_N}];
   varying vec3 vWorld;
   void main() {
     float r = length(vWorld.xz);
     float a = atan(vWorld.z, vWorld.x);
-    vec3 c = mix(uShallow, uDeep, smoothstep(4.7, 8.0, r));
+    // The shoreline here, from the island's outline.
+    float f = fract(a / 6.2831853 + 1.0) * ${SHORE_N}.0;
+    int i = int(floor(f));
+    int j = i + 1 >= ${SHORE_N} ? 0 : i + 1;
+    float off = r - mix(uShore[i], uShore[j], fract(f));
+    // Turquoise over the sand near the beach, deepening further out, with slow patches of colour.
+    float patchy = sin(vWorld.x * 0.55 + uTime * 0.05) * sin(vWorld.z * 0.47 - uTime * 0.04);
+    vec3 c = mix(uShallow, uDeep, smoothstep(0.1, 3.2 + patchy * 0.6, off));
+    c = mix(c, uDeep * 0.82, smoothstep(5.0, 12.0, off) * 0.6);
     // Ripples catching the light.
     float w = sin(vWorld.x * 3.1 + uTime * 1.3) * sin(vWorld.z * 2.6 - uTime * 1.05)
             + 0.5 * sin((vWorld.x + vWorld.z) * 5.3 - uTime * 1.9);
-    c += w * 0.025 * (1.0 - smoothstep(6.0, 16.0, r));
-    // Foam where the waves meet the beach, breathing in and out.
-    float shore = 4.72 + 0.06 * sin(a * 9.0 + uTime * 0.7) + 0.05 * sin(uTime * 0.9);
-    float band = 1.0 - smoothstep(0.0, 0.14 + 0.05 * sin(uTime * 1.6 + a * 5.0), abs(r - shore - 0.1));
-    float edge = 1.0 - smoothstep(0.0, 0.05, abs(r - shore - 0.3 - 0.05 * sin(uTime * 1.2 + a * 7.0)));
-    c = mix(c, uFoam, clamp(band * 0.8 + edge * 0.35, 0.0, 1.0));
-    c = mix(c, uSky, smoothstep(16.0, 34.0, r));
+    float fade = 1.0 - smoothstep(4.0, 14.0, off);
+    c += w * 0.03 * fade;
+    // Waves rolling in towards the beach, fading as they come.
+    float roll = sin(off * 9.0 + uTime * 1.6 + sin(a * 5.0) * 0.6);
+    c = mix(c, uFoam, smoothstep(0.86, 1.0, roll) * (1.0 - smoothstep(0.3, 1.6, off)) * 0.35);
+    // Foam where the water meets the sand, breathing in and out.
+    float lap = 0.05 * sin(a * 9.0 + uTime * 0.7) + 0.04 * sin(uTime * 0.9);
+    float band = 1.0 - smoothstep(0.0, 0.12 + 0.04 * sin(uTime * 1.6 + a * 5.0), abs(off - 0.12 - lap));
+    float edge = 1.0 - smoothstep(0.0, 0.045, abs(off - 0.34 - lap - 0.05 * sin(uTime * 1.2 + a * 7.0)));
+    c = mix(c, uFoam, clamp(band * 0.85 + edge * 0.4, 0.0, 1.0));
+    c = mix(c, uSky, smoothstep(16.0, 36.0, r));
     gl_FragColor = vec4(c, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `;
 
-function Sea() {
+function Sea({ shore }: { shore: number[] }) {
   const mat = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -208,9 +315,10 @@ function Sea() {
           uShallow: { value: new THREE.Color(COLORS.shallow) },
           uFoam: { value: new THREE.Color(COLORS.foam) },
           uSky: { value: new THREE.Color(SKY) },
+          uShore: { value: shore },
         },
       }),
-    [],
+    [shore],
   );
   useEffect(() => () => mat.dispose(), [mat]);
   useFrame(({ clock }) => {
@@ -254,6 +362,7 @@ function Island({
   quality,
   glow,
   pictured,
+  shore,
 }: {
   board: Board;
   seed: number;
@@ -262,11 +371,12 @@ function Island({
   glow: RefObject<{ total: number; at: number } | null>;
   /** Lands with a picture on their tiles: their 3D trees, sheep and so on aren't drawn. */
   pictured?: HexArt;
+  shore: number[];
 }) {
   const mat = useMaterial(quality);
   const tileMat = useMaterial(quality, { roughness: 0.92 });
   const plain = useMemo(() => new Set((Object.keys(pictured ?? {}) as Terrain[]).filter((t) => pictured?.[t] != null)), [pictured]);
-  const built = useMemo(() => buildIsland(board, seed, mat, tileMat, plain), [board, seed, mat, tileMat, plain]);
+  const built = useMemo(() => buildIsland(board, seed, mat, tileMat, plain, shore), [board, seed, mat, tileMat, plain, shore]);
   useEffect(() => () => built.dispose(), [built]);
 
   const base = useMemo(() => board.terrain.map((t) => new THREE.Color(COLORS.terrain[t])), [board]);
@@ -302,29 +412,52 @@ function Island({
   );
 }
 
-function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: THREE.Material, pictured: ReadonlySet<Terrain>) {
+function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: THREE.Material, pictured: ReadonlySet<Terrain>, shore: number[]) {
   const objects: THREE.Object3D[] = [];
   const geos: THREE.BufferGeometry[] = [];
   const { hexes } = TOPOLOGY;
 
-  // The beach under it all, a little uneven at the water's edge.
-  const sand = new THREE.CylinderGeometry(4.78, 4.95, 0.16, 56, 1);
-  const pos = sand.getAttribute('position');
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const z = pos.getZ(i);
-    const r = Math.hypot(x, z);
-    if (r < 0.5) continue;
-    const a = Math.atan2(z, x);
-    const k = 1 + 0.025 * Math.sin(a * 7 + 1.3) + 0.018 * Math.sin(a * 13);
-    pos.setXYZ(i, x * k, pos.getY(i), z * k);
-  }
-  sand.computeVertexNormals();
-  const beach = merge([piece(sand, COLORS.sand, { at: [0, 0.08, 0] })]);
+  // The beach under it all, following the island's outline.
+  const beach = beachGeometry(shore);
   geos.push(beach);
   const beachMesh = new THREE.Mesh(beach, mat);
   beachMesh.receiveShadow = true;
   objects.push(beachMesh);
+
+  // Rocks along the coast in little clusters, kept clear of the harbours.
+  {
+    const random = mulberry32(seed ^ 0x70c5);
+    const harbours = board.ports.map((port) => {
+      const e = TOPOLOGY.edges[port.edge]!;
+      return Math.atan2(e.y, e.x);
+    });
+    const rock = rockGeometry();
+    geos.push(rock);
+    const at: THREE.Matrix4[] = [];
+    for (let k = 0; k < 26; k++) {
+      const a = random() * Math.PI * 2;
+      const r = shoreAt(shore, a) - 0.02 + random() * 0.18;
+      const sc = 0.8 + random() * 1.1;
+      const n = 1 + Math.floor(random() * 3);
+      if (harbours.some((h) => Math.abs(Math.atan2(Math.sin(a - h), Math.cos(a - h))) < 0.22)) continue;
+      for (let j = 0; j < n; j++) {
+        const aj = a + (random() - 0.5) * 0.06;
+        const rj = r + (random() - 0.5) * 0.16;
+        const sz = sc * (0.5 + random() * 0.6);
+        at.push(
+          new THREE.Matrix4().compose(
+            new THREE.Vector3(Math.cos(aj) * rj, 0.02, Math.sin(aj) * rj),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(random(), random() * 6, random())),
+            new THREE.Vector3(sz, sz * 0.8, sz),
+          ),
+        );
+      }
+    }
+    const rocks = new THREE.InstancedMesh(rock, mat, at.length);
+    at.forEach((m, i) => rocks.setMatrixAt(i, m));
+    rocks.receiveShadow = true;
+    objects.push(rocks);
+  }
 
   // The tiles: shared earth sides, tops tinted per land.
   const tile = tileGeometry();
@@ -335,7 +468,7 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
   const tops = new THREE.InstancedMesh(top, tileMat, hexes.length);
   const m = new THREE.Matrix4();
   hexes.forEach((h, i) => {
-    m.makeTranslation(h.x, 0.04, h.y);
+    m.makeTranslation(h.x, 0, h.y);
     sides.setMatrixAt(i, m);
     tops.setMatrixAt(i, m);
     tops.setColorAt(i, new THREE.Color(COLORS.terrain[board.terrain[i]!]));
@@ -382,7 +515,7 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
           const sx = x + Math.cos(turn) * along;
           const sz = z + Math.sin(turn) * along;
           const mm = new THREE.Matrix4().compose(
-            new THREE.Vector3(sx, TILE_TOP + 0.04, sz),
+            new THREE.Vector3(sx, TILE_TOP, sz),
             new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -turn),
             new THREE.Vector3(len * 0.55, 1, 1),
           );
@@ -399,7 +532,7 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
         const at = place(h.x, h.y, 0.11 * s);
         if (!at) continue;
         const mm = new THREE.Matrix4().compose(
-          new THREE.Vector3(at.x, TILE_TOP + 0.04, at.z),
+          new THREE.Vector3(at.x, TILE_TOP, at.z),
           new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), random() * Math.PI * 2),
           new THREE.Vector3(s, s, s),
         );
@@ -444,7 +577,7 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
     const uz = nz / len;
     still.push(harbourGeometry(TOPOLOGY.verts[e.v[0]]!, TOPOLOGY.verts[e.v[1]]!, { x: ux, y: uz }));
     const label = portLabel(port.kind === 'any' ? '3:1' : '2:1', port.kind === 'any' ? COLORS.wood : COLORS.terrain[port.kind]);
-    still.push(placed(label, e.x + ux * 0.5, 0.17, e.y + uz * 0.5));
+    still.push(placed(label, e.x + ux * 0.62, 0.26, e.y + uz * 0.62));
     label.dispose();
   }
   for (const g of tokenGeo.values()) g.dispose();
@@ -471,20 +604,23 @@ function tokenGeometry(n: number) {
   const ink = n === 6 || n === 8 ? COLORS.red : COLORS.ink;
   const pips = TOKEN_PIPS[n]!;
   return merge([
-    piece(new THREE.CylinderGeometry(0.31, 0.31, 0.03, 28), '#C9B48B', { at: [0, 0.015, 0] }),
-    piece(new THREE.CylinderGeometry(0.29, 0.3, 0.03, 28), COLORS.cream, { at: [0, 0.04, 0] }),
-    piece(textGeometry(String(n), n >= 10 ? 0.2 : 0.23, 0.15, 0.012), ink, { at: [0, 0.055, -0.03] }),
+    piece(new THREE.CylinderGeometry(0.27, 0.28, 0.03, 28), '#7A5A34', { at: [0, 0.015, 0] }),
+    piece(new THREE.CylinderGeometry(0.25, 0.26, 0.03, 28), COLORS.cream, { at: [0, 0.04, 0] }),
+    piece(textGeometry(String(n), n >= 10 ? 0.18 : 0.2, 0.13, 0.012), ink, { at: [0, 0.055, -0.03] }),
     ...Array.from({ length: pips }, (_, i) =>
-      piece(new THREE.CylinderGeometry(0.019, 0.019, 0.012, 8), ink, { at: [(i - (pips - 1) / 2) * 0.052, 0.058, 0.17] }),
+      piece(new THREE.CylinderGeometry(0.017, 0.017, 0.012, 8), ink, { at: [(i - (pips - 1) / 2) * 0.046, 0.058, 0.145] }),
     ),
   ]);
 }
 
+/** A harbour's sign: its rate on cream, ringed in the colour of the land it takes (wood for any), on a post. */
 function portLabel(text: string, color: string) {
   return merge([
-    piece(new THREE.CylinderGeometry(0.2, 0.2, 0.03, 24), color, { at: [0, 0, 0] }),
-    piece(new THREE.CylinderGeometry(0.17, 0.17, 0.035, 24), COLORS.cream, { at: [0, 0.01, 0] }),
-    piece(textGeometry(text, 0.12, 0.16, 0.012), COLORS.ink, { at: [0, 0.028, 0] }),
+    piece(new THREE.CylinderGeometry(0.03, 0.035, 0.26, 6), COLORS.woodDark, { at: [0, -0.12, 0] }),
+    piece(new THREE.CylinderGeometry(0.27, 0.27, 0.04, 28), COLORS.ink, { at: [0, 0, 0] }),
+    piece(new THREE.CylinderGeometry(0.25, 0.25, 0.045, 28), color, { at: [0, 0.005, 0] }),
+    piece(new THREE.CylinderGeometry(0.19, 0.19, 0.05, 28), COLORS.cream, { at: [0, 0.01, 0] }),
+    piece(textGeometry(text, 0.15, 0.2, 0.014), COLORS.ink, { at: [0, 0.036, 0] }),
   ]);
 }
 
@@ -503,8 +639,8 @@ export const hexArtAt = (base: string): HexArt =>
 /** How much of each picture shows: just inside its painted rim, so its rounded corners never peek out. */
 const PICTURE_ZOOM = 0.97;
 /** The tile's flat top (the bevelled top's upper face). */
-const TOP_R = 0.9;
-const TOP_Y = TILE_TOP + 0.04 + 0.002;
+const TOP_R = TILE_FACE;
+const TOP_Y = TILE_TOP + 0.002;
 
 /** A flat hex lying face up with UVs that put a hex picture on it, north at the top. */
 function pictureHexGeometry(y = TOP_Y) {
@@ -610,6 +746,72 @@ function LandPictures({ source, hexes }: { source: string | number; hexes: numbe
   return <primitive object={mesh} />;
 }
 
+// ---- Out at sea -------------------------------------------------------------------
+
+/** Islands on the horizon, half lost in the haze. */
+function FarIslands() {
+  const geo = useMemo(() => farIslandGeometry(), []);
+  useEffect(() => () => geo.dispose(), [geo]);
+  const mat = useMemo(() => new THREE.MeshLambertMaterial({ vertexColors: true }), []);
+  useEffect(() => () => mat.dispose(), [mat]);
+  return (
+    <group>
+      {(
+        [
+          [-15, -11, 1.6, 0.4],
+          [17, -9, 1.2, 2.1],
+          [-18, 6, 1.3, 1.2],
+          [14, 13, 1.8, 4],
+        ] as const
+      ).map(([x, z, s, turn], i) => (
+        <mesh key={i} geometry={geo} material={mat} position={[x, -0.05, z]} scale={[s, s * 0.8, s]} rotation-y={turn} />
+      ))}
+    </group>
+  );
+}
+
+/** Boats moored off a few harbours, bobbing on the swell. */
+function Boats({ board, quality }: { board: Board; quality: Quality }) {
+  const mat = useMaterial(quality, { roughness: 0.7 });
+  const geo = useMemo(() => boatGeometry(), []);
+  useEffect(() => () => geo.dispose(), [geo]);
+  const spots = useMemo(
+    () =>
+      board.ports
+        .filter((_, i) => i % 3 === 1)
+        .map((port, i) => {
+          const e = TOPOLOGY.edges[port.edge]!;
+          const h = TOPOLOGY.hexes[e.hexes[0]!]!;
+          const len = Math.hypot(e.x - h.x, e.y - h.y);
+          const ux = (e.x - h.x) / len;
+          const uz = (e.y - h.y) / len;
+          // Off to one side of the landing stage, lying along the coast.
+          return { x: e.x + ux * 1.05 - uz * 0.45, z: e.y + uz * 1.05 + ux * 0.45, turn: -Math.atan2(uz, ux) + Math.PI / 2, phase: i * 1.7 };
+        }),
+    [board],
+  );
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    refs.current.forEach((m, i) => {
+      if (!m) return;
+      const ph = spots[i]!.phase;
+      m.position.y = 0.0 + Math.sin(t * 1.3 + ph) * 0.015;
+      m.rotation.z = Math.sin(t * 1.1 + ph) * 0.05;
+      m.rotation.x = Math.sin(t * 0.9 + ph * 2) * 0.04;
+    });
+  });
+  return (
+    <group>
+      {spots.map((b, i) => (
+        <group key={i} position={[b.x, 0, b.z]} rotation-y={b.turn}>
+          <mesh ref={(m) => void (refs.current[i] = m)} geometry={geo} material={mat} scale={1.5} castShadow />
+        </group>
+      ))}
+    </group>
+  );
+}
+
 // ---- Pieces --------------------------------------------------------------------
 
 function usePlayerMaterials(quality: Quality) {
@@ -642,7 +844,7 @@ function Pieces({ state, quality }: { state: IsleState; quality: Quality }) {
         const edge = TOPOLOGY.edges[e]!;
         return (
           <Drop key={`r${e}`} x={edge.x} z={edge.y} still={first.current}>
-            <mesh geometry={shapes.road} material={mats[p]} rotation-y={-edge.angle} scale={[1, 1.35, 1.3]} castShadow receiveShadow />
+            <mesh geometry={shapes.road} material={mats[p]} rotation-y={-edge.angle} scale={[1, 1.15, 1.25]} castShadow receiveShadow />
           </Drop>
         );
       })}
@@ -650,12 +852,12 @@ function Pieces({ state, quality }: { state: IsleState; quality: Quality }) {
         if (!t) return null;
         const vert = TOPOLOGY.verts[v]!;
         return (
-          <Drop key={`t${v}${t.city ? 'c' : ''}`} x={vert.x} z={vert.y} still={first.current}>
+          <Drop key={`t${v}${t.city ? 'c' : ''}`} x={vert.x} z={vert.y} still={first.current} grow={t.city}>
             <mesh
               geometry={t.city ? shapes.city : shapes.town}
               material={mats[t.p]}
               rotation-y={((v * 47) % 6) * (Math.PI / 3)}
-              scale={t.city ? 1.45 : 1.55}
+              scale={t.city ? 1.6 : 1.7}
               castShadow
               receiveShadow
             />
@@ -666,39 +868,75 @@ function Pieces({ state, quality }: { state: IsleState; quality: Quality }) {
   );
 }
 
-/** Drops a new piece in from above with a small bounce. */
-function Drop({ x, z, still, children }: { x: number; z: number; still: boolean; children: ReactNode }) {
+const rippleShape = new THREE.RingGeometry(0.2, 0.26, 32).rotateX(-Math.PI / 2);
+
+/**
+ * Brings a new piece onto the board: dropped in from above with a small
+ * bounce, or for a city grown out of the town it replaces, and a ring of
+ * light spreading from where it lands.
+ */
+function Drop({ x, z, still, grow, children }: { x: number; z: number; still: boolean; grow?: boolean; children: ReactNode }) {
   const ref = useRef<THREE.Group>(null);
+  const ring = useRef<THREE.Mesh>(null);
   const born = useRef<number | null>(still ? -10 : null);
+  const ringMat = useMemo(
+    () => (still ? null : new THREE.MeshBasicMaterial({ color: '#FFF1A0', transparent: true, opacity: 0, depthWrite: false, toneMapped: false })),
+    [still],
+  );
+  useEffect(() => () => ringMat?.dispose(), [ringMat]);
   useFrame(({ clock }) => {
     const g = ref.current;
     if (!g) return;
     if (born.current == null) born.current = clock.elapsedTime;
     const t = clock.elapsedTime - born.current;
-    if (t > 0.6) {
+    const r = ring.current;
+    if (r && ringMat) {
+      const k = Math.min(1, Math.max(0, (t - (grow ? 0.15 : 0.28)) / 0.6));
+      r.visible = k > 0 && k < 1;
+      r.scale.setScalar(1 + k * 3);
+      ringMat.opacity = (1 - k) * 0.9;
+    }
+    if (t > 0.7) {
       g.position.y = TILE_TOP;
       g.scale.setScalar(1);
       return;
     }
+    if (grow) {
+      // Rising out of the town: a swell past full size, then settling.
+      const k = Math.min(1, t / 0.45);
+      const s = 0.6 + 0.4 * k + Math.sin(k * Math.PI) * 0.18;
+      g.position.y = TILE_TOP;
+      g.scale.set(s, 0.4 + 0.6 * k + Math.sin(k * Math.PI) * 0.25, s);
+      return;
+    }
     // A fall, then two small bounces.
     const fall = Math.max(0, 1 - t / 0.28);
-    const bounce = t > 0.28 ? Math.abs(Math.sin(((t - 0.28) / 0.32) * Math.PI * 2)) * 0.06 * (1 - (t - 0.28) / 0.32) : 0;
+    const bounce = t > 0.28 ? Math.abs(Math.sin(((t - 0.28) / 0.32) * Math.PI * 2)) * 0.06 * Math.max(0, 1 - (t - 0.28) / 0.32) : 0;
     g.position.y = TILE_TOP + fall * fall * 0.9 + bounce;
     const squash = t > 0.26 && t < 0.36 ? 1 - 0.12 * Math.sin(((t - 0.26) / 0.1) * Math.PI) : 1;
     g.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
   });
   return (
-    <group ref={ref} position={[x, TILE_TOP + (still ? 0 : 0.9), z]}>
-      {children}
-    </group>
+    <>
+      <group ref={ref} position={[x, TILE_TOP + (still || grow ? 0 : 0.9), z]}>
+        {children}
+      </group>
+      {ringMat ? <mesh ref={ring} geometry={rippleShape} material={ringMat} position={[x, TILE_TOP + 0.03, z]} visible={false} renderOrder={4} /> : null}
+    </>
   );
 }
 
 const robberShape = robberGeometry();
 
-function Robber({ hex, quality }: { hex: number; quality: Quality }) {
+const robberRing = new THREE.RingGeometry(0.3, 0.38, 36).rotateX(-Math.PI / 2);
+
+/** The robber, gliding over in an arc when moved; while it's waiting to be moved, it bobs in a pulsing ring of light. */
+function Robber({ hex, quality, moving }: { hex: number; quality: Quality; moving: boolean }) {
   const mat = useMaterial(quality, { roughness: 0.4, metalness: 0.15 });
   const ref = useRef<THREE.Mesh>(null);
+  const ring = useRef<THREE.Mesh>(null);
+  const ringMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#FF7A5C', transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false }), []);
+  useEffect(() => () => ringMat.dispose(), [ringMat]);
   const from = useRef<{ x: number; z: number; at: number } | null>(null);
   const spot = (h: number) => ({ x: TOPOLOGY.hexes[h]!.x + 0.36, z: TOPOLOGY.hexes[h]!.y - 0.16 });
   const target = spot(hex);
@@ -722,19 +960,36 @@ function Robber({ hex, quality }: { hex: number; quality: Quality }) {
     m.position.set(f.x + (target.x - f.x) * e, TILE_TOP + Math.sin(t * Math.PI) * 0.9, f.z + (target.z - f.z) * e);
     if (t >= 1) from.current = null;
   });
-  return <mesh ref={ref} geometry={robberShape} material={mat} position={[target.x, TILE_TOP, target.z]} castShadow />;
+  useFrame(({ clock: c }) => {
+    const r = ring.current;
+    const m = ref.current;
+    if (!r || !m) return;
+    r.visible = moving;
+    if (!moving) return;
+    const p = 0.5 + 0.5 * Math.sin(c.elapsedTime * 4);
+    r.position.set(m.position.x, TILE_TOP + 0.02, m.position.z);
+    r.scale.setScalar(1 + p * 0.35);
+    ringMat.opacity = 0.45 + 0.45 * p;
+    if (!from.current) m.position.y = TILE_TOP + 0.06 + Math.sin(c.elapsedTime * 3) * 0.05;
+  });
+  return (
+    <>
+      <mesh ref={ref} geometry={robberShape} material={mat} position={[target.x, TILE_TOP, target.z]} castShadow />
+      <mesh ref={ring} geometry={robberRing} material={ringMat} visible={false} renderOrder={5} />
+    </>
+  );
 }
 
 // ---- Where a piece can go ----------------------------------------------------
 
 const markShapes = {
-  vert: new THREE.TorusGeometry(0.12, 0.028, 8, 28).rotateX(Math.PI / 2),
-  vertDot: new THREE.CircleGeometry(0.1, 24).rotateX(-Math.PI / 2),
-  edge: new THREE.BoxGeometry(0.46, 0.02, 0.11),
-  hex: new THREE.RingGeometry(0.72, 0.86, 6, 1, Math.PI / 2).rotateX(-Math.PI / 2),
+  vert: new THREE.TorusGeometry(0.14, 0.03, 8, 28).rotateX(Math.PI / 2),
+  vertDot: new THREE.CircleGeometry(0.12, 24).rotateX(-Math.PI / 2),
+  edge: new THREE.BoxGeometry(0.5, 0.02, 0.13),
+  hex: new THREE.RingGeometry(0.78, 0.92, 6, 1, Math.PI / 2).rotateX(-Math.PI / 2),
 };
 
-function MarkSpots({ marks }: { marks?: Marks }) {
+function MarkSpots({ marks, hover }: { marks?: Marks; hover?: Picked | null }) {
   const mat = useMemo(
     () => new THREE.MeshBasicMaterial({ color: '#FFF1A0', transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false }),
     [],
@@ -750,45 +1005,54 @@ function MarkSpots({ marks }: { marks?: Marks }) {
     },
     [mat, soft],
   );
+  const hot = useMemo(
+    () => new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false }),
+    [],
+  );
+  useEffect(() => () => hot.dispose(), [hot]);
   const group = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
     const p = 0.5 + 0.5 * Math.sin(clock.elapsedTime * 4);
     mat.opacity = 0.55 + 0.4 * p;
     soft.opacity = 0.2 + 0.25 * p;
     group.current?.children.forEach((c) => {
-      if (c.userData.pulse) c.scale.setScalar(0.92 + 0.12 * p);
+      if (c.userData.pulse) c.scale.setScalar(c.userData.hot ? 1.35 : 0.92 + 0.12 * p);
     });
   });
   if (!marks) return null;
   const y = TILE_TOP + 0.05;
+  const isHot = (kind: Picked['kind'], i: number) => hover?.kind === kind && hover.i === i;
   return (
     <group ref={group}>
       {marks.verts?.map((v) => {
         const p = TOPOLOGY.verts[v]!;
+        const h = isHot('vert', v);
         return (
-          <group key={`v${v}`} position={[p.x, y, p.y]} userData={{ pulse: true }}>
-            <mesh geometry={markShapes.vert} material={mat} renderOrder={5} />
-            <mesh geometry={markShapes.vertDot} material={soft} renderOrder={5} />
+          <group key={`v${v}`} position={[p.x, y, p.y]} userData={{ pulse: true, hot: h }}>
+            <mesh geometry={markShapes.vert} material={h ? hot : mat} renderOrder={5} />
+            <mesh geometry={markShapes.vertDot} material={h ? mat : soft} renderOrder={5} />
           </group>
         );
       })}
       {marks.edges?.map((e) => {
         const p = TOPOLOGY.edges[e]!;
+        const h = isHot('edge', e);
         return (
           <mesh
             key={`e${e}`}
             geometry={markShapes.edge}
-            material={mat}
+            material={h ? hot : mat}
             position={[p.x, y, p.y]}
             rotation-y={-p.angle}
             renderOrder={5}
-            userData={{ pulse: true }}
+            userData={{ pulse: true, hot: h }}
           />
         );
       })}
-      {marks.hexes?.map((h) => {
-        const p = TOPOLOGY.hexes[h]!;
-        return <mesh key={`h${h}`} geometry={markShapes.hex} material={mat} position={[p.x, y - 0.03, p.y]} renderOrder={5} />;
+      {marks.hexes?.map((hx) => {
+        const p = TOPOLOGY.hexes[hx]!;
+        const h = isHot('hex', hx);
+        return <mesh key={`h${hx}`} geometry={markShapes.hex} material={h ? hot : mat} position={[p.x, y - 0.03, p.y]} scale={h ? 1.06 : 1} renderOrder={5} />;
       })}
     </group>
   );
@@ -808,7 +1072,7 @@ function trayGeometry() {
   return merge(parts);
 }
 
-function Dice({ state, quality, onLanded }: { state: IsleState; quality: Quality; onLanded: (total: number) => void }) {
+function Dice({ state, quality, visible, onLanded }: { state: IsleState; quality: Quality; visible: boolean; onLanded: (total: number) => void }) {
   const mat = useMaterial(quality, { roughness: 0.35 });
   const tray = useMemo(() => trayGeometry(), []);
   useEffect(() => () => tray.dispose(), [tray]);
@@ -874,7 +1138,7 @@ function Dice({ state, quality, onLanded }: { state: IsleState; quality: Quality
   });
 
   return (
-    <group>
+    <group visible={visible}>
       <mesh geometry={tray} material={mat} position={[TRAY.x, 0, TRAY.z]} castShadow receiveShadow />
       {dice.map((ref, i) => (
         <mesh key={i} ref={ref} geometry={dieShape} material={mat} castShadow />
@@ -885,12 +1149,53 @@ function Dice({ state, quality, onLanded }: { state: IsleState; quality: Quality
 
 // ---- The camera ----------------------------------------------------------------
 
-function CameraRig({ onReady }: { onReady?: (api: IsleBoardApi) => void }) {
+/** Half the island's width and depth (harbour signs included), for fitting it in view. */
+const ISLAND_HALF_W = 5.5;
+const ISLAND_HALF_D = 5.1;
+
+/** How far back the camera stands so the whole island fills the view (tilted at pitch). */
+function fitDistance(aspect: number, fov: number, pitch: number) {
+  const tanV = Math.tan((fov * Math.PI) / 360);
+  const byWidth = ISLAND_HALF_W / (tanV * aspect);
+  // Tilted, the island's depth shrinks on screen by the sine of the pitch.
+  const byDepth = (ISLAND_HALF_D * Math.sin(pitch) + 0.6 * Math.cos(pitch)) / tanV;
+  return Math.max(byWidth, byDepth) * 0.97;
+}
+
+function CameraRig({ onReady, beside = true, inset }: { onReady?: (api: IsleBoardApi) => void; beside?: boolean; inset?: Inset }) {
   const camera = useThree((t) => t.camera) as THREE.PerspectiveCamera;
   const size = useThree((t) => t.size);
-  const home = (tilt = 0) => ({ x: 0.9, z: 0.4, d: size.width / size.height < 1.2 ? 15 : 10, tilt });
+  const { left = 0, right = 0, top = 0, bottom = 0 } = inset ?? {};
+  // The free part of the screen, between the panels.
+  const freeW = Math.max(1, size.width - left - right);
+  const freeH = Math.max(1, size.height - top - bottom);
+  const aspect = freeW / freeH;
+  const freeFov = (2 * Math.atan(Math.tan(((camera.fov ?? 45) * Math.PI) / 360) * (freeH / Math.max(1, size.height))) * 180) / Math.PI;
+  // With the dice tray beside it the island sits a little left; alone, in the middle and filling the view.
+  const home = (tilt = 0) =>
+    beside
+      ? { x: 0.9, z: 0.4, d: aspect < 1.2 ? 15 : 10, tilt }
+      : { x: 0, z: 0.25, d: fitDistance(aspect, freeFov, pitchAt(tilt)), tilt };
   const want = useRef(home());
   const now = useRef({ ...want.current });
+  // A new size (the window, or the panels around the board): frame the island again.
+  const fitted = useRef(`${freeW}x${freeH}`);
+  useEffect(() => {
+    const key = `${freeW}x${freeH}`;
+    if (fitted.current === key) return;
+    fitted.current = key;
+    want.current = home(want.current.tilt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freeW, freeH]);
+  // The view's middle moved to the middle of the free part: the sea still fills the whole screen.
+  useLayoutEffect(() => {
+    if (!inset) {
+      camera.clearViewOffset();
+      return;
+    }
+    camera.setViewOffset(size.width, size.height, -(left - right) / 2, -(top - bottom) / 2, size.width, size.height);
+    camera.updateProjectionMatrix();
+  }, [camera, inset, size.width, size.height, left, right, top, bottom]);
 
   useFrame((_, dt) => {
     const k = 1 - Math.exp(-dt * 7);
@@ -911,7 +1216,7 @@ function CameraRig({ onReady }: { onReady?: (api: IsleBoardApi) => void }) {
     const hit = new THREE.Vector3();
     const clampView = () => {
       const w = want.current;
-      w.d = Math.min(16, Math.max(5, w.d));
+      w.d = Math.min(beside ? 16 : Math.max(16, home(w.tilt).d * 1.15), Math.max(5, w.d));
       const r = Math.hypot(w.x, w.z);
       const max = 5.2;
       if (r > max) {
@@ -924,6 +1229,11 @@ function CameraRig({ onReady }: { onReady?: (api: IsleBoardApi) => void }) {
         camera.updateMatrixWorld();
         ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
         return ray.ray.intersectPlane(plane, hit) ? { x: hit.x, y: hit.z } : null;
+      },
+      toScreen(x, y) {
+        camera.updateMatrixWorld();
+        const v = new THREE.Vector3(x, TILE_TOP, y).project(camera);
+        return { x: v.x, y: v.y };
       },
       zoomBy(f) {
         want.current.d *= f;
@@ -942,7 +1252,8 @@ function CameraRig({ onReady }: { onReady?: (api: IsleBoardApi) => void }) {
         const top = want.current.tilt < 0.5;
         want.current.tilt = top ? 1 : 0;
         // From above, the board is taller than it is from the side: step back so all of it shows.
-        if (top) want.current.d = Math.max(want.current.d, 12.5);
+        if (top) want.current.d = Math.max(want.current.d, beside ? 12.5 : home(1).d);
+        else if (!beside) want.current.d = home(0).d;
         clampView();
         return top ? 'top' : 'tilted';
       },

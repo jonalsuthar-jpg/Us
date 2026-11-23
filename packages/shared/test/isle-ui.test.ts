@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apply, emptyHand, hardMove, IDLE, logLines, newGame, settleMode, tableView, tapBoard, TOPOLOGY, waitingOn, type IsleState } from '../src/isle';
+import { apply, emptyHand, hardMove, IDLE, logLines, newGame, notesFor, settleMode, tableView, tapBoard, TOPOLOGY, waitingOn, type IsleState } from '../src/isle';
 
 const SEATS = [
   { id: 'a', name: 'Asha', bot: false },
@@ -68,5 +68,39 @@ describe('isle screen', () => {
     expect(lines.length).toBeGreaterThan(5);
     expect(lines.some((l) => /rolled \d+/.test(l.text))).toBe(true);
     expect(new Set(lines.map((l) => l.n)).size).toBe(lines.length);
+  });
+
+  it('says why a build can’t be made, and what’s missing', () => {
+    const s = structuredClone(played(5, (t) => t.phase === 'main'));
+    const me = s.turn;
+    s.players[me]!.hand = { wood: 1, brick: 0, wool: 0, grain: 1, ore: 1 };
+    const v = tableView(s, me);
+    const road = v.build.find((b) => b.what === 'road')!;
+    expect(road.missing).toEqual({ brick: 1 });
+    expect(road.why).toBe('Need 1 brick');
+    expect(v.build.find((b) => b.what === 'city')!.missing).toEqual({ grain: 1, ore: 2 });
+    const other = (me + 1) % 4;
+    expect(tableView(s, other).build.every((b) => b.why === 'Not your turn')).toBe(true);
+  });
+
+  it('notes answers to my offer, counters included, and the trade', () => {
+    const s = structuredClone(played(5, (t) => t.phase === 'main' && !t.offer));
+    const me = s.turn;
+    const [a, b, c] = [1, 2, 3].map((k) => (me + k) % 4) as [number, number, number];
+    for (const p of s.players) p.hand = emptyHand();
+    s.players[me]!.hand.wood = 2;
+    s.players[a]!.hand.ore = 1;
+    s.players[b]!.hand.ore = 2;
+    let t = apply(s, me, { t: 'offer', give: { wood: 1 }, want: { ore: 1 } }) as IsleState;
+    let n = apply(t, a, { t: 'reply', yes: false }) as IsleState;
+    expect(notesFor(t, n, me).map((x) => x.text)).toEqual([`${s.players[a]!.name} rejected your offer`]);
+    t = n;
+    n = apply(t, b, { t: 'counter', give: { ore: 1 }, want: { wood: 2 } }) as IsleState;
+    expect(notesFor(t, n, me)[0]!.text).toBe(`${s.players[b]!.name} countered: they give 1 ore for 2 wood`);
+    expect(tableView(n, b).answered?.counter).toEqual({ give: { ore: 1 }, want: { wood: 2 } });
+    t = apply(n, c, { t: 'reply', yes: false }) as IsleState;
+    n = apply(t, me, { t: 'accept', with: b }) as IsleState;
+    expect(notesFor(t, n, me).map((x) => x.text)).toContain(`Trade done with ${s.players[b]!.name}`);
+    expect(notesFor(t, n, b).map((x) => x.text)).toContain(`Trade done with ${s.players[me]!.name}`);
   });
 });

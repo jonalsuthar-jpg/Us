@@ -94,6 +94,7 @@ export function cuesFor(prev: IsleState | null, next: IsleState, me: number): Cu
         cues.push({ name: 'trade', volume: mine || (e.k === 'trade' && e.with === me) ? 0.8 : 0.4, at: 0 });
         break;
       case 'offer':
+      case 'counter':
         if (!mine) cues.push({ name: 'card', volume: 0.6, at: 0 });
         break;
       case 'longest':
