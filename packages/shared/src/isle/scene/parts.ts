@@ -251,21 +251,6 @@ export function contactShadowGeometry(rx: number, rz: number) {
   return g;
 }
 
-/** A craggy rock for the coast: a squashed, lumpy dodecahedron in grey-brown. */
-export function coastRockGeometry() {
-  const g = new THREE.DodecahedronGeometry(0.12, 1);
-  const pos = g.getAttribute('position');
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    const k = 1 + 0.18 * Math.sin(x * 41 + z * 23) * Math.cos(y * 37);
-    pos.setXYZ(i, x * k, Math.max(-0.02, y * k * 0.75), z * k);
-  }
-  g.computeVertexNormals();
-  return piece(g, '#8C857A', { at: [0, 0.03, 0] });
-}
-
 /** A small sailing boat, bow along +x. */
 export function boatGeometry() {
   const hull = new THREE.CylinderGeometry(0.09, 0.06, 0.34, 8, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateX(Math.PI / 2);

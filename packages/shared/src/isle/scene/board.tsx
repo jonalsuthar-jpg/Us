@@ -22,7 +22,6 @@ import { textGeometry } from './glyphs';
 import {
   boatGeometry,
   bushGeometry,
-  coastRockGeometry,
   contactShadowGeometry,
   cityGeometry,
   clayGeometry,
@@ -129,7 +128,9 @@ export const IsleBoard = memo(function IsleBoard({ state, marks, quality = 'medi
   const clock = useThree((t) => t.clock);
   const gl = useThree((t) => t.gl);
   // Shadows are drawn again only when something that casts one moves (see shadowsMoved), not every frame.
+  // On a GPU that can't take them (shadowsSafe) they're off altogether, before anything is drawn.
   useLayoutEffect(() => {
+    if (!shadowsSafe(gl)) gl.shadowMap.enabled = false;
     gl.shadowMap.autoUpdate = false;
     gl.shadowMap.needsUpdate = true;
     return () => {
@@ -247,8 +248,28 @@ function beachGeometry(shore: number[]) {
 
 // ---- Light, sky and sea ------------------------------------------------------
 
+/**
+ * Whether this GPU can be trusted with shadow maps. PowerVR (Imagination)
+ * drivers, as on the Pixel 10, crash or reset with this scene's shadows: the
+ * app closed inside the driver (LoadTextureState, during an instanced draw),
+ * and Chrome on the same phone lost its GPU context; the same board without
+ * shadows ran fine. On those GPUs the board goes without them.
+ */
+export function shadowsSafe(gl: THREE.WebGLRenderer): boolean {
+  try {
+    const c = gl.getContext();
+    const ext = c.getExtension('WEBGL_debug_renderer_info');
+    const name = `${c.getParameter(c.RENDERER) ?? ''} ${ext ? (c.getParameter(ext.UNMASKED_RENDERER_WEBGL) ?? '') : ''}`;
+    return !/powervr|imagination/i.test(name);
+  } catch {
+    return true;
+  }
+}
+
 function Lights({ quality }: { quality: Quality }) {
   const sun = useRef<THREE.DirectionalLight>(null);
+  const gl = useThree((t) => t.gl);
+  const shadows = useMemo(() => quality !== 'low' && shadowsSafe(gl), [gl, quality]);
   useLayoutEffect(() => {
     const l = sun.current;
     if (!l) return;
@@ -271,7 +292,7 @@ function Lights({ quality }: { quality: Quality }) {
         position={[-6, 11, 7]}
         intensity={2.9}
         color="#FFE2B8"
-        castShadow={quality !== 'low'}
+        castShadow={shadows}
         shadow-mapSize-width={quality === 'high' ? 2048 : 1024}
         shadow-mapSize-height={quality === 'high' ? 2048 : 1024}
       />
@@ -535,28 +556,28 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
   beachMesh.receiveShadow = true;
   objects.push(beachMesh);
 
-  // Rocks along the coast in little clusters, kept clear of the harbours.
+  // Rocks along the coast in little clusters, kept clear of the harbours. Kept simple and out of the
+  // shadow pass: a denser, shadow-casting set (lumpier rocks, sea stacks) crashed the PowerVR driver on a
+  // Pixel 10 when drawn with the sea and the beach.
   {
     const random = mulberry32(seed ^ 0x70c5);
     const harbours = board.ports.map((port) => {
       const e = TOPOLOGY.edges[port.edge]!;
       return Math.atan2(e.y, e.x);
     });
-    const rock = coastRockGeometry();
+    const rock = rockGeometry();
     geos.push(rock);
     const at: THREE.Matrix4[] = [];
-    for (let k = 0; k < 46; k++) {
+    for (let k = 0; k < 26; k++) {
       const a = random() * Math.PI * 2;
-      // Most on the water's edge; a few out at sea, standing alone.
-      const far = k >= 38;
-      const r = shoreAt(shore, a) + (far ? 0.7 + random() * 1.1 : 0.02 + random() * 0.2);
-      const sc = far ? 1.3 + random() * 1.1 : 0.6 + random() * 0.9;
-      const n = far ? 1 + Math.floor(random() * 2) : 2 + Math.floor(random() * 3);
-      if (harbours.some((h) => Math.abs(Math.atan2(Math.sin(a - h), Math.cos(a - h))) < (far ? 0.4 : 0.24))) continue;
+      const r = shoreAt(shore, a) - 0.02 + random() * 0.18;
+      const sc = 0.8 + random() * 1.1;
+      const n = 1 + Math.floor(random() * 3);
+      if (harbours.some((h) => Math.abs(Math.atan2(Math.sin(a - h), Math.cos(a - h))) < 0.22)) continue;
       for (let j = 0; j < n; j++) {
-        const aj = a + (random() - 0.5) * 0.07;
-        const rj = r + (random() - 0.5) * 0.18;
-        const sz = sc * (0.45 + random() * 0.6);
+        const aj = a + (random() - 0.5) * 0.06;
+        const rj = r + (random() - 0.5) * 0.16;
+        const sz = sc * (0.5 + random() * 0.6);
         at.push(
           new THREE.Matrix4().compose(
             new THREE.Vector3(Math.cos(aj) * rj, 0.02, Math.sin(aj) * rj),
@@ -569,7 +590,6 @@ function buildIsland(board: Board, seed: number, mat: THREE.Material, tileMat: T
     const rocks = new THREE.InstancedMesh(rock, mat, at.length);
     at.forEach((m, i) => rocks.setMatrixAt(i, m));
     rocks.receiveShadow = true;
-    rocks.castShadow = true;
     objects.push(rocks);
   }
 
