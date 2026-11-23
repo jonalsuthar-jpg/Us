@@ -364,6 +364,33 @@ export default function HouseLab() {
         [900, () => cb.cmds.push({ t: 'walkTo', x: -55, y: 0, z: 49 })],
         [62000, () => ((ca.yaw = Math.PI - 0.5), (ca.pitch = 0.2), (cb.yaw = Math.PI + 0.15), (cb.pitch = 0.2))],
       ]);
+    if (scene === 'cycle')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: -1.6, y: 0, z: 34.4 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: -0.4, y: 0, z: 34.4 })],
+        [26000, () => ca.cmds.push({ t: 'use' })],
+        [27000, () => cb.cmds.push({ t: 'use' })],
+        [28500, () => ca.cmds.push({ t: 'use' })],
+        [29000, () => ((ca.yaw = 2.6), (ca.pitch = 0.3), (cb.yaw = -2.2), (cb.pitch = 0.35))],
+      ]);
+    if (scene === 'swings')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 32, y: 0, z: 53.3 })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 32, y: 0, z: 54.7 })],
+        [45000, () => ca.cmds.push({ t: 'use' })],
+        [46000, () => cb.cmds.push({ t: 'use' })],
+        [47000, () => ((ca.yaw = -Math.PI / 2 + 0.5), (ca.pitch = 0.25), (cb.yaw = -Math.PI / 2 - 0.6), (cb.pitch = 0.25))],
+      ]);
+    if (scene === 'kites')
+      run([
+        [800, () => ca.cmds.push({ t: 'walkTo', x: 42.2, y: 0, z: 70.8, use: 'kite_1' })],
+        [900, () => cb.cmds.push({ t: 'walkTo', x: 41.8, y: 0, z: 70.8, use: 'kite_2' })],
+        [55000, () => ca.cmds.push({ t: 'walkTo', x: 54, y: 0, z: 70 })],
+        [55500, () => cb.cmds.push({ t: 'walkTo', x: 30, y: 0, z: 66 })],
+        [62000, () => ca.cmds.push({ t: 'walkTo', x: 30, y: 0, z: 72 })],
+        [62500, () => cb.cmds.push({ t: 'walkTo', x: 54, y: 0, z: 64 })],
+        [70000, () => ((ca.yaw = 2.2 + Math.PI), (ca.pitch = -0.1), (cb.yaw = 2.2 + Math.PI), (cb.pitch = -0.1))],
+      ]);
     if (scene === 'chaat')
       run([
         [800, () => ca.cmds.push({ t: 'walkTo', x: 7.4, y: 0, z: 40.2 })],

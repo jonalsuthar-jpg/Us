@@ -260,3 +260,48 @@ describe('the village: stalls and carts', () => {
     expect(villagerAt(spices, at(1), 'c1')).toBeNull();
   });
 });
+
+describe('the village: play in the park', () => {
+  it('the cycle stays on the paths, clear of everything', async () => {
+    const { CYCLE } = await import('../src/house/village');
+    const r = CYCLE.route;
+    for (let i = 0; i + 1 < r.length; i++) {
+      const [ax, az] = r[i]!;
+      const [bx, bz] = r[i + 1]!;
+      const n = Math.ceil(Math.hypot(bx - ax, bz - az) / 0.5);
+      for (let k = 0; k <= n; k++) {
+        const x = ax + ((bx - ax) * k) / n;
+        const z = az + ((bz - az) * k) / n;
+        expect(regionAt(x, 0.1, z), `off the path at ${x},${z}`).not.toBeNull();
+        for (const [ox, oz, rad] of OBSTACLES) expect(Math.hypot(ox - x, oz - z), `hits ${ox},${oz} at ${x},${z}`).toBeGreaterThan(rad + 0.4);
+      }
+    }
+    expect(r[0]).toEqual(r[r.length - 1]);
+  });
+
+  it('the swings and kites can be walked up to', async () => {
+    const { SWINGS, KITES } = await import('../src/house/village');
+    for (const [x, z] of [[SWINGS.x + 0.9, SWINGS.seats[0]], [SWINGS.x + 0.9, SWINGS.seats[1]], [KITES.x + 0.8, KITES.z]] as [number, number][]) {
+      const reg = regionAt(x, 0.1, z);
+      expect(reg).not.toBeNull();
+      expect(findPath('living', { region: reg!.id, x, z }).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('the village: the tandem ride', () => {
+  it('starts and ends at the stand, moves smoothly, the same on both phones', async () => {
+    const { cycleAt, CYCLE_S } = await import('../src/house/scene/park');
+    const { CYCLE } = await import('../src/house/village');
+    expect(cycleAt(0)).toMatchObject({ x: CYCLE.stand.x, z: CYCLE.stand.z });
+    expect(cycleAt(CYCLE_S)).toMatchObject({ x: CYCLE.stand.x, z: CYCLE.stand.z });
+    let prev = cycleAt(0.01);
+    for (let s = 0.5; s < CYCLE_S; s += 0.5) {
+      const p = cycleAt(s);
+      expect(Math.hypot(p.x - prev.x, p.z - prev.z)).toBeLessThan(2.5);
+      expect(regionAt(p.x, 0.1, p.z)).not.toBeNull();
+      prev = p;
+    }
+    expect(cycleAt(31.7)).toEqual(cycleAt(31.7));
+  });
+});

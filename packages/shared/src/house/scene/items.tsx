@@ -388,6 +388,15 @@ function Model({ look }: { look: Look }): ReactNode {
         </>
       );
     }
+    case 'kiteReel':
+      // A wooden reel of kite string.
+      return (
+        <>
+          <B a={[-0.05, -0.04, -0.03]} b={[0.05, 0.04, 0.03]} m="bedding" />
+          <B a={[-0.07, -0.06, -0.035]} b={[-0.05, 0.06, 0.035]} m="wood" />
+          <B a={[0.05, -0.06, -0.035]} b={[0.07, 0.06, 0.035]} m="wood" />
+        </>
+      );
     case 'kulfi':
       return <Kulfi at={item.state.at} />;
     case 'bouquet':

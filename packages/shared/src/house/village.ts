@@ -212,6 +212,20 @@ export const STALLS = {
 } as const;
 export type StallId = keyof typeof STALLS;
 
+/**
+ * Play in the park: the tandem cycle's stand on the street and its ride (along the street and once round
+ * the park on the joggers' path, back to the stand); the two-seat swing set (its seats along z, facing +x);
+ * the kites on their post.
+ */
+export const CYCLE = {
+  stand: { x: -1, z: 33.2, h: Math.PI / 2 },
+  route: [
+    [-1, 33.2], [27, 33.2], [27.5, 37.5], [56.5, 37.5], [56.5, 74.5], [27.5, 74.5], [27.5, 37.5], [27, 33.2], [-1, 33.2],
+  ] as [number, number][],
+} as const;
+export const SWINGS = { x: 31, z: 54, seats: [53.35, 54.65] } as const;
+export const KITES = { x: 42, z: 70 } as const;
+
 /** The flower stall on the square. */
 export const STALL = { x: -8, z: 53, ry: Math.PI / 2 } as const;
 
@@ -314,6 +328,10 @@ export function obstacles(inside: (x: number, z: number) => boolean): [number, n
     // The street-food carts (there every day; the market's stalls only at weekends, so walk-through then).
     [STALLS.chaat.x, STALLS.chaat.z, 0.75],
     [STALLS.kulfi.x, STALLS.kulfi.z, 0.75],
+    // The swing set's posts, and the kite post.
+    [SWINGS.x, SWINGS.z - 1.2, 0.2],
+    [SWINGS.x, SWINGS.z + 1.2, 0.2],
+    [KITES.x, KITES.z, 0.2],
   ];
 }
 

@@ -930,7 +930,7 @@ export function HouseWorld(props: WorldProps) {
       me.rig.root.rotation.y = me.heading;
       me.rig.update(dt, { moving, speed: me.speed, swimming: me.at === 'pool' && !me.seat, act: bodyAct(act), carrying: !!me.hold, barefoot, talking: talking && !moving && (!voice || voice.me > SPEAKING), lookAt: p && them.shown ? [them.pos.x, them.pos.y + 1.6, them.pos.z] : undefined }, me.motion);
     }
-    const label = me.seat?.key === 'boat' ? 'Out on the lake' : region(me.at).label;
+    const label = me.seat?.key === 'boat' ? 'Out on the lake' : me.seat?.key === 'cycle' ? 'Cycling round the park' : region(me.at).label;
     if (label !== me.place) {
       me.place = label;
       onPlace?.(label);
@@ -955,7 +955,9 @@ export function HouseWorld(props: WorldProps) {
     if (them.rig) {
       if (p) {
         // In the boat they sit in their seat on the ride as this phone works it out (the same ride on both).
-        const inBoat = p.a?.startsWith('sit:boat:') ? fun.seat('boat', Number(p.a.split(':')[2])) : null;
+        // (Any seat that moves: the boat, the cycle, a swing.)
+        const [sitting, seatKey, seatI] = (p.a ?? '').split(':');
+        const inBoat = sitting === 'sit' && seatKey ? fun.seat(seatKey, Number(seatI)) : null;
         const to = inBoat ? tmp.to.set(inBoat.x, inBoat.y, inBoat.z) : tmp.to.set(p.x, p.y, p.z);
         if (!them.shown || them.pos.distanceTo(to) > 6) them.pos.copy(to);
         else if (inBoat) them.pos.copy(to);
@@ -971,7 +973,7 @@ export function HouseWorld(props: WorldProps) {
         them.rig.root.visible = false;
       }
     }
-    const theirPlace = p ? (p.a?.startsWith('sit:boat') ? 'Out on the lake' : (regionAt(p.x, p.y + 0.1, p.z)?.label ?? 'Garden')) : null;
+    const theirPlace = p ? (p.a?.startsWith('sit:boat') ? 'Out on the lake' : p.a?.startsWith('sit:cycle') ? 'Cycling round the park' : (regionAt(p.x, p.y + 0.1, p.z)?.label ?? 'Garden')) : null;
     if (theirPlace !== them.place) {
       them.place = theirPlace;
       onPartnerPlace?.(theirPlace);
