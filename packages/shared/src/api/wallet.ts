@@ -22,6 +22,7 @@ export const REWARDS = {
   breakfast: { amount: 150, perDay: 2 },
   sell_veg: { amount: 50, perDay: 6 },
   request: { amount: 200, perDay: 3 },
+  today: { amount: 300, perDay: 1 },
 } as const;
 export type Reward = keyof typeof REWARDS;
 
@@ -112,6 +113,7 @@ export function walletLineText(l: Pick<WalletLine, 'reason' | 'delta'>): string 
     breakfast: 'Breakfast together',
     sell_veg: 'Vegetables sold at the market',
     request: 'Helping in the village',
+    today: 'Today together, all three',
     'spend:chaat': 'Pani puri',
     'spend:kulfi': 'Kulfi',
     'spend:spices': 'Spices',

@@ -335,6 +335,9 @@ export function obstacles(inside: (x: number, z: number) => boolean): [number, n
     [SWINGS.x, SWINGS.z + 1.2, 0.2],
     [KITES.x, KITES.z, 0.2],
     [PITCH.x, PITCH.stumps, 0.2],
+    // The open-air screen's posts, either side of the lake path (scene/daily.tsx).
+    [-2.3, 57.8, 0.15],
+    [2.3, 57.8, 0.15],
   ];
 }
 

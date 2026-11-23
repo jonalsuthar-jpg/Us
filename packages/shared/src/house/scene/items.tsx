@@ -82,7 +82,7 @@ function Photo({ url, w, h, z = 0, y = 0, glow }: { url?: string; w: number; h: 
 }
 
 /** Our photos, one after another, while the TV is on. */
-function Slideshow({ photos, w, h, z, y }: { photos: HousePhoto[]; w: number; h: number; z: number; y: number }) {
+export function Slideshow({ photos, w, h, z, y }: { photos: HousePhoto[]; w: number; h: number; z: number; y: number }) {
   const [i, setI] = useState(0);
   useEffect(() => {
     if (photos.length < 2) return;

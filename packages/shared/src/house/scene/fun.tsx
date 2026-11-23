@@ -65,6 +65,7 @@ import { colour, FunBall, FunFlames, funSphere, Near } from './fun-models';
 import { useOutdoors } from './outdoors';
 import { usePark } from './park';
 import { useCricket } from './cricket';
+import { useDaily } from './daily';
 import { KULFI_S, type HousePhoto } from './items';
 
 /** A card the screens draw the same way on the phone and the web: some words, a picture, buttons, maybe a box to type in. */
@@ -479,6 +480,13 @@ export function useFun(h: FunHost) {
 
   const partnerHere = () => !!h.them.pose && h.them.shown;
   // The lake and the hill (outdoors.tsx).
+  // Daily life: every moment is checked against today's three and the stamp book.
+  const daily = useDaily({ h, raw, set, partnerHere });
+  const announce = h.moment;
+  h.moment = (id, text, hearts, pays) => {
+    announce(id, text, hearts, pays);
+    daily.track(id, text);
+  };
   const outdoors = useOutdoors({ h, raw, set, partnerHere, openPanel: (id) => void (ui.panel = id) });
   const park = usePark({ h, raw, set, partnerHere });
   const cricket = useCricket({ h, raw, set, partnerHere });
@@ -596,7 +604,7 @@ export function useFun(h: FunHost) {
     }
     if (!p) return null;
     const next = h.pairedAt ? nextUnlock(h.pairedAt, new Date()) : null;
-    const outsidePanel = outdoors.panel(p);
+    const outsidePanel = outdoors.panel(p) ?? daily.panel(p);
     if (outsidePanel) return outsidePanel;
     switch (p) {
       case 'menu':
@@ -606,6 +614,7 @@ export function useFun(h: FunHost) {
           text: next ? `Coming to the house: ${next.label.toLowerCase()} in ${next.inDays} ${next.inDays === 1 ? 'day' : 'days'}` : undefined,
           options: [
             opt('goto', 'Go to…', '🧭'),
+            ...daily.menu(),
             opt('games', 'Play a game', '🎲'),
             opt('dates', 'A date', '🕯️'),
             opt('leave', `Leave something for ${partnerName}`, '🎁'),
@@ -798,6 +807,8 @@ export function useFun(h: FunHost) {
     const t = text?.trim() ?? '';
     const shut = () => void (ui.panel = null);
     if (outdoors.pick(id, t, ui.panel)) return;
+    if (daily.picks(id)) return void (ui.panel = id);
+    if (id.startsWith('today-') || id.startsWith('stamp-')) return;
     if (id === 'close') return shut();
     if (id === 'back') return void (ui.panel = ui.panel === 'wish' && ui.scope ? null : 'menu');
     const go = id.startsWith('go:') ? GO_TO.find((g) => g.id === id.slice(3)) : undefined;
@@ -1000,7 +1011,7 @@ export function useFun(h: FunHost) {
   /** What the action button does here, if it's one of ours. */
   function focus(): { label: string; run: () => void } | null {
     if (ui.board || ui.scope) return null;
-    const outside = outdoors.focus() ?? park.focus() ?? cricket.focus();
+    const outside = outdoors.focus() ?? park.focus() ?? cricket.focus() ?? daily.focus();
     if (outside) return outside;
     const game = readGame(raw(GAME_KEY));
     const treasure = readTreasure();
@@ -1509,6 +1520,7 @@ export function useFun(h: FunHost) {
     if (!hud.banner && outside.banner) hud.banner = outside.banner;
     const play = park.frame(dt);
     if (!hud.banner && play.banner) hud.banner = play.banner;
+    daily.frame();
     const match = cricket.frame();
     if (!hud.banner && match.banner) hud.banner = match.banner;
 
@@ -1645,6 +1657,7 @@ export function useFun(h: FunHost) {
       {outdoors.scene}
       {park.scene}
       {cricket.scene}
+      {daily.scene}
       {coffee ? (
         <Near near={h.me.pos} x={CAFE_TABLES[coffee.table]![0]} z={CAFE_TABLES[coffee.table]![1]} r={30}>
           <CoffeeCups x={CAFE_TABLES[coffee.table]![0]} z={CAFE_TABLES[coffee.table]![1]} left={coffee.left} />

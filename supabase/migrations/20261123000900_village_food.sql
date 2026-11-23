@@ -1,4 +1,4 @@
--- Food and stalls in the village: pani puri, kulfi, spices to buy; breakfast, selling vegetables and helping villagers pay.
+-- Food and stalls in the village: pani puri, kulfi, spices to buy; breakfast, selling vegetables, helping villagers and finishing today's three things together pay.
 create or replace function public.wallet_reward(p_reason text)
 returns table (amount integer, per_day integer)
 language sql
@@ -17,7 +17,8 @@ as $$
     ('shells', 50, 8),        -- shells from the beach
     ('breakfast', 150, 2),    -- chai and toast together, in the morning
     ('sell_veg', 50, 6),      -- a vegetable sold at the weekend market
-    ('request', 200, 3)       -- helping someone in the village
+    ('request', 200, 3),      -- helping someone in the village
+    ('today', 300, 1)         -- all three of today's things done together
   ) as r(reason, amount, per_day)
   where r.reason = p_reason;
 $$;
