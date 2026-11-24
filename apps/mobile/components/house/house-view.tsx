@@ -15,6 +15,7 @@ import { RTCView } from 'react-native-webrtc';
 import Animated, { FadeOut, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { GradientView } from '../plan/art';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { keepLikeness } from '@/lib/likeness';
 import { useHousePack } from '@/lib/use-house-pack';
 import { Text } from '../ui/text';
 
@@ -36,7 +37,7 @@ const tick = () => void Haptics.selectionAsync().catch(() => {});
  */
 export function HouseView() {
   const insets = useSafeAreaInsets();
-  const game = useHouseGame();
+  const game = useHouseGame({ keepLikeness });
   // The realistic house, when its pack is on the phone; the box house until then.
   const pack = useHousePack();
   const houseUrl = pack.kind === 'ready' ? pack.dir : undefined;
@@ -697,6 +698,21 @@ function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) 
             <X size={20} color="#fff" />
           </Pressable>
         </View>
+        {game.likeness ? (
+          <View className="flex-row items-center gap-2">
+            <Text className="w-20 text-small text-white/80">Look</Text>
+            <Pressable accessibilityRole="button" onPress={() => game.setLook({ classic: false })} className={chip(!look.classic)}>
+              <Text className={chipText(!look.classic)}>Like me</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => game.setLook({ classic: true })} className={chip(!!look.classic)}>
+              <Text className={chipText(!!look.classic)}>Classic</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {look.me ? (
+          <Text className="max-w-[280px] text-small text-white/70">Made from your photos: your face, hair, glasses and clothes.</Text>
+        ) : (
+          <>
         <View className="flex-row items-center gap-2">
           <Text className="w-20 text-small text-white/80">Body</Text>
           {(['f', 'm'] as const).map((b) => (
@@ -733,6 +749,8 @@ function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) 
             ))}
           </View>
         ))}
+          </>
+        )}
       </ScrollView>
     </View>
   );

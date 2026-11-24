@@ -188,28 +188,33 @@ def build(tag, gltf):
     print(f"[characters] body_{tag}.glb")
 
 
-build("m", "Superhero_Male_FullBody.gltf")
-build("f", "Superhero_Female_FullBody.gltf")
+def main():
+    build("m", "Superhero_Male_FullBody.gltf")
+    build("f", "Superhero_Female_FullBody.gltf")
 
-# The moves: just the skeleton and the animations we use.
-bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.gltf(filepath=ANIM)
-for o in [o for o in bpy.context.scene.objects if o.type == "MESH"]:
-    bpy.data.objects.remove(o)
-for a in list(bpy.data.actions):
-    if a.name not in MOVES:
-        bpy.data.actions.remove(a)
-missing = [m for m in MOVES if m not in bpy.data.actions]
-if missing:
-    raise SystemExit(f"missing animations: {missing}")
-bpy.ops.object.select_all(action="SELECT")
-bpy.ops.export_scene.gltf(
-    filepath=os.path.join(OUT, "moves.glb"),
-    export_format="GLB",
-    use_selection=True,
-    export_animations=True,
-    export_animation_mode="ACTIONS",
-    export_skins=True,
-    export_yup=True,
-)
-print("[characters] moves.glb")
+    # The moves: just the skeleton and the animations we use.
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.gltf(filepath=ANIM)
+    for o in [o for o in bpy.context.scene.objects if o.type == "MESH"]:
+        bpy.data.objects.remove(o)
+    for a in list(bpy.data.actions):
+        if a.name not in MOVES:
+            bpy.data.actions.remove(a)
+    missing = [m for m in MOVES if m not in bpy.data.actions]
+    if missing:
+        raise SystemExit(f"missing animations: {missing}")
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.export_scene.gltf(
+        filepath=os.path.join(OUT, "moves.glb"),
+        export_format="GLB",
+        use_selection=True,
+        export_animations=True,
+        export_animation_mode="ACTIONS",
+        export_skins=True,
+        export_yup=True,
+    )
+    print("[characters] moves.glb")
+
+
+if __name__ == "__main__":
+    main()

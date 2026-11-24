@@ -12,6 +12,7 @@
  *   D:\blender.exe -b --factory-startup -P scripts/blender/build_house.py -- --samples 256 --size 1024
  *   D:\blender.exe -b --factory-startup -P scripts/blender/convert_models.py -- <ids in scene/furniture.ts>
  *   D:\blender.exe -b --factory-startup -P scripts/blender/build_characters.py   (Quaternius zips unpacked in assets-src/house/characters)
+ *   python scripts/blender/likeness_textures.py && D:\blender.exe -b --factory-startup -P scripts/blender/build_likeness.py
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -42,7 +43,8 @@ for (const sky of ['day', 'night']) {
   files.push(`sky_${sky}.hdr`);
 }
 for (const f of readdirSync(join(built, 'models'))) if (used.has(f.replace(/\.glb$/, ''))) files.push(`models/${f}`);
-// The two of us (scripts/blender/build_characters.py).
+// The two of us (scripts/blender/build_characters.py). Not us as ourselves (build_likeness.py):
+// that's private, so it goes with our own files (scripts/upload-likeness.mjs), never in this pack.
 for (const f of ['body_m.glb', 'body_f.glb', 'moves.glb']) files.push(`characters/${f}`);
 // The sounds (scripts/generate-house-sounds.mjs).
 for (const f of readdirSync(join(built, 'sounds')).filter((f) => f.endsWith('.wav')).sort()) files.push(`sounds/${f}`);
@@ -63,6 +65,11 @@ if (process.argv.includes('--dev')) {
   const dev = join(root, 'apps/web/public/house');
   rmSync(dev, { recursive: true, force: true });
   for (const path of [...files, 'manifest.json']) cpSync(join(built, path), join(dev, path));
+  // The lab's ?us=1 (apps/web/public/house is ignored by git, so this never ships).
+  for (const who of ['jonal', 'parul']) {
+    const abs = join(built, 'characters', `body_${who}.glb`);
+    if (existsSync(abs)) cpSync(abs, join(dev, 'likeness', `body_${who}.glb`));
+  }
   console.log(`copied to ${relative(root, dev)}`);
 }
 

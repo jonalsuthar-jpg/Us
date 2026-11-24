@@ -60,9 +60,11 @@ function aim(bone: THREE.Object3D | undefined, dir: THREE.Vector3, rootQ: THREE.
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
-export function RealAvatar({ base, look, rigRef, ringColor, ring = true }: { base: string; look: LookState; rigRef: (r: AvatarRig | null) => void; ringColor: string; ring?: boolean }) {
+export function RealAvatar({ base, src, look, rigRef, ringColor, ring = true }: { base: string; src?: string; look: LookState; rigRef: (r: AvatarRig | null) => void; ringColor: string; ring?: boolean }) {
+  // Ourselves (made from our photos, `src`) come dressed and coloured in; otherwise the body from the pack, coloured in here.
+  const own = !!look.me && !!src;
   const body = look.body === 'm' ? 'm' : 'f';
-  const [person, moves] = useLoader(GLTFLoader, [`${base}/characters/body_${body}.glb`, `${base}/characters/moves.glb`]);
+  const [person, moves] = useLoader(GLTFLoader, [own ? src! : `${base}/characters/body_${body}.glb`, `${base}/characters/moves.glb`]);
 
   // Our own copy (skinned meshes need SkeletonUtils), dressed in our colours.
   const made = useMemo(() => {
@@ -78,24 +80,29 @@ export function RealAvatar({ base, look, rigRef, ringColor, ring = true }: { bas
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
-      if (o.name.startsWith('Hair_')) {
+      if (o.name.startsWith('Hair_') && !own) {
         o.visible = o.name === style || (o.name === 'Hair_Beard' && !!look.beard);
       }
-      const src = plainGlass(mesh.material as THREE.MeshStandardMaterial);
-      const mat = src.clone();
-      mats.push(mat);
-      const name = src.name;
-      if (name === 'Cloth_Top') mat.color.set(look.shirt);
-      else if (name === 'Cloth_Bottom') mat.color.set(look.pants);
-      else if (name === 'Shoes') mat.color.set(look.shoes ?? '#F2F0EA');
-      else if (name.startsWith('MI_Hair')) mat.color.set(look.hair);
-      else if (name.startsWith('MI_Superhero')) mat.color.set(skinTint);
-      mesh.material = mat;
+      // A mesh can have more than one material (our shoes and their soles, a watch and its face).
+      const list = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((m) => {
+        const from = plainGlass(m as THREE.MeshStandardMaterial);
+        const mat = from.clone();
+        mats.push(mat);
+        if (own) return mat;
+        const name = from.name;
+        if (name === 'Cloth_Top') mat.color.set(look.shirt);
+        else if (name === 'Cloth_Bottom') mat.color.set(look.pants);
+        else if (name === 'Shoes') mat.color.set(look.shoes ?? '#F2F0EA');
+        else if (name.startsWith('MI_Hair')) mat.color.set(look.hair);
+        else if (name.startsWith('MI_Superhero')) mat.color.set(skinTint);
+        return mat;
+      });
+      mesh.material = Array.isArray(mesh.material) ? list : list[0]!;
     });
-    // The shoes, so they can come off at the temple: bare feet in the skin's own colour.
-    const shoes = mats.filter((m) => m.name === 'Shoes');
+    // The shoes, so they can come off at the temple: bare feet in the skin's own colour, then back as they were.
+    const shoes = mats.filter((m) => m.name.startsWith('Shoes')).map((m) => ({ mat: m as THREE.MeshStandardMaterial, color: (m as THREE.MeshStandardMaterial).color.clone() }));
     return { scene, mats, bones, shoes };
-  }, [person, look, body]);
+  }, [person, look, body, own]);
   useEffect(() => () => made.mats.forEach((m) => m.dispose()), [made]);
 
   const mixer = useMemo(() => new THREE.AnimationMixer(made.scene), [made]);
@@ -139,7 +146,10 @@ export function RealAvatar({ base, look, rigRef, ringColor, ring = true }: { bas
       update(dt, d, m) {
         if (!!d.barefoot !== bare) {
           bare = !!d.barefoot;
-          for (const s of made.shoes) (s as THREE.MeshStandardMaterial).color.set(bare ? look.skin : (look.shoes ?? '#F2F0EA'));
+          for (const s of made.shoes) {
+            if (bare) s.mat.color.set(look.skin);
+            else s.mat.color.copy(s.color);
+          }
         }
         const { clip, speed } = clipFor(d, m);
         const next = actions.get(clip) ?? actions.get('Idle_Loop')!;

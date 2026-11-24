@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionFor, addedKey, BOUQUET, BREAD_BAG, avatarKey, cleanLook, cleanState, doorFor, HAIRS, ITEMS, PANTS, placeItems, restingY, seatPose, SHIRTS, SKINS, toLocal, toWorld, water } from '../src/house/items';
+import { actionFor, addedKey, BOUQUET, BREAD_BAG, avatarKey, cleanLook, cleanState, doorFor, HAIRS, ITEMS, PANTS, placeItems, restingY, seatPose, SHIRTS, shownLook, SKINS, toLocal, toWorld, water } from '../src/house/items';
 import { FLOOR_H, walkStep, type RegionId } from '../src/house/layout';
 import { holdLoses, KEY, readItemOp, readPose } from '../src/house/presence';
 import { HouseStore, StaleHouseError, type HouseApi } from '../src/house/store';
@@ -96,6 +96,16 @@ describe('house: things in it', () => {
     expect(cleanState([1])).toBeNull();
     expect(cleanLook({ skin: SKINS[0], hair: HAIRS[0], shirt: SHIRTS[0], pants: PANTS[0] })).not.toBeNull();
     expect(cleanLook({ skin: '#000000', hair: HAIRS[0], shirt: SHIRTS[0], pants: PANTS[0] })).toBeNull();
+  });
+
+  it('shows the two of us as ourselves unless we chose the classic avatar', () => {
+    const look = { skin: SKINS[0]!, hair: HAIRS[0]!, shirt: SHIRTS[0]!, pants: PANTS[0]! };
+    expect(shownLook(look, '248AC56C-9103-47A1-B429-1F00F4065094').me).toBe('jonal');
+    expect(shownLook(look, '6bf60568-fdf7-4af5-85ac-4a3132408e96').me).toBe('parul');
+    expect(shownLook({ ...look, classic: true }, '6bf60568-fdf7-4af5-85ac-4a3132408e96').me).toBeUndefined();
+    expect(shownLook(look, '00000000-0000-0000-0000-000000000000').me).toBeUndefined();
+    // Who we are is never saved, and can't be claimed from the wire.
+    expect(cleanLook({ ...look, me: 'jonal', classic: true })).toEqual({ ...look, classic: true });
   });
 
   it('labels the action button', () => {

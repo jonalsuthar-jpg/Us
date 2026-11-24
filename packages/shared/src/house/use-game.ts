@@ -7,13 +7,13 @@ import { useCallManager, useCallState } from '../react/call-provider';
 import { useChatKey } from '../react/chat-key-provider';
 import { minimiseCallScreen, setCallBubbleHidden, useCallBubbleHidden } from '../react/call-ui';
 import { useCouple } from '../react/couple-provider';
-import { avatarKey, MUSIC_KEY, NOTE_KEY, SKY_KEY, type ItemModel, type LookState } from './items';
+import { avatarKey, likenessOf, MUSIC_KEY, NOTE_KEY, shownLook, SKY_KEY, type ItemModel, type LookState } from './items';
 import { formatWorldTime, isNight, untilWorld, worldHours } from './sky';
 import type { Emote, Together } from './presence';
 import { LOOKS } from './scene/avatar';
 import type { HouseLetters, HouseWallet } from './scene/fun';
 import { createControls, nextCameraView, setView, type CameraView, type HouseControls, type HudState, type WorldProps } from './scene/world';
-import { useHouse, useHouseItems, useHousePhotos } from './use-house';
+import { useHouse, useHouseItems, useHousePhotos, useLikeness, type KeepLikeness } from './use-house';
 
 const NO_HUD: HudState = { action: null, seated: false, holding: null, selected: null, nearPartner: false, invite: null, asking: null, note: null, fun: { panel: null, banner: null, cover: null, myMood: null, partnerMood: null } };
 
@@ -22,7 +22,7 @@ const NO_HUD: HudState = { action: null, seated: false, holding: null, selected:
  * world's props, what the buttons show, and what they do. The screens only
  * draw the buttons and feed in the joystick and taps.
  */
-export function useHouseGame() {
+export function useHouseGame(opts: { keepLikeness?: KeepLikeness } = {}) {
   const { me, partner, mySlot, couple, sb, channel } = useCouple();
   const { sealer } = useChatKey();
   const call = useCallState();
@@ -30,6 +30,7 @@ export function useHouseGame() {
   const { presence, store, partnerHere } = useHouse();
   const items = useHouseItems(store);
   const photos = useHousePhotos();
+  const likeness = useLikeness(opts.keepLikeness);
   const controls = useMemo<HouseControls>(createControls, []);
   const [hud, setHud] = useState<HudState>(NO_HUD);
   const [place, setPlace] = useState('');
@@ -64,8 +65,8 @@ export function useHouseGame() {
   const myKey = avatarKey(me.id);
   const theirKey = avatarKey(partner.id);
   // items changes whenever the store does, which is when a look could have.
-  const mine: LookState = useMemo(() => store?.look(myKey) ?? LOOKS[mySlot === 'a' ? 0 : 1]!, [store, myKey, mySlot, items]); // eslint-disable-line react-hooks/exhaustive-deps
-  const theirs: LookState = useMemo(() => store?.look(theirKey) ?? LOOKS[mySlot === 'a' ? 1 : 0]!, [store, theirKey, mySlot, items]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mine: LookState = useMemo(() => shownLook(store?.look(myKey) ?? LOOKS[mySlot === 'a' ? 0 : 1]!, me.id), [store, myKey, mySlot, items, me.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const theirs: LookState = useMemo(() => shownLook(store?.look(theirKey) ?? LOOKS[mySlot === 'a' ? 1 : 0]!, partner.id), [store, theirKey, mySlot, items, partner.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The world's clock (a day in 4 hours), shown on screen; ticks every world minute.
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => {
@@ -252,7 +253,14 @@ export function useHouseGame() {
     wallet.earn('daily', walletRef('daily', me.id, `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`));
   }, [wallet, me.id]);
 
-  const setLook = useCallback((patch: Partial<LookState>) => store?.set(myKey, { ...mine, ...patch }), [store, myKey, mine]);
+  const setLook = useCallback(
+    (patch: Partial<LookState>) => {
+      const next = { ...mine, ...patch };
+      delete next.me; // shown, not saved
+      store?.set(myKey, next);
+    },
+    [store, myKey, mine],
+  );
   // No look of mine saved yet, once we know: the house invites me to make one.
   const needsLook = !!store?.loaded && !store.look(myKey);
 
@@ -263,6 +271,7 @@ export function useHouseGame() {
     store,
     items,
     photos,
+    likeness,
     meId: me.id,
     partnerId: partner.id,
     partnerName: partner.display_name,
@@ -282,7 +291,7 @@ export function useHouseGame() {
     wallet,
   };
 
-  return { world, controls, hud, place, partnerPlace, partnerHere, moment, say: onMoment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, bubbleHidden, worldClock, coins: purse.balance, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
+  return { world, controls, hud, place, partnerPlace, partnerHere, moment, say: onMoment, decorate, setDecorate, view, nextView, chooseView, night, toggleNight, look: mine, setLook, likeness: likenessOf(me.id) ?? null, needsLook, actions, music, toggleMusic, inCall, talking, toggleTalk, bubbleHidden, worldClock, coins: purse.balance, theirVideo, myVideo, toggleVideo, remoteStream: talking ? call.remoteStream : null, note: note ?? null, leaveNote, readNote, meId: me.id, partnerName: partner.display_name };
 }
 
 export type HouseGame = ReturnType<typeof useHouseGame>;

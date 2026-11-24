@@ -6,6 +6,7 @@
  * HouseWorld, HousePresence and HouseStore the app uses. Click a pane to
  * play it: WASD walks (Shift runs), drag looks, E uses, 1–3 emote, N night,
  * V view, P decorate. window.__lab exposes everything for automated checks.
+ * ?real=1 uses the art pack; with &us=1, A and B are the two of us as ourselves.
  */
 import { Canvas, useThree } from '@react-three/fiber';
 import {
@@ -25,6 +26,7 @@ import {
   type HouseApi,
   type HouseControls,
   type HouseEvent,
+  type LookState,
   type HudState,
   type Quality,
   worldHours,
@@ -64,7 +66,10 @@ function memoryDb(): HouseApi {
   };
 }
 
-function Pane({ who, presence, store, controls, quality, focused, onFocus, houseUrl }: { who: 'a' | 'b'; presence: HousePresence; store: HouseStore; controls: HouseControls; quality: Quality; focused: boolean; onFocus: () => void; houseUrl?: string }) {
+/** A lab look: A and B, or (?us=1) Jonal and Parul as themselves. */
+const labLook = (who: 'a' | 'b', us: boolean): LookState => ({ ...LOOKS[who === 'a' ? 0 : 1]!, ...(us ? { me: who === 'a' ? 'jonal' : 'parul' } : {}) });
+
+function Pane({ who, presence, store, controls, quality, focused, onFocus, houseUrl, us }: { who: 'a' | 'b'; presence: HousePresence; store: HouseStore; controls: HouseControls; quality: Quality; focused: boolean; onFocus: () => void; houseUrl?: string; us: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const down = useRef<{ x: number; y: number; sx: number; sy: number } | null>(null);
   const items = useSyncExternalStore((fn) => store.subscribe(fn), () => store.items(), () => store.items());
@@ -110,8 +115,8 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
           meId={who}
           partnerId={who === 'a' ? 'b' : 'a'}
           partnerName={who === 'a' ? 'B' : 'A'}
-          mine={LOOKS[who === 'a' ? 0 : 1]!}
-          theirs={LOOKS[who === 'a' ? 1 : 0]!}
+          mine={labLook(who, us)}
+          theirs={labLook(who === 'a' ? 'b' : 'a', us)}
           onPlace={setPlace}
           onPartnerPlace={setOther}
           onHud={setHud}
@@ -121,6 +126,7 @@ function Pane({ who, presence, store, controls, quality, focused, onFocus, house
           }}
           onFps={(f, calls) => setFps(`${Math.round(f)} fps · ${calls} calls`)}
           houseUrl={houseUrl}
+          likeness={us ? { jonal: '/house/likeness/body_jonal.glb', parul: '/house/likeness/body_parul.glb' } : undefined}
           pairedAt={PAIRED}
           wallet={LAB_WALLET}
           coupleId={LAB_COUPLE}
@@ -168,8 +174,11 @@ export default function HouseLab() {
   const [focus, setFocus] = useState<'a' | 'b'>('a');
   // ?real=1: the realistic house from public/house (copy assets-build/house there).
   const [houseUrl, setHouseUrl] = useState<string | undefined>();
+  const [us, setUs] = useState(false);
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('real')) setHouseUrl('/house');
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('real')) setHouseUrl('/house');
+    setUs(!!q.get('us'));
   }, []);
   const lab = useMemo(() => {
     const wire = bus();
@@ -540,8 +549,8 @@ export default function HouseLab() {
         ))}
       </div>
       <div className="flex flex-1 gap-1">
-        <Pane who="a" presence={lab.a} store={lab.sa} controls={lab.ca} quality={quality} focused={focus === 'a'} onFocus={() => setFocus('a')} houseUrl={houseUrl} />
-        <Pane who="b" presence={lab.b} store={lab.sb} controls={lab.cb} quality={quality} focused={focus === 'b'} onFocus={() => setFocus('b')} houseUrl={houseUrl} />
+        <Pane who="a" presence={lab.a} store={lab.sa} controls={lab.ca} quality={quality} focused={focus === 'a'} onFocus={() => setFocus('a')} houseUrl={houseUrl} us={us} />
+        <Pane who="b" presence={lab.b} store={lab.sb} controls={lab.cb} quality={quality} focused={focus === 'b'} onFocus={() => setFocus('b')} houseUrl={houseUrl} us={us} />
       </div>
     </div>
   );

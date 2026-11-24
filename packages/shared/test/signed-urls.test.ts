@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { estimateVideoBytes, isVideoPath, VIDEO_MAX_BYTES, VIDEO_PROFILES, VIDEO_TARGET, videoPlan } from '../src/api/chat-video';
+import { likenessUrls } from '../src/api/house';
 import { forgetSignedUrl, signedUrls } from '../src/api/signed-urls';
 import { clearDataCache } from '../src/react/data-cache';
 import type { UsClient } from '../src/supabase';
@@ -116,5 +117,18 @@ describe('videoPlan', () => {
     expect(estimateVideoBytes(5 * MB, 30_000, 'standard')).toBe(5 * MB);
     expect(estimateVideoBytes(20 * MB, 20_000, 'hd')).toBeLessThan(estimateVideoBytes(20 * MB, 20_000, 'memory')!);
     expect(estimateVideoBytes(500 * MB, 600_000, 'standard')).toBeNull();
+  });
+});
+
+describe('likenessUrls', () => {
+  it('signs each of us in our own private memories, never the public pack', async () => {
+    const { sb, asked } = fakeStorage();
+    const couple = 'AAAAAAAA-0000-0000-0000-000000000001';
+    expect(await likenessUrls(sb, couple, ['jonal', 'parul'])).toEqual({
+      jonal: 'aaaaaaaa-0000-0000-0000-000000000001/house/body_jonal_v1.glb#1',
+      parul: 'aaaaaaaa-0000-0000-0000-000000000001/house/body_parul_v1.glb#1',
+    });
+    expect(asked).toEqual([['aaaaaaaa-0000-0000-0000-000000000001/house/body_jonal_v1.glb', 'aaaaaaaa-0000-0000-0000-000000000001/house/body_parul_v1.glb']]);
+    expect(await likenessUrls(sb, couple, [])).toEqual({});
   });
 });

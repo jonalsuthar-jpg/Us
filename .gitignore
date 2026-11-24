@@ -45,3 +45,7 @@ backups/
 assets-src/
 apps/web/public/house/
 assets-build/
+
+# Private reference photos for our lookalike characters
+assets-src/likeness/
+__pycache__/

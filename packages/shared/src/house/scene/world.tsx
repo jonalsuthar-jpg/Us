@@ -21,6 +21,7 @@ import {
   water,
   type ItemModel,
   type ItemState,
+  type Likeness,
   type LookState,
   type PlacedItem,
 } from '../items';
@@ -154,6 +155,8 @@ export interface WorldProps {
   store: HouseStore | null;
   items: ReadonlyMap<string, ItemState>;
   photos: HousePhoto[];
+  /** Each of us as ourselves, where we have one: a private link, or a file on the phone. */
+  likeness?: Partial<Record<Likeness, string>>;
   meId: string;
   partnerId: string;
   partnerName: string;
@@ -260,7 +263,7 @@ interface Me {
 
 /** The house, the two of us, the things in it and the camera. Goes inside a Canvas. */
 export function HouseWorld(props: WorldProps) {
-  const { quality, controls, presence, store, items, photos, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl, coupleId, sound, talking, capture, pairedAt, celebrate, letters, notify, voice, onVoice, tvVideo, wallet } = props;
+  const { quality, controls, presence, store, items, photos, likeness, meId, partnerId, partnerName, mine, theirs, onPlace, onPartnerPlace, onHud, onMoment, onFps, onError, onReady, houseUrl, coupleId, sound, talking, capture, pairedAt, celebrate, letters, notify, voice, onVoice, tvVideo, wallet } = props;
   const { gl, scene, camera, invalidate } = useThree();
   const mats = useMemo(() => makeMaterials(quality), [quality]);
   useEffect(() => () => mats.dispose(), [mats]);
@@ -1492,8 +1495,8 @@ export function HouseWorld(props: WorldProps) {
         ground={<Items items={shownItems} mats={mats} quality={quality} night={night} photos={photos} objects={objects} selected={decor.key} floor={0} carried={carried} assets={houseUrl} />}
         upper={<Items items={shownItems} mats={mats} quality={quality} night={night} photos={photos} objects={objects} selected={decor.key} floor={1} carried={carried} assets={houseUrl} />}
       />
-      <Person look={mine} quality={quality} rigRef={setMine} ringColor="#FFFFFF" base={houseUrl} />
-      <Person look={theirs} quality={quality} rigRef={setTheirs} ringColor="#FF8FB0" base={houseUrl} />
+      <Person look={mine} quality={quality} rigRef={setMine} ringColor="#FFFFFF" base={houseUrl} src={mine.me && likeness?.[mine.me]} />
+      <Person look={theirs} quality={quality} rigRef={setTheirs} ringColor="#FF8FB0" base={houseUrl} src={theirs.me && likeness?.[theirs.me]} />
       {fun.scene}
       <LampPosts items={placed} mats={mats} night={night} />
       <LightPool sources={sources} size={poolSize(quality, onPhone())} near={me.pos} />
@@ -1571,13 +1574,13 @@ function solid(o: THREE.Object3D): boolean {
 }
 
 /** One of us: a real person once the pack is here (and loaded), the simple figure until then or if it fails. */
-function Person({ base, ...p }: { look: LookState; quality: Quality; rigRef: (r: AvatarRig | null) => void; ringColor: string; base?: string }) {
+function Person({ base, src, ...p }: { look: LookState; quality: Quality; rigRef: (r: AvatarRig | null) => void; ringColor: string; base?: string; src?: string }) {
   const simple = <Avatar look={p.look} quality={p.quality} rigRef={p.rigRef} ringColor={p.ringColor} />;
   if (!base) return simple;
   return (
     <Optional fallback={simple}>
       <Suspense fallback={simple}>
-        <RealAvatar base={base} look={p.look} rigRef={p.rigRef} ringColor={p.ringColor} />
+        <RealAvatar base={base} src={src} look={p.look} rigRef={p.rigRef} ringColor={p.ringColor} />
       </Suspense>
     </Optional>
   );

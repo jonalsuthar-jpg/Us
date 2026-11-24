@@ -1,8 +1,10 @@
 import type { Json } from '../database.types';
+import { likenessPath, type Likeness } from '../house/items';
 import { HOUSE_PACK_VERSION } from '../house/pack';
 import { StaleHouseError, type HouseApi, type HouseRow } from '../house/store';
 import type { UsClient } from '../supabase';
 import { createMemory, listMemories, memoryPhotos, signedPhotoUrls, uploadMemoryPhoto } from './memory';
+import { signedUrls } from './signed-urls';
 
 /**
  * Our House on the server: the saved things (house_items) and the photos
@@ -33,6 +35,14 @@ export async function housePhotos(sb: UsClient, coupleId: string, max = 24): Pro
   if (!paths.length) return [];
   const urls = await signedPhotoUrls(sb, paths, 60 * 60);
   return paths.filter((p) => urls[p]).map((p) => ({ path: p, url: urls[p]! }));
+}
+
+/** Links to each of us as ourselves (private, like our photos), by who. */
+export async function likenessUrls(sb: UsClient, coupleId: string, who: Likeness[]): Promise<Partial<Record<Likeness, string>>> {
+  if (!who.length) return {};
+  const paths = who.map((w) => likenessPath(coupleId, w));
+  const urls = await signedUrls(sb, 'memories', paths);
+  return Object.fromEntries(who.flatMap((w, i) => (urls[paths[i]!] ? [[w, urls[paths[i]!]!]] : [])));
 }
 
 /** Where Our House's art pack is: house/v<version> on the media Worker. */

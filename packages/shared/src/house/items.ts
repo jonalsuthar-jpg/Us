@@ -451,6 +451,33 @@ export interface LookState {
   style?: (typeof HAIRSTYLES)[number];
   beard?: boolean;
   shoes?: string;
+  /** Chose the made-up avatar above over looking like ourselves. */
+  classic?: boolean;
+  /** Not saved: who this is, when it's one of the two of us looking like ourselves (see likenessOf). */
+  me?: Likeness;
+}
+
+/**
+ * The two of us as ourselves (scripts/blender/build_likeness.py): a body each,
+ * dressed and coloured in, with nothing to choose. Kept with our private
+ * files, not in the house pack everyone can read (scripts/upload-likeness.mjs).
+ */
+export const LIKENESSES = ['jonal', 'parul'] as const;
+export type Likeness = (typeof LIKENESSES)[number];
+const LIKENESS_OF: Record<string, Likeness> = {
+  '248ac56c-9103-47a1-b429-1f00f4065094': 'jonal',
+  '6bf60568-fdf7-4af5-85ac-4a3132408e96': 'parul',
+};
+export const likenessOf = (userId: string): Likeness | undefined => LIKENESS_OF[userId.toLowerCase()];
+/** Bump when either of us is built again; the phone fetches the new one. */
+export const LIKENESS_VERSION = 1;
+/** Where each of us is kept, in our memories (only the two of us can sign links to it). */
+export const likenessPath = (coupleId: string, who: Likeness) => `${coupleId.toLowerCase()}/house/body_${who}_v${LIKENESS_VERSION}.glb`;
+
+/** A saved look as it's shown: ourselves, unless we chose the classic avatar. */
+export function shownLook(look: LookState, userId: string): LookState {
+  const me = likenessOf(userId);
+  return me && !look.classic ? { ...look, me } : look;
 }
 
 export const avatarKey = (userId: string) => `avatar:${userId.toLowerCase()}`;
@@ -464,6 +491,7 @@ export function cleanLook(s: unknown): LookState | null {
   if (HAIRSTYLES.includes(o.style as (typeof HAIRSTYLES)[number])) out.style = o.style;
   if (typeof o.beard === 'boolean') out.beard = o.beard;
   if (ok(o.shoes, SHOES)) out.shoes = o.shoes;
+  if (o.classic === true) out.classic = true;
   return out;
 }
 

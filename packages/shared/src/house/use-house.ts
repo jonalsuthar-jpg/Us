@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { houseApi, housePhotos } from '../api/house';
+import { houseApi, housePhotos, likenessUrls } from '../api/house';
 import { useCouple } from '../react/couple-provider';
+import { likenessOf, type Likeness } from './items';
 import { HousePresence } from './presence';
 import { HouseStore } from './store';
 
@@ -64,4 +65,32 @@ export function useHousePhotos(): { path: string; url: string }[] {
     };
   }, [sb, couple.id]);
   return photos;
+}
+
+/** Where to load each of us as ourselves from: a link, or (on a phone) what `keep` stored it as. */
+export type KeepLikeness = (who: Likeness, url: string) => Promise<string>;
+
+/** The two of us as ourselves, for whichever of us has one; fetched once per visit. */
+export function useLikeness(keep?: KeepLikeness): Partial<Record<Likeness, string>> {
+  const { sb, couple, me, partner } = useCouple();
+  const [found, setFound] = useState<Partial<Record<Likeness, string>>>({});
+  useEffect(() => {
+    const who = [likenessOf(me.id), likenessOf(partner.id)].filter((w): w is Likeness => !!w);
+    if (!who.length) return;
+    let live = true;
+    void likenessUrls(sb, couple.id, who)
+      .then(async (urls) => {
+        const out: Partial<Record<Likeness, string>> = {};
+        for (const w of who) {
+          const url = urls[w];
+          if (url) out[w] = keep ? await keep(w, url).catch(() => undefined) : url;
+        }
+        if (live) setFound(out);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [sb, couple.id, me.id, partner.id, keep]);
+  return found;
 }

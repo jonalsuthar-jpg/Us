@@ -630,6 +630,21 @@ function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) 
             <X size={20} />
           </button>
         </div>
+        {game.likeness ? (
+          <div className="flex items-center gap-2">
+            <span className="w-20 text-small text-white/80">Look</span>
+            <button type="button" onClick={() => game.setLook({ classic: false })} className={chip(!look.classic)}>
+              Like me
+            </button>
+            <button type="button" onClick={() => game.setLook({ classic: true })} className={chip(!!look.classic)}>
+              Classic
+            </button>
+          </div>
+        ) : null}
+        {look.me ? (
+          <span className="max-w-[280px] text-small text-white/70">Made from your photos: your face, hair, glasses and clothes.</span>
+        ) : (
+          <>
         <div className="flex items-center gap-2">
           <span className="w-20 text-small text-white/80">Body</span>
           {(['f', 'm'] as const).map((b) => (
@@ -666,6 +681,8 @@ function LookPanel({ game, onClose }: { game: HouseGame; onClose: () => void }) 
             ))}
           </div>
         ))}
+          </>
+        )}
       </div>
     </div>
   );
