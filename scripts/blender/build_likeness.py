@@ -429,7 +429,7 @@ def brown_irises(eyes):
     rgb = px[..., :3]
     lum = rgb.mean(axis=2)
     sat = rgb.max(axis=2) - rgb.min(axis=2)
-    iris = (lum > 0.08) & (lum < 0.7) & (sat < 0.12)
+    iris = (lum > 0.08) & (lum < 0.8) & (sat < 0.16)
     target = np.array([0.22, 0.13, 0.07], np.float32)
     rgb[iris] = target * (0.6 + 0.8 * lum[iris, None])
     out = bpy.data.images.new("Eyes_ours", img.size[0], img.size[1], alpha=True)
@@ -532,6 +532,61 @@ def scanned_head(arm, body, eyes, brows, path, tris=7000):
     head.parent = arm
     skin_to(scan_eyes, arm, {"Head": 1.0})
     return head, scan_eyes, eye_z
+
+
+def head_box(o, eye_z):
+    """The head above the eyes: its middle and its size."""
+    vs = [o.matrix_world @ v.co for v in o.data.vertices]
+    vs = [v for v in vs if v.z > eye_z and abs(v.x) < 0.15]
+    lo = Vector([min(v[i] for v in vs) for i in range(3)])
+    hi = Vector([max(v[i] for v in vs) for i in range(3)])
+    return (lo + hi) / 2, hi - lo
+
+
+def refit(hair, was, now):
+    """Hair made for one head, stretched to sit on another (each a head_box)."""
+    (c0, s0), (c1, s1) = was, now
+    k = Vector([s1[i] / s0[i] if s0[i] else 1 for i in range(3)])
+    mw, inv = hair.matrix_world, hair.matrix_world.inverted()
+    for v in hair.data.vertices:
+        co = mw @ v.co
+        d = co - c0
+        # The top and sides follow the new head; the long ends just move with it.
+        v.co = inv @ (c1 + Vector((d.x * k.x, d.y * k.y, d.z * k.z if co.z > c0.z - s0.z / 2 else d.z)))
+
+
+def bindi(head, eye_z, radius=0.0018):
+    """A small dark-red bindi between the brows, painted on the scan's face."""
+    front = min(head.data.vertices, key=lambda v: (abs(v.co.x) > 0.006) * 9 + abs(v.co.z - (eye_z + 0.024)) * 20 + v.co.y)
+    img = base_image(head)
+    px = pixels(img)
+    h, w = px.shape[:2]
+    uv = head.data.uv_layers.active.data
+    at = next(uv[li].uv for poly in head.data.polygons for li in poly.loop_indices if head.data.loops[li].vertex_index == front.index)
+    # Texels per metre round there: how far apart two neighbours are, in both.
+    pairs = []
+    for poly in head.data.polygons:
+        if front.index in poly.vertices:
+            for li in poly.loop_indices:
+                vi = head.data.loops[li].vertex_index
+                if vi != front.index:
+                    d3 = (head.data.vertices[vi].co - front.co).length
+                    d2 = ((uv[li].uv - at).length) * w
+                    if d3 > 1e-5:
+                        pairs.append(d2 / d3)
+    per_m = float(np.median(pairs)) if pairs else 2500.0
+    r = max(2.0, radius * per_m)
+    cy, cx = at.y % 1 * (h - 1), at.x % 1 * (w - 1)
+    yy, xx = np.mgrid[0:h, 0:w]
+    m = np.clip((r - np.sqrt((yy - cy) ** 2 + (xx - cx) ** 2)) / 1.5, 0, 1)[..., None]
+    px[..., :3] = px[..., :3] * (1 - m) + np.array([0.47, 0.09, 0.13], np.float32) * m
+    out = bpy.data.images.new("Face_ours", w, h, alpha=True)
+    out.pixels.foreach_set(px.ravel())
+    out.pack()
+    for mat in head.data.materials:
+        for n in mat.node_tree.nodes:
+            if n.type == "TEX_IMAGE" and n.image == img:
+                n.image = out
 
 
 def scan_curls(head, arm, eye_z):
@@ -747,8 +802,14 @@ def parul():
     bc.cut(body, "Shoes", FEET, 0.012, flat("Shoes", (58, 42, 36), 0.5), threshold=0.5, smooth=30)
     bc.hide_under(body, TORSO + LEGS)
     bc.hide_under(body, FEET, threshold=0.85)
-    add_hair(arm, "Hair_Long", (0.12, 0.09, 0.08), lambda h: longer(h, 1.6, 3.6, 0.3))
-    earrings(body, eyes, arm)
+    # Her own face from her scan (its short haircut stays out: her long hair is ours).
+    l, r = eye_line(eyes)
+    was = head_box(body, (l.z + r.z) / 2)
+    head, eyes, eye_z = scanned_head(arm, body, eyes, brows, os.path.join(bc.ROOT, "assets-src", "likeness", "parul", "model.glb"))
+    bindi(head, eye_z)
+    hair = add_hair(arm, "Hair_Long", (0.12, 0.09, 0.08), lambda h: longer(h, 1.6, 3.6, 0.3))
+    refit(hair, was, head_box(head, eye_z))
+    earrings(head, eyes, arm)
     watch(body, arm, (226, 170, 150), (246, 236, 230))
     export("parul")
 

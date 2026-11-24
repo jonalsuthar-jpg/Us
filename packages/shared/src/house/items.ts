@@ -470,7 +470,7 @@ const LIKENESS_OF: Record<string, Likeness> = {
 };
 export const likenessOf = (userId: string): Likeness | undefined => LIKENESS_OF[userId.toLowerCase()];
 /** Bump when either of us is built again; the phone fetches the new one. */
-export const LIKENESS_VERSION = 1;
+export const LIKENESS_VERSION = 2;
 /** Where each of us is kept, in our memories (only the two of us can sign links to it). */
 export const likenessPath = (coupleId: string, who: Likeness) => `${coupleId.toLowerCase()}/house/body_${who}_v${LIKENESS_VERSION}.glb`;
 
