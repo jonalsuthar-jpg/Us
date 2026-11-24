@@ -802,14 +802,10 @@ def parul():
     bc.cut(body, "Shoes", FEET, 0.012, flat("Shoes", (58, 42, 36), 0.5), threshold=0.5, smooth=30)
     bc.hide_under(body, TORSO + LEGS)
     bc.hide_under(body, FEET, threshold=0.85)
-    # Her own face from her scan (its short haircut stays out: her long hair is ours).
-    l, r = eye_line(eyes)
-    was = head_box(body, (l.z + r.z) / 2)
-    head, eyes, eye_z = scanned_head(arm, body, eyes, brows, os.path.join(bc.ROOT, "assets-src", "likeness", "parul", "model.glb"))
-    bindi(head, eye_z)
-    hair = add_hair(arm, "Hair_Long", (0.12, 0.09, 0.08), lambda h: longer(h, 1.6, 3.6, 0.3))
-    refit(hair, was, head_box(head, eye_z))
-    earrings(head, eyes, arm)
+    # Her face as painted (likeness_textures.py): she liked it better than her scan
+    # (assets-src/likeness/parul/model.glb; scanned_head, bindi and refit can put it on).
+    add_hair(arm, "Hair_Long", (0.12, 0.09, 0.08), lambda h: longer(h, 1.6, 3.6, 0.3))
+    earrings(body, eyes, arm)
     watch(body, arm, (226, 170, 150), (246, 236, 230))
     export("parul")
 

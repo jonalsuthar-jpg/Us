@@ -125,10 +125,10 @@ describe('likenessUrls', () => {
     const { sb, asked } = fakeStorage();
     const couple = 'AAAAAAAA-0000-0000-0000-000000000001';
     expect(await likenessUrls(sb, couple, ['jonal', 'parul'])).toEqual({
-      jonal: 'aaaaaaaa-0000-0000-0000-000000000001/house/body_jonal_v2.glb#1',
-      parul: 'aaaaaaaa-0000-0000-0000-000000000001/house/body_parul_v2.glb#1',
+      jonal: 'aaaaaaaa-0000-0000-0000-000000000001/house/body_jonal_v3.glb#1',
+      parul: 'aaaaaaaa-0000-0000-0000-000000000001/house/body_parul_v3.glb#1',
     });
-    expect(asked).toEqual([['aaaaaaaa-0000-0000-0000-000000000001/house/body_jonal_v2.glb', 'aaaaaaaa-0000-0000-0000-000000000001/house/body_parul_v2.glb']]);
+    expect(asked).toEqual([['aaaaaaaa-0000-0000-0000-000000000001/house/body_jonal_v3.glb', 'aaaaaaaa-0000-0000-0000-000000000001/house/body_parul_v3.glb']]);
     expect(await likenessUrls(sb, couple, [])).toEqual({});
   });
 });
